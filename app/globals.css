@@ -1,26 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Hind:wght@400;500;600&display=swap');
+
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Cores principais */
+  --color-primary:          #EED9C4;
+  --color-primary-dark:     #C19A6B;
+  --color-primary-darker:   #A67B5B;
+
+  /* Texto */
+  --color-text-primary:     #05070F;
+  --color-text-secondary:   #111111;
+  --color-text-muted:       #747474;
+
+  /* Backgrounds */
+  --color-bg-default:       #FAF8F9;
+  --color-bg-surface:       #F1F1F1;
+
+  /* Estados */
+  --color-error:            #FF0000;
+  --color-success:          #22C55E;
+  --color-warning:          #F59E0B;
+
+  /* Sidebar */
+  --sidebar-width-collapsed: 64px;
+  --sidebar-width-expanded:  240px;
+
+  /* Tabela */
+  --table-row-height: 40px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-bg-default);
+  color: var(--color-text-primary);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Manrope', sans-serif;
 }
