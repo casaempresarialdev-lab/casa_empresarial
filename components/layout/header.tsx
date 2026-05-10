@@ -1,6 +1,8 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store'
+import { createClient } from '@/lib/supabase/client'
 
 interface HeaderProps {
   companies?: { id: string; razao_social: string }[]
@@ -9,10 +11,17 @@ interface HeaderProps {
 }
 
 export function Header({ companies = [], userName, userAvatar }: HeaderProps) {
+  const router = useRouter()
   // Seletores separados — objeto literal causaria re-render infinito
   const activeCompanyId = useAppStore((s) => s.activeCompanyId)
   const setActiveCompany = useAppStore((s) => s.setActiveCompany)
   const expanded = useAppStore((s) => s.sidebarExpanded)
+
+  async function handleLogout() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   const activeCompany = companies.find((c) => c.id === activeCompanyId)
 
@@ -50,7 +59,7 @@ export function Header({ companies = [], userName, userAvatar }: HeaderProps) {
         )}
       </div>
 
-      {/* Avatar do usuário */}
+      {/* Avatar + Logout */}
       <div className="flex items-center gap-3">
         <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
           {userName}
@@ -66,6 +75,14 @@ export function Header({ companies = [], userName, userAvatar }: HeaderProps) {
             userName?.charAt(0).toUpperCase() ?? '?'
           )}
         </div>
+        <button
+          onClick={handleLogout}
+          className="text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
+          style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}
+          title="Sair do sistema"
+        >
+          Sair
+        </button>
       </div>
     </header>
   )
