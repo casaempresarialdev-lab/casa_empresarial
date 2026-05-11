@@ -18,6 +18,10 @@ interface AppStore {
   toggleSidebar: () => void
   setSidebarExpanded: (v: boolean) => void
 
+  // Mobile sidebar (não persistido)
+  mobileSidebarOpen: boolean
+  setMobileSidebarOpen: (v: boolean) => void
+
   // Modais
   activeModal: ActiveModal | null
   openModal: (id: string, data?: unknown) => void
@@ -33,6 +37,9 @@ export const useAppStore = create<AppStore>()(
       sidebarExpanded: true,
       toggleSidebar: () => set((s) => ({ sidebarExpanded: !s.sidebarExpanded })),
       setSidebarExpanded: (v) => set({ sidebarExpanded: v }),
+
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: (v) => set({ mobileSidebarOpen: v }),
 
       activeModal: null,
       openModal: (id, data) => set({ activeModal: { id, data } }),
