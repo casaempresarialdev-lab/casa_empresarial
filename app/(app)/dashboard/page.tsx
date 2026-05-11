@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { formatCurrency } from '@/lib/utils'
 import { MetricCard } from '@/components/modules/dashboard/metric-card'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,15 +12,6 @@ function greeting() {
   if (h < 12) return 'Bom dia'
   if (h < 18) return 'Boa tarde'
   return 'Boa noite'
-}
-
-function formatDate() {
-  return new Date().toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
 }
 
 function startOfMonth() {
@@ -95,9 +87,9 @@ export default async function DashboardPage() {
           >
             {greeting()}, {firstName}! 👋
           </h1>
-          <p className="text-sm mt-1 capitalize" style={{ color: 'var(--color-text-muted)' }}>
-            {formatDate()} · {companyLabel}
-          </p>
+          <div className="mt-1.5">
+            <Breadcrumb />
+          </div>
         </div>
       </div>
 
