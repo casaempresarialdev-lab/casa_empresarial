@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { formatCurrency } from '@/lib/utils'
 import { MetricCard } from '@/components/modules/dashboard/metric-card'
-import { ModuleCard } from '@/components/modules/dashboard/module-card'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,16 +66,12 @@ export default async function DashboardPage() {
     { data: receitasMes },
     { data: despesasMes },
     { count: pendentesCount },
-    { count: employeesCount },
-    { count: productsCount },
     { data: profile },
   ] = await Promise.all([
     admin.from('bank_accounts').select('saldo_inicial').eq('company_id', companyId).eq('ativo', true),
     admin.from('transactions').select('valor').eq('company_id', companyId).eq('tipo', 'recebimento').eq('status', 'pago').gte('data_competencia', monthStart),
     admin.from('transactions').select('valor').eq('company_id', companyId).eq('tipo', 'pagamento').eq('status', 'pago').gte('data_competencia', monthStart),
     admin.from('transactions').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'pendente').lte('data_vencimento', new Date().toISOString().split('T')[0]),
-    admin.from('employees').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'ativo'),
-    admin.from('products').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('ativo', true),
     admin.from('profiles').select('name').eq('id', user.id).single(),
   ])
 
@@ -84,8 +79,6 @@ export default async function DashboardPage() {
   const totalReceitas = (receitasMes ?? []).reduce((s, t) => s + (t.valor ?? 0), 0)
   const totalDespesas = (despesasMes ?? []).reduce((s, t) => s + (t.valor ?? 0), 0)
   const pendentes = pendentesCount ?? 0
-  const totalFuncionarios = employeesCount ?? 0
-  const totalProdutos = productsCount ?? 0
 
   const userName = profile?.name ?? user.email ?? ''
   const firstName = userName.split(' ')[0]
@@ -108,8 +101,8 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Métricas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Métricas financeiras */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Saldo Total"
           value={formatCurrency(saldoTotal)}
@@ -144,102 +137,6 @@ export default async function DashboardPage() {
           href="/financeiro/fluxo-de-caixa"
           accent={Number(pendentes) > 0 ? 'red' : 'default'}
           empty={Number(pendentes) === 0}
-        />
-      </div>
-
-      {/* Módulos */}
-      <h2
-        className="text-base font-semibold mb-4"
-        style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}
-      >
-        Módulos do sistema
-      </h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <ModuleCard
-          icon="🏢"
-          title="Administrativo"
-          subtitle="O Telhado"
-          description="Usuários do sistema, quadro societário e cofre de logins e senhas."
-          href="/admin/usuarios"
-          items={[
-            { label: 'Usuários', href: '/admin/usuarios' },
-            { label: 'Sócios', href: '/admin/quadro-societario' },
-            { label: 'Logins e Senhas', href: '/admin/logins-senhas' },
-          ]}
-        />
-
-        <ModuleCard
-          icon="💰"
-          title="Financeiro"
-          subtitle="Coluna 1"
-          description="Fluxo de caixa, contas bancárias, cartões, categorias e contatos."
-          href="/financeiro/fluxo-de-caixa"
-          badge={Number(pendentes) > 0 ? pendentes : undefined}
-          items={[
-            { label: 'Fluxo de Caixa', href: '/financeiro/fluxo-de-caixa' },
-            { label: 'Contas e Cartões', href: '/financeiro/contas-cartoes' },
-            { label: 'Contatos', href: '/financeiro/contatos' },
-            { label: 'Categorias', href: '/financeiro/categorias' },
-          ]}
-        />
-
-        <ModuleCard
-          icon="👥"
-          title="Pessoas"
-          subtitle="Coluna 2"
-          description="Funcionários, registro de ponto, escala e folha de pagamento."
-          href="/pessoas/funcionarios"
-          badge={Number(totalFuncionarios) > 0 ? totalFuncionarios : undefined}
-          items={[
-            { label: 'Funcionários', href: '/pessoas/funcionarios' },
-            { label: 'Registro de Ponto', href: '/pessoas/registro-de-ponto' },
-            { label: 'Escala', href: '/pessoas/escala-de-trabalho' },
-            { label: 'Folha', href: '/pessoas/folha-de-pagamento' },
-          ]}
-        />
-
-        <ModuleCard
-          icon="📦"
-          title="Operacional"
-          subtitle="A Fundação"
-          description="Produtos, pedidos de compra e venda e frente de caixa (PDV)."
-          href="/operacional/produtos"
-          badge={Number(totalProdutos) > 0 ? totalProdutos : undefined}
-          items={[
-            { label: 'Produtos', href: '/operacional/produtos' },
-            { label: 'Pedidos de Venda', href: '/operacional/pedidos-venda' },
-            { label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
-            { label: 'Frente de Caixa', href: '/operacional/frente-de-caixa' },
-          ]}
-        />
-
-        <ModuleCard
-          icon="📣"
-          title="Marketing"
-          subtitle="Arquitetura Externa"
-          description="Calendário editorial, fotos, vídeos, material gráfico e manual da marca."
-          href="/marketing/calendario"
-          items={[
-            { label: 'Calendário', href: '/marketing/calendario' },
-            { label: 'Manual da Marca', href: '/marketing/manual-da-marca' },
-            { label: 'Fotos e Vídeos', href: '/marketing/fotos-videos' },
-            { label: 'Depoimentos', href: '/marketing/depoimentos' },
-          ]}
-        />
-
-        {/* Card da empresa */}
-        <ModuleCard
-          icon="🏠"
-          title="Minha Empresa"
-          subtitle={activeCompany.razao_social}
-          description="Dados cadastrais, logo, cores, informações bancárias e dados fiscais."
-          href="/empresa"
-          items={[
-            { label: 'Dados da Empresa', href: '/empresa' },
-            { label: 'Meu Perfil', href: '/perfil' },
-            { label: 'Meu Plano', href: '/meu-plano' },
-          ]}
         />
       </div>
     </div>
