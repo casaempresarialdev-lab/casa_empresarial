@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { formatCurrency } from '@/lib/utils'
 import { MetricCard } from '@/components/modules/dashboard/metric-card'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,9 +86,6 @@ export default async function DashboardPage() {
           >
             {greeting()}, {firstName}! 👋
           </h1>
-          <div className="mt-1.5">
-            <Breadcrumb />
-          </div>
         </div>
       </div>
 
