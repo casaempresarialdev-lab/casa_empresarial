@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { formatCurrency } from '@/lib/utils'
 import { MetricCard } from '@/components/modules/dashboard/metric-card'
@@ -44,7 +45,37 @@ export default async function DashboardPage() {
     return Array.isArray(c) ? c : [c]
   })
 
-  if (companies.length === 0) redirect('/empresa')
+  // Sem empresa: busca nome do perfil e mostra tela de boas-vindas sem redirecionar
+  if (companies.length === 0) {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('name')
+      .eq('id', user.id)
+      .single()
+    const firstName = (profile?.name ?? user.email ?? '').split(' ')[0]
+
+    return (
+      <div className="max-w-xl mx-auto mt-12 text-center">
+        <div className="text-5xl mb-6">🏢</div>
+        <h1
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}
+        >
+          {greeting()}, {firstName}! 👋
+        </h1>
+        <p className="text-sm mb-8" style={{ color: 'var(--color-text-muted)' }}>
+          Cadastre sua empresa para começar a usar o sistema.
+        </p>
+        <Link
+          href="/empresa"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-colors"
+          style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+        >
+          Cadastrar minha empresa →
+        </Link>
+      </div>
+    )
+  }
 
   const activeCompany =
     companies.find((c) => c.id === cookieCompanyId) ?? companies[0]
