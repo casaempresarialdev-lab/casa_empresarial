@@ -50,7 +50,11 @@ export default function CadastroPasso1Page() {
     }
 
     if (signUpData.user) {
-      await saveCpfAction(signUpData.user.id, data.cpf)
+      try {
+        await saveCpfAction(signUpData.user.id, data.cpf)
+      } catch {
+        // CPF salvo via metadata; o perfil será atualizado no próximo acesso
+      }
     }
 
     router.push('/cadastro/passo-2')

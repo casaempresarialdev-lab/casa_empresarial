@@ -2,10 +2,13 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Redireciona para /dashboard se já estiver logado
-const AUTH_ONLY_ROUTES = ['/login', '/esqueci-senha', '/nova-senha', '/cadastro/passo-1']
+const AUTH_ONLY_ROUTES = ['/login', '/esqueci-senha', '/nova-senha']
 
 // Requer auth mas não redireciona autenticados (onboarding)
 const ONBOARDING_ROUTES = ['/cadastro/passo-2', '/cadastro/termos']
+
+// Acessível para todos (autenticado ou não)
+const PUBLIC_ROUTES = ['/cadastro/passo-1']
 
 // Rotas PDV — autenticação dupla com cookie pdv_session
 const PDV_ROUTES = ['/operacional/frente-de-caixa']
@@ -43,6 +46,11 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/operacional/frente-de-caixa/login', request.url))
     if (pdvSession && isLoginPage)
       return NextResponse.redirect(new URL('/operacional/frente-de-caixa', request.url))
+    return response
+  }
+
+  // Rotas públicas — acessíveis com ou sem login
+  if (PUBLIC_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/'))) {
     return response
   }
 
