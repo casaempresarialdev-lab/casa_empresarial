@@ -1,5 +1,19 @@
 import { z } from 'zod'
 
+function isValidCpf(digits: string): boolean {
+  if (/^(\d)\1+$/.test(digits)) return false
+  let sum = 0
+  for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i)
+  let r = (sum * 10) % 11
+  if (r >= 10) r = 0
+  if (r !== parseInt(digits[9])) return false
+  sum = 0
+  for (let i = 0; i < 10; i++) sum += parseInt(digits[i]) * (11 - i)
+  r = (sum * 10) % 11
+  if (r >= 10) r = 0
+  return r === parseInt(digits[10])
+}
+
 export const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
   password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
@@ -8,6 +22,10 @@ export const loginSchema = z.object({
 export const cadastroPasso1Schema = z
   .object({
     name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres').max(100),
+    cpf: z.string()
+      .min(1, 'CPF é obrigatório')
+      .refine((v) => v.replace(/\D/g, '').length === 11, 'CPF deve ter 11 dígitos')
+      .refine((v) => isValidCpf(v.replace(/\D/g, '')), 'CPF inválido'),
     email: z.string().email('E-mail inválido'),
     password: z
       .string()

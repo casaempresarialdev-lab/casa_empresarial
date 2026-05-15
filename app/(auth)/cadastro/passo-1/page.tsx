@@ -9,6 +9,15 @@ import { createClient } from '@/lib/supabase/client'
 import { cadastroPasso1Schema, type CadastroPasso1Data } from '@/lib/validations/auth'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { saveCpfAction } from './actions'
+
+function maskCpf(value: string) {
+  const d = value.replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
+}
 
 export default function CadastroPasso1Page() {
   const router = useRouter()
@@ -17,6 +26,7 @@ export default function CadastroPasso1Page() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CadastroPasso1Data>({ resolver: zodResolver(cadastroPasso1Schema) })
 
@@ -24,10 +34,10 @@ export default function CadastroPasso1Page() {
     setServerError(null)
     const supabase = createClient()
 
-    const { error } = await supabase.auth.signUp({
+    const { error, data: signUpData } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
-      options: { data: { name: data.name } },
+      options: { data: { name: data.name, cpf: data.cpf.replace(/\D/g, '') } },
     })
 
     if (error) {
@@ -37,6 +47,10 @@ export default function CadastroPasso1Page() {
           : 'Erro ao criar conta. Tente novamente.'
       )
       return
+    }
+
+    if (signUpData.user) {
+      await saveCpfAction(signUpData.user.id, data.cpf)
     }
 
     router.push('/cadastro/passo-2')
@@ -75,6 +89,22 @@ export default function CadastroPasso1Page() {
             autoComplete="name"
             error={errors.name?.message}
             {...register('name')}
+          />
+
+          <Input
+            label="CPF"
+            type="text"
+            placeholder="000.000.000-00"
+            inputMode="numeric"
+            maxLength={14}
+            error={errors.cpf?.message}
+            {...register('cpf', {
+              onChange: (e) => {
+                const masked = maskCpf(e.target.value)
+                e.target.value = masked
+                setValue('cpf', masked, { shouldValidate: false })
+              },
+            })}
           />
 
           <Input
