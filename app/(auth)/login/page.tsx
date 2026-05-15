@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { loginSchema, type LoginData } from '@/lib/validations/auth'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
 
 export default function LoginPage() {
@@ -66,9 +67,8 @@ export default function LoginPage() {
           />
 
           <div className="flex flex-col gap-1">
-            <Input
+            <PasswordInput
               label="Senha"
-              type="password"
               placeholder="••••••••"
               autoComplete="current-password"
               error={errors.password?.message}

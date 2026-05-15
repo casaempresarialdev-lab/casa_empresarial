@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { cadastroPasso1Schema, type CadastroPasso1Data } from '@/lib/validations/auth'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
 import { saveCpfAction } from './actions'
 
@@ -120,9 +121,8 @@ export default function CadastroPasso1Page() {
             {...register('email')}
           />
 
-          <Input
+          <PasswordInput
             label="Senha"
-            type="password"
             placeholder="Mínimo 8 caracteres"
             autoComplete="new-password"
             hint="Pelo menos 8 caracteres, uma maiúscula e um número"
@@ -130,9 +130,8 @@ export default function CadastroPasso1Page() {
             {...register('password')}
           />
 
-          <Input
+          <PasswordInput
             label="Confirmar senha"
-            type="password"
             placeholder="Repita a senha"
             autoComplete="new-password"
             error={errors.confirmPassword?.message}

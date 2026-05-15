@@ -16,6 +16,13 @@ export async function createCompanyAction(formData: FormData) {
     regime_tributario: formData.get('regime_tributario') as string || undefined,
     telefone: formData.get('telefone') as string || undefined,
     email: formData.get('email') as string || undefined,
+    cep: formData.get('cep') as string || undefined,
+    uf: formData.get('uf') as string || undefined,
+    cidade: formData.get('cidade') as string || undefined,
+    logradouro: formData.get('logradouro') as string || undefined,
+    bairro: formData.get('bairro') as string || undefined,
+    numero: formData.get('numero') as string || undefined,
+    complemento: formData.get('complemento') as string || undefined,
   }
 
   const parsed = companySchema.safeParse(raw)
@@ -32,6 +39,13 @@ export async function createCompanyAction(formData: FormData) {
       regime_tributario: parsed.data.regime_tributario,
       telefone: parsed.data.telefone,
       email: parsed.data.email,
+      cep: parsed.data.cep?.replace(/\D/g, '') || null,
+      uf: parsed.data.uf || null,
+      cidade: parsed.data.cidade || null,
+      logradouro: parsed.data.logradouro || null,
+      bairro: parsed.data.bairro || null,
+      numero: parsed.data.numero || null,
+      complemento: parsed.data.complemento || null,
     })
     .select('id')
     .single()

@@ -36,6 +36,14 @@ export const companySchema = z.object({
     .optional(),
   telefone: z.string().optional(),
   email: z.string().email('E-mail inválido').optional().or(z.literal('')),
+  // Endereço (opcional)
+  cep: z.string().optional(),
+  uf: z.string().optional(),
+  cidade: z.string().optional(),
+  logradouro: z.string().optional(),
+  bairro: z.string().optional(),
+  numero: z.string().optional(),
+  complemento: z.string().optional(),
 })
 
 export type CompanyData = z.infer<typeof companySchema>
