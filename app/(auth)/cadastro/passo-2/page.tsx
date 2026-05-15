@@ -4,22 +4,25 @@ import { useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Link from 'next/link'
-import { createCompanyAction } from './actions'
-import { companySchema, type CompanyData } from '@/lib/validations/company'
+import { saveAddressAction } from './actions'
+import { cadastroPasso2Schema, type CadastroPasso2Data } from '@/lib/validations/auth'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
-function formatCNPJ(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 14)
-  return digits
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d)/, '.$1/$2')
-    .replace(/(\d{4})(\d)/, '$1-$2')
+const UF_OPTIONS = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
+  'MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN',
+  'RS','RO','RR','SC','SP','SE','TO',
+]
+
+function maskCep(value: string) {
+  const d = value.replace(/\D/g, '').slice(0, 8)
+  return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d
 }
 
 export default function CadastroPasso2Page() {
   const [serverError, setServerError] = useState<string | null>(null)
+  const [cepLoading, setCepLoading] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const {
@@ -27,19 +30,34 @@ export default function CadastroPasso2Page() {
     handleSubmit,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<CompanyData>({ resolver: zodResolver(companySchema) })
+  } = useForm<CadastroPasso2Data>({ resolver: zodResolver(cadastroPasso2Schema) })
 
   const loading = isSubmitting || isPending
 
-  async function onSubmit(data: CompanyData) {
-    setServerError(null)
-    const formData = new FormData()
-    Object.entries(data).forEach(([k, v]) => {
-      if (v !== undefined && v !== '') formData.set(k, String(v))
-    })
+  async function handleCepBlur(cep: string) {
+    const digits = cep.replace(/\D/g, '')
+    if (digits.length !== 8) return
+    setCepLoading(true)
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      const json = await res.json()
+      if (!json.erro) {
+        setValue('logradouro', json.logradouro || '', { shouldValidate: true })
+        setValue('bairro', json.bairro || '', { shouldValidate: true })
+        setValue('cidade', json.localidade || '', { shouldValidate: true })
+        setValue('uf', json.uf || '', { shouldValidate: true })
+      }
+    } catch {
+      // Ignora erros de rede — usuário preenche manualmente
+    } finally {
+      setCepLoading(false)
+    }
+  }
 
+  async function onSubmit(data: CadastroPasso2Data) {
+    setServerError(null)
     startTransition(async () => {
-      const result = await createCompanyAction(formData)
+      const result = await saveAddressAction(data)
       if (result?.error) setServerError(result.error)
     })
   }
@@ -51,7 +69,7 @@ export default function CadastroPasso2Page() {
           Casa Empresarial
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-          Quase lá! Dados da sua empresa
+          Quase lá! Informe seu endereço
         </p>
       </div>
 
@@ -61,75 +79,117 @@ export default function CadastroPasso2Page() {
         <div className="flex-1 h-1.5 rounded-full" style={{ backgroundColor: 'var(--color-primary-dark)' }} />
       </div>
       <p className="text-xs mb-6 text-center" style={{ color: 'var(--color-text-muted)' }}>
-        Passo 2 de 2 — Dados da empresa
+        Passo 2 de 2 — Seu endereço
       </p>
 
       <div className="bg-white rounded-2xl shadow-sm border p-8" style={{ borderColor: 'var(--color-bg-surface)' }}>
         <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text-primary)' }}>
-          Sua empresa
+          Endereço pessoal
         </h2>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <Input
-            label="CNPJ"
-            type="text"
-            placeholder="00.000.000/0000-00"
-            inputMode="numeric"
-            error={errors.cnpj?.message}
-            {...register('cnpj')}
-            onChange={(e) => {
-              const formatted = formatCNPJ(e.target.value)
-              setValue('cnpj', formatted, { shouldValidate: true })
-            }}
-          />
-
-          <Input
-            label="Razão Social"
-            type="text"
-            placeholder="Nome oficial da empresa"
-            error={errors.razao_social?.message}
-            {...register('razao_social')}
-          />
-
-          <Input
-            label="Nome Fantasia (opcional)"
-            type="text"
-            placeholder="Como a empresa é conhecida"
-            error={errors.nome_fantasia?.message}
-            {...register('nome_fantasia')}
-          />
-
+          {/* CEP */}
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Regime Tributário (opcional)
-            </label>
-            <select
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                CEP
+              </label>
+              <a
+                href="https://buscacepinter.correios.com.br/app/endereco/index.php"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs hover:underline"
+                style={{ color: 'var(--color-primary-dark)' }}
+              >
+                Não sabe o CEP?
+              </a>
+            </div>
+            <input
+              type="text"
+              placeholder="00000-000"
+              inputMode="numeric"
+              maxLength={9}
               className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
-              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
-              {...register('regime_tributario')}
-            >
-              <option value="">Selecione...</option>
-              <option value="mei">MEI</option>
-              <option value="simples_nacional">Simples Nacional</option>
-              <option value="lucro_presumido">Lucro Presumido</option>
-              <option value="lucro_real">Lucro Real</option>
-            </select>
+              style={{ borderColor: errors.cep ? 'var(--color-error)' : 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+              {...register('cep', {
+                onChange: (e) => {
+                  e.target.value = maskCep(e.target.value)
+                  setValue('cep', e.target.value, { shouldValidate: false })
+                },
+                onBlur: (e) => handleCepBlur(e.target.value),
+              })}
+            />
+            {cepLoading && (
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Buscando endereço...</p>
+            )}
+            {errors.cep && (
+              <p className="text-xs" style={{ color: 'var(--color-error)' }}>{errors.cep.message}</p>
+            )}
           </div>
 
+          {/* UF + Cidade */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>UF</label>
+              <select
+                className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+                style={{ borderColor: errors.uf ? 'var(--color-error)' : 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
+                {...register('uf')}
+              >
+                <option value="">UF</option>
+                {UF_OPTIONS.map((uf) => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+              {errors.uf && (
+                <p className="text-xs" style={{ color: 'var(--color-error)' }}>{errors.uf.message}</p>
+              )}
+            </div>
+
+            <div className="col-span-2 flex flex-col gap-1">
+              <Input
+                label="Cidade"
+                type="text"
+                placeholder="Cidade"
+                error={errors.cidade?.message}
+                {...register('cidade')}
+              />
+            </div>
+          </div>
+
+          {/* Logradouro */}
+          <Input
+            label="Logradouro"
+            type="text"
+            placeholder="Rua, Avenida, etc."
+            error={errors.logradouro?.message}
+            {...register('logradouro')}
+          />
+
+          {/* Bairro */}
+          <Input
+            label="Bairro"
+            type="text"
+            placeholder="Bairro"
+            error={errors.bairro?.message}
+            {...register('bairro')}
+          />
+
+          {/* Número + Complemento */}
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Telefone (opcional)"
-              type="tel"
-              placeholder="(11) 99999-9999"
-              error={errors.telefone?.message}
-              {...register('telefone')}
+              label="Número"
+              type="text"
+              placeholder="Número"
+              error={errors.numero?.message}
+              {...register('numero')}
             />
             <Input
-              label="E-mail da empresa (opcional)"
-              type="email"
-              placeholder="empresa@email.com"
-              error={errors.email?.message}
-              {...register('email')}
+              label="Complemento (opcional)"
+              type="text"
+              placeholder="Apto, sala..."
+              error={errors.complemento?.message}
+              {...register('complemento')}
             />
           </div>
 
@@ -140,7 +200,7 @@ export default function CadastroPasso2Page() {
           )}
 
           <Button type="submit" loading={loading} size="lg" className="w-full mt-2">
-            Criar conta e acessar o sistema
+            Concluir cadastro →
           </Button>
         </form>
 

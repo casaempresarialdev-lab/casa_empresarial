@@ -44,7 +44,7 @@ export default async function DashboardPage() {
     return Array.isArray(c) ? c : [c]
   })
 
-  if (companies.length === 0) redirect('/cadastro/passo-2')
+  if (companies.length === 0) redirect('/empresa')
 
   const activeCompany =
     companies.find((c) => c.id === cookieCompanyId) ?? companies[0]

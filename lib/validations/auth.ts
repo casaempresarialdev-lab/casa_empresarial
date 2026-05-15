@@ -42,6 +42,16 @@ export const cadastroPasso1Schema = z
     path: ['confirmPassword'],
   })
 
+export const cadastroPasso2Schema = z.object({
+  cep: z.string().refine((v) => v.replace(/\D/g, '').length === 8, 'CEP deve ter 8 dígitos'),
+  uf: z.string().min(2, 'Selecione o estado'),
+  cidade: z.string().min(1, 'Cidade é obrigatória'),
+  logradouro: z.string().min(1, 'Logradouro é obrigatório'),
+  bairro: z.string().min(1, 'Bairro é obrigatório'),
+  numero: z.string().min(1, 'Número é obrigatório'),
+  complemento: z.string().optional(),
+})
+
 export const esqueciSenhaSchema = z.object({
   email: z.string().email('E-mail inválido'),
 })
@@ -62,5 +72,6 @@ export const novaSenhaSchema = z
 
 export type LoginData = z.infer<typeof loginSchema>
 export type CadastroPasso1Data = z.infer<typeof cadastroPasso1Schema>
+export type CadastroPasso2Data = z.infer<typeof cadastroPasso2Schema>
 export type EsqueciSenhaData = z.infer<typeof esqueciSenhaSchema>
 export type NovaSenhaData = z.infer<typeof novaSenhaSchema>
