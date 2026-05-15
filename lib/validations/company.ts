@@ -36,6 +36,13 @@ export const companySchema = z.object({
     .optional(),
   telefone: z.string().optional(),
   email: z.string().email('E-mail inválido').optional().or(z.literal('')),
+  // Documentos fiscais (opcional)
+  inscricao_estadual: z.string().optional(),
+  inscricao_municipal: z.string().optional(),
+  // Identidade visual (opcional)
+  cor_primaria: z.string().optional(),
+  // Certificado digital (opcional)
+  certificado_digital_senha: z.string().optional(),
   // Endereço (opcional)
   cep: z.string().optional(),
   uf: z.string().optional(),
