@@ -41,11 +41,11 @@ export default function CadastroPasso1Page() {
     })
 
     if (error) {
-      setServerError(
-        error.message.includes('already')
-          ? 'Este e-mail já está cadastrado. Faça login.'
-          : 'Erro ao criar conta. Tente novamente.'
-      )
+      if (error.message.includes('already')) {
+        setServerError('Este e-mail já está cadastrado. Faça login.')
+      } else {
+        setServerError(`Erro ao criar conta: ${error.message}`)
+      }
       return
     }
 
