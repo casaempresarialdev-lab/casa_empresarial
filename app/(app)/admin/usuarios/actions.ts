@@ -1,12 +1,20 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 async function getAuthUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   return user
+}
+
+async function getAppUrl() {
+  const hdrs = await headers()
+  const host = hdrs.get('host') ?? 'localhost:3000'
+  const proto = hdrs.get('x-forwarded-proto') ?? 'http'
+  return `${proto}://${host}`
 }
 
 export async function addMemberAction(companyId: string, cpf: string, role: string) {
@@ -24,7 +32,7 @@ export async function addMemberAction(companyId: string, cpf: string, role: stri
     .eq('cpf', normalized)
     .single()
 
-  if (!profile) return { error: 'Usuário não encontrado. Peça para ele se cadastrar primeiro.' }
+  if (!profile) return { error: 'Usuário não encontrado. Use a aba "Convidar" para enviar um convite por e-mail.' }
 
   const { data: existing } = await admin
     .from('company_members')
@@ -56,6 +64,67 @@ export async function addMemberAction(companyId: string, cpf: string, role: stri
   return { success: true }
 }
 
+export async function inviteUserAction(companyId: string, email: string, role: string) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const normalizedEmail = email.trim().toLowerCase()
+  const admin = createAdminClient()
+
+  // Verifica convite pendente já existente
+  const { data: existing } = await admin
+    .from('invitations')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('email', normalizedEmail)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  if (existing) return { error: 'Já existe um convite pendente para este e-mail.' }
+
+  // Cria registro do convite
+  const { error: dbErr } = await admin.from('invitations').insert({
+    company_id: companyId,
+    email: normalizedEmail,
+    role,
+    invited_by: user.id,
+    status: 'pending',
+  })
+
+  if (dbErr) return { error: dbErr.message }
+
+  // Envia convite via Supabase Auth (cria usuário em estado "invited" + dispara e-mail)
+  const appUrl = await getAppUrl()
+  const { error: emailErr } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
+    redirectTo: `${appUrl}/auth/callback`,
+    data: { company_id: companyId, role },
+  })
+
+  if (emailErr) {
+    // Convite salvo no banco mas e-mail falhou
+    return { warning: `Convite registrado, mas o e-mail não pôde ser enviado: ${emailErr.message}` }
+  }
+
+  revalidatePath('/admin/usuarios')
+  return { success: true }
+}
+
+export async function cancelInvitationAction(invitationId: string, companyId: string) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('invitations')
+    .update({ status: 'cancelled' })
+    .eq('id', invitationId)
+    .eq('company_id', companyId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/admin/usuarios')
+  return { success: true }
+}
+
 export async function updateMemberRoleAction(memberId: string, role: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
@@ -77,7 +146,6 @@ export async function removeMemberAction(memberId: string, companyId: string) {
 
   const admin = createAdminClient()
 
-  // Impedir remoção do último owner
   const { data: member } = await admin
     .from('company_members')
     .select('role, profile_id')

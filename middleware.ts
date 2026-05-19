@@ -8,7 +8,7 @@ const AUTH_ONLY_ROUTES = ['/login', '/esqueci-senha', '/nova-senha']
 const ONBOARDING_ROUTES = ['/cadastro/passo-2', '/cadastro/termos']
 
 // Acessível para todos (autenticado ou não)
-const PUBLIC_ROUTES = ['/cadastro/passo-1']
+const PUBLIC_ROUTES = ['/cadastro/passo-1', '/auth/callback']
 
 // Rotas PDV — autenticação dupla com cookie pdv_session
 const PDV_ROUTES = ['/operacional/frente-de-caixa']

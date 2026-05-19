@@ -5,12 +5,20 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { RoleBadge, StatusBadge } from '@/components/ui/badge'
 import { ModalUsuario } from './modal-usuario'
-import { removeMemberAction } from '../actions'
-import type { MemberWithProfile } from '../queries'
+import { removeMemberAction, cancelInvitationAction } from '../actions'
+import type { MemberWithProfile, Invitation } from '../queries'
 import { formatDate } from '@/lib/utils'
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Proprietário',
+  admin: 'Administrador',
+  member: 'Membro',
+  accountant: 'Contador',
+}
 
 interface Props {
   members: MemberWithProfile[]
+  invitations: Invitation[]
   companyId: string
   currentProfileId: string
 }
@@ -21,34 +29,35 @@ function cpfMask(cpf: string | null) {
   return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
 }
 
-export function UsuariosClient({ members, companyId, currentProfileId }: Props) {
+export function UsuariosClient({ members, invitations, companyId, currentProfileId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<MemberWithProfile | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
-  const [removeError, setRemoveError] = useState('')
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
 
-  function openAdd() {
-    setEditingMember(null)
-    setModalOpen(true)
-  }
-
-  function openEdit(member: MemberWithProfile) {
-    setEditingMember(member)
-    setModalOpen(true)
-  }
+  function openAdd() { setEditingMember(null); setModalOpen(true) }
+  function openEdit(member: MemberWithProfile) { setEditingMember(member); setModalOpen(true) }
 
   async function handleRemove(member: MemberWithProfile) {
     if (!confirm(`Remover ${member.profiles?.name ?? 'este membro'} da empresa?`)) return
     setRemovingId(member.id)
-    setRemoveError('')
+    setErrorMsg('')
     const result = await removeMemberAction(member.id, companyId)
     setRemovingId(null)
-    if ('error' in result) {
-      setRemoveError(result.error ?? 'Erro ao remover.')
-    } else {
-      router.refresh()
-    }
+    if ('error' in result) setErrorMsg(result.error ?? 'Erro ao remover.')
+    else router.refresh()
+  }
+
+  async function handleCancelInvite(inv: Invitation) {
+    if (!confirm(`Cancelar convite para ${inv.email}?`)) return
+    setCancellingId(inv.id)
+    setErrorMsg('')
+    const result = await cancelInvitationAction(inv.id, companyId)
+    setCancellingId(null)
+    if ('error' in result) setErrorMsg(result.error ?? 'Erro ao cancelar.')
+    else router.refresh()
   }
 
   const active = members.filter((m) => m.status === 'active')
@@ -68,12 +77,13 @@ export function UsuariosClient({ members, companyId, currentProfileId }: Props) 
         <Button onClick={openAdd}>+ Adicionar</Button>
       </div>
 
-      {removeError && (
+      {errorMsg && (
         <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>
-          {removeError}
+          {errorMsg}
         </p>
       )}
 
+      {/* ── Membros ── */}
       <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
         <table className="w-full min-w-[600px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
@@ -118,13 +128,7 @@ export function UsuariosClient({ members, companyId, currentProfileId }: Props) 
                   <div className="flex items-center gap-2 justify-end">
                     {m.status === 'active' && (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEdit(m)}
-                        >
-                          Editar
-                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>Editar</Button>
                         {m.profile_id !== currentProfileId && (
                           <Button
                             variant="danger"
@@ -144,6 +148,56 @@ export function UsuariosClient({ members, companyId, currentProfileId }: Props) 
           </tbody>
         </table>
       </div>
+
+      {/* ── Convites pendentes ── */}
+      {invitations.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+            Convites pendentes
+          </h2>
+          <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+            <table className="w-full min-w-[500px] text-sm">
+              <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>E-mail</th>
+                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Função</th>
+                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Enviado em</th>
+                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Expira em</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {invitations.map((inv) => (
+                  <tr key={inv.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
+                    <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>{inv.email}</td>
+                    <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
+                      {ROLE_LABELS[inv.role] ?? inv.role}
+                    </td>
+                    <td className="px-4 py-3" style={{ color: 'var(--color-text-muted)' }}>
+                      {formatDate(inv.created_at)}
+                    </td>
+                    <td className="px-4 py-3" style={{ color: 'var(--color-text-muted)' }}>
+                      {formatDate(inv.expires_at)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end">
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          loading={cancellingId === inv.id}
+                          onClick={() => handleCancelInvite(inv)}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <ModalUsuario
         open={modalOpen}
