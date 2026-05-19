@@ -20,6 +20,16 @@ export function CredentialsClient({ credentials, companyId }: Props) {
   const [revealingId, setRevealingId] = useState<string | null>(null)
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, string>>({})
   const [errorMsg, setErrorMsg] = useState('')
+  const [search, setSearch] = useState('')
+
+  const filtered = credentials.filter((c) => {
+    const q = search.toLowerCase()
+    return (
+      c.sistema.toLowerCase().includes(q) ||
+      c.login.toLowerCase().includes(q) ||
+      (c.observacao ?? '').toLowerCase().includes(q)
+    )
+  })
 
   function openAdd() { setEditingCredential(null); setModalOpen(true) }
   function openEdit(c: Credential) { setEditingCredential(c); setModalOpen(true) }
@@ -63,6 +73,17 @@ export function CredentialsClient({ credentials, companyId }: Props) {
         <Button onClick={openAdd}>+ Nova credencial</Button>
       </div>
 
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Pesquisar por sistema, login ou observação..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+          style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
+        />
+      </div>
+
       {errorMsg && (
         <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>
           {errorMsg}
@@ -81,14 +102,14 @@ export function CredentialsClient({ credentials, companyId }: Props) {
             </tr>
           </thead>
           <tbody>
-            {credentials.length === 0 && (
+            {filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  Nenhuma credencial cadastrada.
+                  {search ? 'Nenhuma credencial encontrada para essa pesquisa.' : 'Nenhuma credencial cadastrada.'}
                 </td>
               </tr>
             )}
-            {credentials.map((c) => (
+            {filtered.map((c) => (
               <tr key={c.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
                 <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
                   {c.sistema}
