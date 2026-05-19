@@ -25,8 +25,6 @@ export function SociosClient({ socios, companyId }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
 
-  const totalParticipacao = socios.reduce((s, x) => s + (x.participacao ?? 0), 0)
-
   function openAdd() { setEditingSocio(null); setModalOpen(true) }
   function openEdit(s: Socio) { setEditingSocio(s); setModalOpen(true) }
 
@@ -60,24 +58,6 @@ export function SociosClient({ socios, companyId }: Props) {
         </p>
       )}
 
-      {socios.length > 0 && (
-        <div
-          className="flex items-center gap-2 mb-4 px-4 py-2 rounded-lg text-sm"
-          style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
-        >
-          <span>Total de participação:</span>
-          <span
-            className="font-semibold"
-            style={{ color: totalParticipacao > 100 ? 'var(--color-error)' : 'var(--color-text-primary)' }}
-          >
-            {totalParticipacao.toFixed(2)}%
-          </span>
-          {totalParticipacao > 100 && (
-            <span style={{ color: 'var(--color-error)' }}>— excede 100%!</span>
-          )}
-        </div>
-      )}
-
       <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
         <table className="w-full min-w-[600px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
@@ -85,15 +65,14 @@ export function SociosClient({ socios, companyId }: Props) {
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>CPF</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Cargo</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Participação</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Contato</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Administrador</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {socios.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={5} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
                   Nenhum sócio cadastrado.
                 </td>
               </tr>
@@ -103,11 +82,17 @@ export function SociosClient({ socios, companyId }: Props) {
                 <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{s.nome}</td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{cpfMask(s.cpf)}</td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{s.cargo ?? '—'}</td>
-                <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                  {s.participacao != null ? `${s.participacao}%` : '—'}
-                </td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                  {s.email ?? s.telefone ?? '—'}
+                <td className="px-4 py-3">
+                  {s.administrador ? (
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+                    >
+                      Sim
+                    </span>
+                  ) : (
+                    <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Não</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2 justify-end">

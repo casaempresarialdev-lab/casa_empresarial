@@ -9,6 +9,14 @@ export type Socio = {
   telefone: string | null
   participacao: number | null
   cargo: string | null
+  administrador: boolean
+  cep: string | null
+  uf: string | null
+  cidade: string | null
+  logradouro: string | null
+  bairro: string | null
+  numero: string | null
+  complemento: string | null
   created_at: string
   updated_at: string
 }
