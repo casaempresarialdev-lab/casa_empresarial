@@ -1,7 +1,25 @@
-export default function Page() {
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { getMeetings } from './queries'
+import { ReunioesClient } from './components/reunioes-client'
+
+export const dynamic = 'force-dynamic'
+
+export default async function ReunioesPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const cookieStore = await cookies()
+  const companyId = cookieStore.get('active_company_id')?.value
+  if (!companyId) redirect('/cadastro/passo-2')
+
+  const meetings = await getMeetings(companyId)
+
   return (
-    <div>
-      <h1>Reuniões</h1>
+    <div className="max-w-5xl mx-auto">
+      <ReunioesClient meetings={meetings} companyId={companyId} />
     </div>
   )
 }

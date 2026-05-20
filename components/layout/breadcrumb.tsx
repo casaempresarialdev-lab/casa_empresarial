@@ -28,6 +28,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'escala-de-trabalho': 'Escala de Trabalho',
   'folha-de-pagamento': 'Folha de Pagamento',
   prestadores: 'Prestadores',
+  reunioes: 'Reuniões',
   marketing: 'Marketing',
   calendario: 'Calendário',
   depoimentos: 'Depoimentos',

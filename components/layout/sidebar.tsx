@@ -51,6 +51,7 @@ const NAV_ITEMS = [
       { label: 'Prestadores', href: '/pessoas/prestadores' },
       { label: 'Registro de Ponto', href: '/pessoas/registro-de-ponto' },
       { label: 'Escala de Trabalho', href: '/pessoas/escala-de-trabalho' },
+      { label: 'Reuniões', href: '/pessoas/reunioes' },
       { label: 'Folha de Pagamento', href: '/pessoas/folha-de-pagamento' },
     ],
   },
