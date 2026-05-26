@@ -11,7 +11,7 @@ interface ActiveModal {
 interface AppStore {
   // Empresa ativa (multi-CNPJ)
   activeCompanyId: string | null
-  setActiveCompany: (id: string) => void
+  setActiveCompany: (id: string | null) => void
 
   // Sidebar
   sidebarExpanded: boolean

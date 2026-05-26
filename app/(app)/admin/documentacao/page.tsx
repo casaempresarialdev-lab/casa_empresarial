@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers'
+﻿import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getDocuments } from './queries'
@@ -13,7 +13,7 @@ export default async function DocumentacaoPage() {
 
   const cookieStore = await cookies()
   const companyId = cookieStore.get('active_company_id')?.value
-  if (!companyId) redirect('/cadastro/passo-2')
+  if (!companyId) redirect('/empresa')
 
   const documents = await getDocuments(companyId)
 

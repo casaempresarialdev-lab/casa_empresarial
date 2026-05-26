@@ -26,6 +26,8 @@ export function AppStoreInitializer({ companies, firstCompanyId, children }: Pro
 
     if (resolved) {
       document.cookie = `active_company_id=${resolved}; path=/; max-age=86400; SameSite=Lax`
+    } else {
+      document.cookie = 'active_company_id=; path=/; max-age=0; SameSite=Lax'
     }
   }, [activeCompanyId, companies, firstCompanyId, setActiveCompany])
 
