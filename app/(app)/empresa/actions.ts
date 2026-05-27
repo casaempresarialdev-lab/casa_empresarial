@@ -68,12 +68,17 @@ export async function createCompanyAction(formData: FormData) {
     return { error: `Erro ao criar empresa: ${companyError.message}` }
   }
 
-  await admin.from('company_members').insert({
+  const { error: memberError } = await admin.from('company_members').insert({
     company_id: company.id,
     profile_id: user.id,
     role: 'owner',
     status: 'active',
   })
+
+  if (memberError) {
+    await admin.from('companies').delete().eq('id', company.id)
+    return { error: `Erro ao vincular usuário à empresa: ${memberError.message}` }
+  }
 
   await uploadLogoAndCert(admin, company.id, formData)
 
