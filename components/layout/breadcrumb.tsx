@@ -3,6 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+// Segmentos que são apenas grupos de rota — sem page.tsx própria
+const NON_LINK_SEGMENTS = new Set(['admin', 'financeiro', 'operacional', 'pessoas', 'marketing'])
+
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   admin: 'Administrativo',
@@ -69,8 +72,11 @@ export function Breadcrumb() {
           return (
             <li key={crumb.href} className="flex items-center gap-1.5">
               <span style={{ color: 'var(--color-text-muted)' }} aria-hidden="true">/</span>
-              {isLast ? (
-                <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+              {isLast || NON_LINK_SEGMENTS.has(segments[i]) ? (
+                <span
+                  className="text-sm"
+                  style={{ color: isLast ? 'var(--color-text-primary)' : 'var(--color-text-muted)', fontWeight: isLast ? 500 : 400 }}
+                >
                   {crumb.label}
                 </span>
               ) : (
