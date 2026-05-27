@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Image from 'next/image'
@@ -55,6 +56,7 @@ interface Props {
 export function EmpresaForm({ company }: Props) {
   const isEdit = !!company
 
+  const router = useRouter()
   const [serverError, setServerError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [cepLoading, setCepLoading] = useState(false)
@@ -150,8 +152,12 @@ export function EmpresaForm({ company }: Props) {
         else setSuccessMsg('Dados da empresa atualizados com sucesso!')
       } else {
         const result = await createCompanyAction(formData)
-        if (result?.error) setServerError(result.error)
-        // sucesso → redirect para /dashboard feito pela action
+        if (result?.error) {
+          setServerError(result.error)
+        } else if (result?.companyId) {
+          document.cookie = `active_company_id=${result.companyId}; path=/; max-age=31536000; SameSite=Lax`
+          router.push('/dashboard')
+        }
       }
     })
   }

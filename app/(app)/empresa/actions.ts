@@ -1,8 +1,6 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { companySchema } from '@/lib/validations/company'
 import { encrypt } from '@/lib/crypto'
@@ -79,15 +77,7 @@ export async function createCompanyAction(formData: FormData) {
 
   await uploadLogoAndCert(admin, company.id, formData)
 
-  const cookieStore = await cookies()
-  cookieStore.set('active_company_id', company.id, {
-    path: '/',
-    httpOnly: false,
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 365,
-  })
-
-  redirect('/dashboard')
+  return { companyId: company.id }
 }
 
 export async function updateCompanyAction(companyId: string, formData: FormData) {
