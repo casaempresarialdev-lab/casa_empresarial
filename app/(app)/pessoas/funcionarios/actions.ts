@@ -31,6 +31,8 @@ function parseEmployeeFields(formData: FormData) {
     vale_refeicao: formData.get('vale_refeicao') === 'true',
     plano_saude: formData.get('plano_saude') === 'true',
     grau_instrucao: (formData.get('grau_instrucao') as string) || null,
+    pin: (formData.get('pin') as string) || null,
+    pin_ativo: formData.get('pin_ativo') === 'true',
   }
 }
 

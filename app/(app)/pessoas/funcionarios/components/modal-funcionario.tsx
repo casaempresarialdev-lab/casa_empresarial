@@ -57,6 +57,8 @@ export function ModalFuncionario({ open, onClose, companyId, employee }: Props) 
   const [valeTransporte, setValeTransporte] = useState(false)
   const [valeRefeicao, setValeRefeicao] = useState(false)
   const [planoSaude, setPlanoSaude] = useState(false)
+  const [pin, setPin] = useState('')
+  const [pinAtivo, setPinAtivo] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -81,12 +83,15 @@ export function ModalFuncionario({ open, onClose, companyId, employee }: Props) 
       setValeTransporte(employee.vale_transporte)
       setValeRefeicao(employee.vale_refeicao)
       setPlanoSaude(employee.plano_saude)
+      setPin((employee as unknown as { pin?: string }).pin ?? '')
+      setPinAtivo((employee as unknown as { pin_ativo?: boolean }).pin_ativo ?? false)
     } else {
       setNome(''); setCpf(''); setRg(''); setTelefone(''); setEmail('')
       setCargo(''); setDepartamento(''); setSalario(''); setStatus('admissao')
       setDataAdmissao(''); setDataExperienciaFim(''); setDataDemissao('')
       setTipoContrato(''); setGrauInstrucao('')
       setValeTransporte(false); setValeRefeicao(false); setPlanoSaude(false)
+      setPin(''); setPinAtivo(false)
     }
   }, [open, employee])
 
@@ -113,6 +118,8 @@ export function ModalFuncionario({ open, onClose, companyId, employee }: Props) 
     fd.set('vale_transporte', String(valeTransporte))
     fd.set('vale_refeicao', String(valeRefeicao))
     fd.set('plano_saude', String(planoSaude))
+    fd.set('pin', pin)
+    fd.set('pin_ativo', String(pinAtivo))
 
     const result = isEdit
       ? await updateEmployeeAction(employee!.id, fd)
@@ -277,6 +284,44 @@ export function ModalFuncionario({ open, onClose, companyId, employee }: Props) 
             <Toggle value={valeTransporte} onChange={setValeTransporte} label="Vale Transporte" />
             <Toggle value={valeRefeicao} onChange={setValeRefeicao} label="Vale Refeição" />
             <Toggle value={planoSaude} onChange={setPlanoSaude} label="Plano de Saúde" />
+          </div>
+        </div>
+
+        {/* Acesso ao Portal de Ponto */}
+        <div>
+          <p style={sectionTitle}>Acesso ao Portal de Ponto</p>
+          <div className="space-y-3">
+            <Toggle value={pinAtivo} onChange={setPinAtivo} label="Permitir registro de ponto pelo colaborador" />
+            {pinAtivo && (
+              <div>
+                <label style={labelStyle}>PIN de acesso (4 dígitos)</label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    value={pin}
+                    onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="0000"
+                    inputMode="numeric"
+                    maxLength={4}
+                    className="w-28 text-center text-lg tracking-widest font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPin(String(Math.floor(1000 + Math.random() * 9000)))}
+                    className="text-xs px-3 py-2 rounded-lg border transition-colors hover:bg-gray-50"
+                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
+                  >
+                    Gerar PIN
+                  </button>
+                </div>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                  O colaborador usa este PIN em{' '}
+                  <span className="font-mono" style={{ color: 'var(--color-primary-darker)' }}>
+                    /registrar-ponto
+                  </span>{' '}
+                  junto ao CNPJ da empresa.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
