@@ -22,7 +22,7 @@ function parseEmployeeFields(formData: FormData) {
     cargo: (formData.get('cargo') as string) || null,
     departamento: (formData.get('departamento') as string) || null,
     salario,
-    status: (formData.get('status') as string) || 'ativo',
+    status: (formData.get('status') as string) || 'admissao',
     data_admissao: (formData.get('data_admissao') as string) || null,
     data_experiencia_fim: (formData.get('data_experiencia_fim') as string) || null,
     data_demissao: (formData.get('data_demissao') as string) || null,
