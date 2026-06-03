@@ -35,17 +35,21 @@ const TURNOS_PRESET = [
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
+function pad(n: number) { return String(n).padStart(2, '0') }
+
 export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }: Props) {
   const router = useRouter()
 
-  const [employeeId, setEmployeeId] = useState('')
-  // dias da semana selecionados: 0=Dom … 6=Sáb; padrão: Seg a Sex
-  const [diasSemana, setDiasSemana] = useState<number[]>([1, 2, 3, 4, 5])
-  const [turno, setTurno] = useState('manha')
-  const [horaInicio, setHoraInicio] = useState('08:00')
-  const [horaFim, setHoraFim] = useState('12:00')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [employeeId, setEmployeeId]     = useState('')
+  const [diasSemana, setDiasSemana]     = useState<number[]>([1, 2, 3, 4, 5])
+  const [turno, setTurno]               = useState('manha')
+  const [horaInicio, setHoraInicio]     = useState('08:00')
+  const [horaFim, setHoraFim]           = useState('12:00')
+  const [excluidas, setExcluidas]       = useState<Set<string>>(new Set())
+  const [periodoInicio, setPeriodoInicio] = useState('')
+  const [periodoFim, setPeriodoFim]     = useState('')
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -53,6 +57,9 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
     setEmployeeId('')
     setDiasSemana([1, 2, 3, 4, 5])
     applyPreset('manha')
+    setExcluidas(new Set())
+    setPeriodoInicio('')
+    setPeriodoFim('')
   }, [open])
 
   function applyPreset(value: string) {
@@ -67,29 +74,70 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
     )
   }
 
-  // Preview: quantas datas serão geradas
-  const preview = useMemo(() => {
+  // Todas as datas candidatas (dias da semana selecionados)
+  const todasDatas = useMemo(() => {
     if (diasSemana.length === 0) return []
     const totalDias = new Date(ano, mes, 0).getDate()
     const datas: string[] = []
     for (let d = 1; d <= totalDias; d++) {
       const date = new Date(ano, mes - 1, d)
       if (diasSemana.includes(date.getDay())) {
-        datas.push(`${String(d).padStart(2, '0')}/${String(mes).padStart(2, '0')}`)
+        datas.push(`${ano}-${pad(mes)}-${pad(d)}`)
       }
     }
     return datas
   }, [diasSemana, mes, ano])
 
+  const incluidas = todasDatas.filter(d => !excluidas.has(d))
+  const folgas    = todasDatas.filter(d => excluidas.has(d))
+
+  function toggleExcluida(data: string) {
+    setExcluidas(prev => {
+      const next = new Set(prev)
+      if (next.has(data)) next.delete(data)
+      else next.add(data)
+      return next
+    })
+  }
+
+  function aplicarPeriodo() {
+    if (!periodoInicio || !periodoFim) return
+    const inicio = new Date(periodoInicio + 'T00:00:00')
+    const fim    = new Date(periodoFim    + 'T00:00:00')
+    if (inicio > fim) return
+
+    setExcluidas(prev => {
+      const next = new Set(prev)
+      todasDatas.forEach(d => {
+        const date = new Date(d + 'T00:00:00')
+        if (date >= inicio && date <= fim) next.add(d)
+      })
+      return next
+    })
+    setPeriodoInicio('')
+    setPeriodoFim('')
+  }
+
+  function limparExcluidas() {
+    setExcluidas(new Set())
+  }
+
+  function formatChip(data: string) {
+    const [, , d] = data.split('-')
+    return `${d}/${pad(mes)}`
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (incluidas.length === 0) { setError('Nenhuma data incluída após aplicar as folgas.'); return }
     setLoading(true)
     setError('')
 
     const fd = new FormData()
     fd.set('employee_id', employeeId)
-    fd.set('mes_ano', `${ano}-${String(mes).padStart(2, '0')}`)
+    fd.set('mes_ano', `${ano}-${pad(mes)}`)
     fd.set('dias_semana', JSON.stringify(diasSemana))
+    fd.set('datas_excluidas', JSON.stringify([...excluidas]))
     fd.set('turno', turno)
     fd.set('hora_inicio', horaInicio)
     fd.set('hora_fim', horaFim)
@@ -149,28 +197,18 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
               )
             })}
           </div>
-          {/* Atalhos */}
           <div className="flex gap-2 mt-2">
-            <button type="button" onClick={() => setDiasSemana([1,2,3,4,5])}
-              className="text-xs px-2 py-1 rounded border transition-colors hover:bg-gray-50"
-              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
-              Seg–Sex
-            </button>
-            <button type="button" onClick={() => setDiasSemana([1,2,3,4,5,6])}
-              className="text-xs px-2 py-1 rounded border transition-colors hover:bg-gray-50"
-              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
-              Seg–Sáb
-            </button>
-            <button type="button" onClick={() => setDiasSemana([0,1,2,3,4,5,6])}
-              className="text-xs px-2 py-1 rounded border transition-colors hover:bg-gray-50"
-              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
-              Todos
-            </button>
-            <button type="button" onClick={() => setDiasSemana([])}
-              className="text-xs px-2 py-1 rounded border transition-colors hover:bg-gray-50"
-              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
-              Limpar
-            </button>
+            {[
+              { label: 'Seg–Sex', val: [1,2,3,4,5] },
+              { label: 'Seg–Sáb', val: [1,2,3,4,5,6] },
+              { label: 'Todos',   val: [0,1,2,3,4,5,6] },
+            ].map(({ label, val }) => (
+              <button key={label} type="button" onClick={() => setDiasSemana(val)}
+                className="text-xs px-2 py-1 rounded border transition-colors hover:bg-gray-50"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -208,30 +246,96 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
           </div>
         </div>
 
-        {/* Preview */}
-        <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-          {preview.length === 0 ? (
-            <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-              Selecione ao menos um dia da semana.
-            </p>
-          ) : (
-            <>
-              <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-                SERÃO GERADOS <span style={{ color: 'var(--color-primary-darker)' }}>{preview.length} TURNOS</span> EM {MESES[mes - 1].toUpperCase()} {ano}
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {preview.map(d => (
-                  <span key={d} className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}>
-                    {d}
-                  </span>
-                ))}
+        {/* Preview interativo */}
+        {todasDatas.length > 0 && (
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)' }}>
+            {/* Header do preview */}
+            <div className="px-4 py-3 flex items-center justify-between" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <div className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                DIAS DO MÊS — clique para marcar como folga
               </div>
-              <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-                Se já houver escala em algum desses dias, ela será substituída.
+              <div className="flex items-center gap-3 text-xs">
+                <span style={{ color: 'var(--color-primary-darker)' }}>
+                  ✓ {incluidas.length} turnos
+                </span>
+                {folgas.length > 0 && (
+                  <span style={{ color: '#C0392B' }}>
+                    ✕ {folgas.length} folgas
+                  </span>
+                )}
+                {folgas.length > 0 && (
+                  <button type="button" onClick={limparExcluidas}
+                    className="text-xs underline" style={{ color: 'var(--color-text-muted)' }}>
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Grid de chips */}
+            <div className="p-3 flex flex-wrap gap-1.5">
+              {todasDatas.map(data => {
+                const isExcluida = excluidas.has(data)
+                return (
+                  <button
+                    key={data}
+                    type="button"
+                    onClick={() => toggleExcluida(data)}
+                    title={isExcluida ? 'Clique para incluir' : 'Clique para marcar como folga'}
+                    className="px-2 py-1 rounded text-xs font-medium transition-all"
+                    style={{
+                      backgroundColor: isExcluida ? '#FDEDEC' : 'var(--color-primary)',
+                      color: isExcluida ? '#C0392B' : 'var(--color-primary-darker)',
+                      textDecoration: isExcluida ? 'line-through' : 'none',
+                      opacity: isExcluida ? 0.75 : 1,
+                    }}
+                  >
+                    {formatChip(data)}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Atalho: excluir período */}
+            <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
+              <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                EXCLUIR PERÍODO (férias, folgas em bloco)
               </p>
-            </>
-          )}
-        </div>
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <label style={{ ...labelStyle, marginBottom: 2 }}>De</label>
+                  <Input type="date" value={periodoInicio} onChange={e => setPeriodoInicio(e.target.value)}
+                    min={`${ano}-${pad(mes)}-01`}
+                    max={`${ano}-${pad(mes)}-${new Date(ano, mes, 0).getDate()}`}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label style={{ ...labelStyle, marginBottom: 2 }}>Até</label>
+                  <Input type="date" value={periodoFim} onChange={e => setPeriodoFim(e.target.value)}
+                    min={periodoInicio || `${ano}-${pad(mes)}-01`}
+                    max={`${ano}-${pad(mes)}-${new Date(ano, mes, 0).getDate()}`}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={aplicarPeriodo}
+                  disabled={!periodoInicio || !periodoFim}
+                >
+                  Excluir
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {todasDatas.length === 0 && (
+          <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              Selecione ao menos um dia da semana para ver o preview.
+            </p>
+          </div>
+        )}
 
         {error && (
           <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{error}</p>
@@ -239,8 +343,8 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
 
         <div className="flex gap-3 justify-end pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button type="submit" loading={loading} disabled={preview.length === 0}>
-            Gerar {preview.length > 0 ? `${preview.length} turnos` : 'escala'}
+          <Button type="submit" loading={loading} disabled={incluidas.length === 0}>
+            {incluidas.length > 0 ? `Gerar ${incluidas.length} turnos` : 'Selecione os dias'}
           </Button>
         </div>
       </form>

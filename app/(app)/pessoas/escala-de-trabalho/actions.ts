@@ -84,14 +84,17 @@ export async function createMonthlyScheduleAction(companyId: string, formData: F
   const horaInicio = (formData.get('hora_inicio') as string) || null
   const horaFim = (formData.get('hora_fim') as string) || null
 
+  const datasExcluidasRaw = formData.get('datas_excluidas') as string
+  const datasExcluidas = new Set<string>(datasExcluidasRaw ? JSON.parse(datasExcluidasRaw) : [])
+
   const [ano, mes] = mesAno.split('-').map(Number)
   const totalDias = new Date(ano, mes, 0).getDate()
 
   const registros: { company_id: string; employee_id: string; data: string; turno: string | null; hora_inicio: string | null; hora_fim: string | null }[] = []
   for (let d = 1; d <= totalDias; d++) {
     const date = new Date(ano, mes - 1, d)
-    if (diasSemana.includes(date.getDay())) {
-      const dataStr = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const dataStr = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    if (diasSemana.includes(date.getDay()) && !datasExcluidas.has(dataStr)) {
       registros.push({ company_id: companyId, employee_id: employeeId, data: dataStr, turno, hora_inicio: horaInicio, hora_fim: horaFim })
     }
   }
