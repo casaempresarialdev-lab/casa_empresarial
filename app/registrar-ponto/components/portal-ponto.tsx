@@ -2,8 +2,18 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { registrarPontoAction, sairPontoAction } from '../actions'
 import type { PontoSession } from '../actions'
+
+const MapaPonto = dynamic(
+  () => import('./mapa-ponto').then(m => m.MapaPonto),
+  { ssr: false, loading: () => (
+    <div className="rounded-xl flex items-center justify-center" style={{ height: 160, backgroundColor: 'var(--color-bg-surface)' }}>
+      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Carregando mapa...</p>
+    </div>
+  )}
+)
 
 interface Props {
   session: PontoSession
@@ -114,11 +124,6 @@ export function PortalPonto({ session, registroHoje }: Props) {
   const horaDisplay = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const dataDisplay = formatDate(now)
 
-  // Mapa: iframe OpenStreetMap (sem API key)
-  const mapUrl = lat && lng
-    ? `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.003},${lat-0.003},${lng+0.003},${lat+0.003}&layer=mapnik&marker=${lat},${lng}`
-    : null
-
   const gmapsUrl = lat && lng
     ? `https://www.google.com/maps?q=${lat},${lng}`
     : null
@@ -209,20 +214,9 @@ export function PortalPonto({ session, registroHoje }: Props) {
                 ⚠️ Localização não autorizada — o ponto será registrado sem coordenadas.
               </p>
             )}
-            {geoStatus === 'ok' && (
+            {geoStatus === 'ok' && lat && lng && (
               <div className="space-y-2">
-                {mapUrl && (
-                  <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--color-bg-surface)', height: 140 }}>
-                    <iframe
-                      src={mapUrl}
-                      width="100%"
-                      height="140"
-                      style={{ border: 0 }}
-                      title="Sua localização"
-                      loading="lazy"
-                    />
-                  </div>
-                )}
+                <MapaPonto lat={lat} lng={lng} />
                 {endereco && (
                   <div className="flex items-start gap-1.5">
                     <span className="text-xs mt-0.5">📍</span>
