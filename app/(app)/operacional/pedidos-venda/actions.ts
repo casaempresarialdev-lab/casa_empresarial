@@ -64,10 +64,38 @@ export async function updateSaleOrderStatusAction(orderId: string, status: strin
   if (!user) return { error: 'Não autenticado' }
 
   const admin = createAdminClient()
-  const { error } = await admin.from('sale_orders').update({ status }).eq('id', orderId)
 
+  // Ao marcar como entregue → gera lançamento de recebimento no fluxo de caixa
+  if (status === 'entregue') {
+    const { data: order } = await admin
+      .from('sale_orders')
+      .select('numero, valor_total, cliente_id, data, data_entrega, company_id')
+      .eq('id', orderId)
+      .single()
+
+    if (order && order.valor_total > 0) {
+      const dataComp = order.data
+      const dataVenc = order.data_entrega ?? order.data
+
+      await admin.from('transactions').insert({
+        company_id:       order.company_id,
+        tipo:             'recebimento',
+        descricao:        `Pedido de Venda #${order.numero}`,
+        valor:            order.valor_total,
+        data_competencia: dataComp,
+        data_vencimento:  dataVenc,
+        status:           'pendente',
+        contact_id:       order.cliente_id,
+        recorrente:       'false',
+      })
+    }
+  }
+
+  const { error } = await admin.from('sale_orders').update({ status }).eq('id', orderId)
   if (error) return { error: error.message }
+
   revalidatePath('/operacional/pedidos-venda')
+  revalidatePath('/financeiro/fluxo-de-caixa')
   return { success: true }
 }
 

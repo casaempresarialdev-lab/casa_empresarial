@@ -61,10 +61,38 @@ export async function updatePurchaseOrderStatusAction(orderId: string, status: s
   if (!user) return { error: 'Não autenticado' }
 
   const admin = createAdminClient()
-  const { error } = await admin.from('purchase_orders').update({ status }).eq('id', orderId)
 
+  // Ao marcar como recebido → gera lançamento de pagamento no fluxo de caixa
+  if (status === 'recebido') {
+    const { data: order } = await admin
+      .from('purchase_orders')
+      .select('numero, valor_total, fornecedor_id, data, data_entrega, company_id')
+      .eq('id', orderId)
+      .single()
+
+    if (order && order.valor_total > 0) {
+      const dataComp = order.data
+      const dataVenc = order.data_entrega ?? order.data
+
+      await admin.from('transactions').insert({
+        company_id:      order.company_id,
+        tipo:            'pagamento',
+        descricao:       `Pedido de Compra #${order.numero}`,
+        valor:           order.valor_total,
+        data_competencia: dataComp,
+        data_vencimento:  dataVenc,
+        status:          'pendente',
+        contact_id:      order.fornecedor_id,
+        recorrente:      'false',
+      })
+    }
+  }
+
+  const { error } = await admin.from('purchase_orders').update({ status }).eq('id', orderId)
   if (error) return { error: error.message }
+
   revalidatePath('/operacional/pedidos-compra')
+  revalidatePath('/financeiro/fluxo-de-caixa')
   return { success: true }
 }
 
