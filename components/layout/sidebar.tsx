@@ -48,11 +48,16 @@ const NAV_ITEMS = [
     icon: '👥',
     children: [
       { label: 'Funcionários', href: '/pessoas/funcionarios' },
+      { label: 'Admissão', href: '/pessoas/admissao' },
       { label: 'Prestadores', href: '/pessoas/prestadores' },
       { label: 'Registro de Ponto', href: '/pessoas/registro-de-ponto' },
       { label: 'Escala de Trabalho', href: '/pessoas/escala-de-trabalho' },
-      { label: 'Reuniões', href: '/pessoas/reunioes' },
       { label: 'Folha de Pagamento', href: '/pessoas/folha-de-pagamento' },
+      { label: 'Benefícios', href: '/pessoas/beneficios' },
+      { label: 'Encargos', href: '/pessoas/encargos' },
+      { label: 'Reuniões', href: '/pessoas/reunioes' },
+      { label: 'Pesquisas', href: '/pessoas/pesquisas' },
+      { label: 'Segurança e Saúde', href: '/pessoas/seguranca-saude' },
     ],
   },
   {

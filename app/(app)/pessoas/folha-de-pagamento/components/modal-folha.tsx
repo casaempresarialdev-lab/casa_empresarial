@@ -1,0 +1,227 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { Modal } from '@/components/ui/modal'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { createPayrollEntryAction, updatePayrollEntryAction } from '../actions'
+import type { PayrollEntry, EmployeeForPayroll } from '../queries'
+
+interface Props {
+  open: boolean
+  onClose: () => void
+  companyId: string
+  entry: PayrollEntry | null
+  employees: EmployeeForPayroll[]
+  mesAno: string
+}
+
+function fmt(n: number): string {
+  return n > 0 ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
+}
+
+export function ModalFolha({ open, onClose, companyId, entry, employees, mesAno }: Props) {
+  const router = useRouter()
+  const isEdit = !!entry
+
+  const [employeeId, setEmployeeId] = useState('')
+  const [salarioBase, setSalarioBase] = useState('')
+  const [horasExtras, setHorasExtras] = useState('')
+  const [adicionalNoturno, setAdicionalNoturno] = useState('')
+  const [bonus, setBonus] = useState('')
+  const [descontoFaltas, setDescontoFaltas] = useState('')
+  const [descontoInss, setDescontoInss] = useState('')
+  const [descontoIrrf, setDescontoIrrf] = useState('')
+  const [descontoVt, setDescontoVt] = useState('')
+  const [descontoOutros, setDescontoOutros] = useState('')
+  const [status, setStatus] = useState('rascunho')
+  const [observacao, setObservacao] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const baseNum = parseFloat(salarioBase.replace(',', '.')) || 0
+  const extras = parseFloat(horasExtras.replace(',', '.')) || 0
+  const noturno = parseFloat(adicionalNoturno.replace(',', '.')) || 0
+  const bonusNum = parseFloat(bonus.replace(',', '.')) || 0
+  const faltas = parseFloat(descontoFaltas.replace(',', '.')) || 0
+  const inss = parseFloat(descontoInss.replace(',', '.')) || 0
+  const irrf = parseFloat(descontoIrrf.replace(',', '.')) || 0
+  const vt = parseFloat(descontoVt.replace(',', '.')) || 0
+  const outros = parseFloat(descontoOutros.replace(',', '.')) || 0
+  const liquido = Math.max(0, baseNum + extras + noturno + bonusNum - faltas - inss - irrf - vt - outros)
+
+  function onEmployeeChange(id: string) {
+    setEmployeeId(id)
+    const emp = employees.find(e => e.id === id)
+    if (emp && !isEdit) {
+      setSalarioBase(emp.salario ? fmt(emp.salario) : '')
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return
+    setError('')
+    if (entry) {
+      setEmployeeId(entry.employee_id)
+      setSalarioBase(fmt(entry.salario_base))
+      setHorasExtras(fmt(entry.horas_extras))
+      setAdicionalNoturno(fmt(entry.adicional_noturno))
+      setBonus(fmt(entry.bonus))
+      setDescontoFaltas(fmt(entry.desconto_faltas))
+      setDescontoInss(fmt(entry.desconto_inss))
+      setDescontoIrrf(fmt(entry.desconto_irrf))
+      setDescontoVt(fmt(entry.desconto_vt))
+      setDescontoOutros(fmt(entry.desconto_outros))
+      setStatus(entry.status)
+      setObservacao(entry.observacao ?? '')
+    } else {
+      setEmployeeId(''); setSalarioBase(''); setHorasExtras(''); setAdicionalNoturno('')
+      setBonus(''); setDescontoFaltas(''); setDescontoInss(''); setDescontoIrrf('')
+      setDescontoVt(''); setDescontoOutros(''); setStatus('rascunho'); setObservacao('')
+    }
+  }, [open, entry])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    const fd = new FormData()
+    fd.set('employee_id', employeeId)
+    fd.set('mes_ano', mesAno)
+    fd.set('salario_base', salarioBase)
+    fd.set('horas_extras', horasExtras)
+    fd.set('adicional_noturno', adicionalNoturno)
+    fd.set('bonus', bonus)
+    fd.set('desconto_faltas', descontoFaltas)
+    fd.set('desconto_inss', descontoInss)
+    fd.set('desconto_irrf', descontoIrrf)
+    fd.set('desconto_vt', descontoVt)
+    fd.set('desconto_outros', descontoOutros)
+    fd.set('status', status)
+    fd.set('observacao', observacao)
+
+    const result = isEdit
+      ? await updatePayrollEntryAction(entry!.id, fd)
+      : await createPayrollEntryAction(companyId, fd)
+
+    setLoading(false)
+    if ('error' in result) { setError(result.error ?? 'Erro ao salvar.'); return }
+    router.refresh()
+    onClose()
+  }
+
+  const labelStyle = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }
+
+  return (
+    <Modal open={open} onClose={onClose} title={isEdit ? 'Editar Holerite' : 'Novo Holerite'}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {!isEdit && (
+          <div>
+            <label style={labelStyle}>Funcionário *</label>
+            <select
+              value={employeeId}
+              onChange={e => onEmployeeChange(e.target.value)}
+              required
+              className="w-full px-3 py-2 rounded-lg border text-sm"
+              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+            >
+              <option value="">Selecione...</option>
+              {employees.map(e => (
+                <option key={e.id} value={e.id}>{e.nome}{e.cargo ? ` — ${e.cargo}` : ''}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Proventos */}
+        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>PROVENTOS</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label style={labelStyle}>Salário base *</label>
+              <Input value={salarioBase} onChange={e => setSalarioBase(e.target.value)} placeholder="0,00" inputMode="decimal" required />
+            </div>
+            <div>
+              <label style={labelStyle}>Horas extras</label>
+              <Input value={horasExtras} onChange={e => setHorasExtras(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+            <div>
+              <label style={labelStyle}>Adicional noturno</label>
+              <Input value={adicionalNoturno} onChange={e => setAdicionalNoturno(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+            <div>
+              <label style={labelStyle}>Bônus / comissão</label>
+              <Input value={bonus} onChange={e => setBonus(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+          </div>
+        </div>
+
+        {/* Descontos */}
+        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>DESCONTOS</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label style={labelStyle}>INSS</label>
+              <Input value={descontoInss} onChange={e => setDescontoInss(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+            <div>
+              <label style={labelStyle}>IRRF</label>
+              <Input value={descontoIrrf} onChange={e => setDescontoIrrf(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+            <div>
+              <label style={labelStyle}>Vale-transporte</label>
+              <Input value={descontoVt} onChange={e => setDescontoVt(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+            <div>
+              <label style={labelStyle}>Faltas</label>
+              <Input value={descontoFaltas} onChange={e => setDescontoFaltas(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+            <div>
+              <label style={labelStyle}>Outros descontos</label>
+              <Input value={descontoOutros} onChange={e => setDescontoOutros(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+          </div>
+        </div>
+
+        {/* Líquido calculado */}
+        <div className="flex items-center justify-between px-4 py-3 rounded-xl"
+          style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}>
+          <span className="font-semibold text-sm">Salário Líquido</span>
+          <span className="font-bold text-lg">
+            {liquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label style={labelStyle}>Status</label>
+            <select
+              value={status}
+              onChange={e => setStatus(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border text-sm"
+              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+            >
+              <option value="rascunho">Rascunho</option>
+              <option value="fechado">Fechado</option>
+              <option value="pago">Pago</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Observação</label>
+            <Input value={observacao} onChange={e => setObservacao(e.target.value)} placeholder="Opcional" />
+          </div>
+        </div>
+
+        {error && (
+          <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{error}</p>
+        )}
+        <div className="flex gap-3 justify-end pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={loading}>{isEdit ? 'Salvar alterações' : 'Criar holerite'}</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
