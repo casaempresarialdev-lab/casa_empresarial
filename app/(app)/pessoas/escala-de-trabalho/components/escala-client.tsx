@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalEscala } from './modal-escala'
+import { ModalEscalaMes } from './modal-escala-mes'
 import { deleteScheduleAction } from '../actions'
 import type { WorkSchedule } from '../queries'
 
@@ -48,6 +49,7 @@ function getFirstDayOfWeek(ano: number, mes: number) {
 export function EscalaClient({ schedules, employees, companyId, mes, ano }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
+  const [modalMesOpen, setModalMesOpen] = useState(false)
   const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [filterEmployee, setFilterEmployee] = useState('')
@@ -131,6 +133,7 @@ export function EscalaClient({ schedules, employees, companyId, mes, ano }: Prop
               </button>
             ))}
           </div>
+          <Button variant="ghost" onClick={() => setModalMesOpen(true)}>📅 Escala do mês</Button>
           <Button onClick={() => openAdd()}>+ Novo turno</Button>
         </div>
       </div>
@@ -293,6 +296,15 @@ export function EscalaClient({ schedules, employees, companyId, mes, ano }: Prop
         schedule={editingSchedule}
         employees={employees}
         defaultDate={preselectedDate}
+      />
+
+      <ModalEscalaMes
+        open={modalMesOpen}
+        onClose={() => setModalMesOpen(false)}
+        companyId={companyId}
+        mes={mes}
+        ano={ano}
+        employees={employees}
       />
     </>
   )
