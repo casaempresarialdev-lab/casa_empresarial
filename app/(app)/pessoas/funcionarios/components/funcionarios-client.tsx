@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button'
 import { ModalFuncionario } from './modal-funcionario'
 import { deleteEmployeeAction } from '../actions'
 import type { Employee } from '../queries'
+import type { CompanyBenefit } from '../../beneficios/queries'
 
 interface Props {
   employees: Employee[]
   companyId: string
+  companyBenefits: CompanyBenefit[]
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -50,7 +52,7 @@ function cpfMask(cpf: string | null) {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
 }
 
-export function FuncionariosClient({ employees, companyId }: Props) {
+export function FuncionariosClient({ employees, companyId, companyBenefits }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
@@ -178,6 +180,7 @@ export function FuncionariosClient({ employees, companyId }: Props) {
         onClose={() => setModalOpen(false)}
         companyId={companyId}
         employee={editingEmployee}
+        companyBenefits={companyBenefits}
       />
     </>
   )

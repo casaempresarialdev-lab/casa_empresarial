@@ -36,6 +36,19 @@ function parseEmployeeFields(formData: FormData) {
   }
 }
 
+async function syncEmployeeBenefits(admin: ReturnType<typeof createAdminClient>, companyId: string, employeeId: string, formData: FormData) {
+  const raw = formData.get('benefit_ids') as string
+  const benefitIds: string[] = raw ? JSON.parse(raw) : []
+
+  await admin.from('employee_benefits').delete().eq('employee_id', employeeId)
+
+  if (benefitIds.length > 0) {
+    await admin.from('employee_benefits').insert(
+      benefitIds.map(bid => ({ company_id: companyId, employee_id: employeeId, benefit_id: bid }))
+    )
+  }
+}
+
 export async function createEmployeeAction(companyId: string, formData: FormData) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
@@ -44,10 +57,17 @@ export async function createEmployeeAction(companyId: string, formData: FormData
   if (!fields.nome) return { error: 'Nome é obrigatório.' }
 
   const admin = createAdminClient()
-  const { error } = await admin.from('employees').insert({ company_id: companyId, ...fields })
+  const { data, error } = await admin
+    .from('employees')
+    .insert({ company_id: companyId, ...fields })
+    .select('id')
+    .single()
 
   if (error) return { error: error.message }
+  await syncEmployeeBenefits(admin, companyId, data.id, formData)
+
   revalidatePath('/pessoas/funcionarios')
+  revalidatePath('/pessoas/beneficios')
   return { success: true }
 }
 
@@ -60,9 +80,13 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
 
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update(fields).eq('id', employeeId)
-
   if (error) return { error: error.message }
+
+  const { data: emp } = await admin.from('employees').select('company_id').eq('id', employeeId).single()
+  if (emp) await syncEmployeeBenefits(admin, emp.company_id, employeeId, formData)
+
   revalidatePath('/pessoas/funcionarios')
+  revalidatePath('/pessoas/beneficios')
   return { success: true }
 }
 

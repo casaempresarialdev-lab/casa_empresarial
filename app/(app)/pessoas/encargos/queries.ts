@@ -6,15 +6,29 @@ export type EmployeeEncargo = {
   cargo: string | null
   tipo_contrato: string | null
   salario: number | null
-  vale_transporte: boolean
-  vale_refeicao: boolean
+  employee_benefits: {
+    benefit_id: string
+    valor_override: number | null
+    benefit: {
+      nome: string
+      valor: number
+      por_dia_trabalhado: boolean
+      desconta_salario: boolean
+    }
+  }[]
 }
 
 export async function getEncargosEmployees(companyId: string): Promise<EmployeeEncargo[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, nome, cargo, tipo_contrato, salario, vale_transporte, vale_refeicao')
+    .select(`
+      id, nome, cargo, tipo_contrato, salario,
+      employee_benefits(
+        benefit_id, valor_override,
+        benefit:benefit_id(nome, valor, por_dia_trabalhado, desconta_salario)
+      )
+    `)
     .eq('company_id', companyId)
     .in('status', ['ativo', 'experiencia'])
     .not('salario', 'is', null)

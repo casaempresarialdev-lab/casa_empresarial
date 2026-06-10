@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createEmployeeAction, updateEmployeeAction } from '../actions'
 import type { Employee } from '../queries'
+import type { CompanyBenefit } from '../../beneficios/queries'
 
 function formatCpf(value: string) {
   const d = value.replace(/\D/g, '').slice(0, 11)
@@ -21,6 +22,7 @@ interface Props {
   onClose: () => void
   companyId: string
   employee: Employee | null
+  companyBenefits: CompanyBenefit[]
 }
 
 const GRAU_OPTIONS = [
@@ -36,7 +38,7 @@ const GRAU_OPTIONS = [
   'Doutorado',
 ]
 
-export function ModalFuncionario({ open, onClose, companyId, employee }: Props) {
+export function ModalFuncionario({ open, onClose, companyId, employee, companyBenefits }: Props) {
   const router = useRouter()
   const isEdit = !!employee
 
@@ -59,6 +61,7 @@ export function ModalFuncionario({ open, onClose, companyId, employee }: Props) 
   const [planoSaude, setPlanoSaude] = useState(false)
   const [pin, setPin] = useState('')
   const [pinAtivo, setPinAtivo] = useState(false)
+  const [selectedBenefitIds, setSelectedBenefitIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -83,15 +86,16 @@ export function ModalFuncionario({ open, onClose, companyId, employee }: Props) 
       setValeTransporte(employee.vale_transporte)
       setValeRefeicao(employee.vale_refeicao)
       setPlanoSaude(employee.plano_saude)
-      setPin((employee as unknown as { pin?: string }).pin ?? '')
-      setPinAtivo((employee as unknown as { pin_ativo?: boolean }).pin_ativo ?? false)
+      setPin(employee.pin ?? '')
+      setPinAtivo(employee.pin_ativo ?? false)
+      setSelectedBenefitIds(employee.employee_benefits?.map(b => b.benefit_id) ?? [])
     } else {
       setNome(''); setCpf(''); setRg(''); setTelefone(''); setEmail('')
       setCargo(''); setDepartamento(''); setSalario(''); setStatus('admissao')
       setDataAdmissao(''); setDataExperienciaFim(''); setDataDemissao('')
       setTipoContrato(''); setGrauInstrucao('')
       setValeTransporte(false); setValeRefeicao(false); setPlanoSaude(false)
-      setPin(''); setPinAtivo(false)
+      setPin(''); setPinAtivo(false); setSelectedBenefitIds([])
     }
   }, [open, employee])
 
@@ -120,6 +124,7 @@ export function ModalFuncionario({ open, onClose, companyId, employee }: Props) 
     fd.set('plano_saude', String(planoSaude))
     fd.set('pin', pin)
     fd.set('pin_ativo', String(pinAtivo))
+    fd.set('benefit_ids', JSON.stringify(selectedBenefitIds))
 
     const result = isEdit
       ? await updateEmployeeAction(employee!.id, fd)
@@ -280,11 +285,43 @@ export function ModalFuncionario({ open, onClose, companyId, employee }: Props) 
         {/* Benefícios */}
         <div>
           <p style={sectionTitle}>Benefícios</p>
-          <div className="space-y-3">
-            <Toggle value={valeTransporte} onChange={setValeTransporte} label="Vale Transporte" />
-            <Toggle value={valeRefeicao} onChange={setValeRefeicao} label="Vale Refeição" />
-            <Toggle value={planoSaude} onChange={setPlanoSaude} label="Plano de Saúde" />
-          </div>
+          {companyBenefits.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              Nenhum benefício cadastrado. Acesse Pessoas → Benefícios para criar o catálogo.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {companyBenefits.map(b => {
+                const checked = selectedBenefitIds.includes(b.id)
+                return (
+                  <label
+                    key={b.id}
+                    className="flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors"
+                    style={{
+                      borderColor: checked ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)',
+                      backgroundColor: checked ? 'var(--color-primary)' : 'white',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e => setSelectedBenefitIds(prev =>
+                        e.target.checked ? [...prev, b.id] : prev.filter(id => id !== b.id)
+                      )}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>{b.nome}</p>
+                      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                        {b.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {b.por_dia_trabalhado ? '/dia' : '/mês'}
+                      </p>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Acesso ao Portal de Ponto */}

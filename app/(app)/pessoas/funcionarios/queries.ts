@@ -20,18 +20,21 @@ export type Employee = {
   vale_refeicao: boolean
   plano_saude: boolean
   grau_instrucao: string | null
+  pin: string | null
+  pin_ativo: boolean
   created_at: string
   updated_at: string
+  employee_benefits: { benefit_id: string }[]
 }
 
 export async function getEmployees(companyId: string): Promise<Employee[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('*')
+    .select('*, employee_benefits(benefit_id)')
     .eq('company_id', companyId)
     .order('nome', { ascending: true })
 
   if (error) throw error
-  return (data ?? []) as Employee[]
+  return (data ?? []) as unknown as Employee[]
 }

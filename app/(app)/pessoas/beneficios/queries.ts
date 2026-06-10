@@ -1,26 +1,56 @@
 import { createAdminClient } from '@/lib/supabase/server'
 
-export type EmployeeBenefit = {
+export type CompanyBenefit = {
+  id: string
+  company_id: string
+  nome: string
+  valor: number
+  por_dia_trabalhado: boolean
+  desconta_salario: boolean
+  ativo: boolean
+  created_at: string
+}
+
+export type EmployeeWithBenefits = {
   id: string
   nome: string
   cargo: string | null
-  departamento: string | null
   status: string
-  vale_transporte: boolean
-  vale_refeicao: boolean
-  plano_saude: boolean
   salario: number | null
+  employee_benefits: { benefit_id: string; valor_override: number | null }[]
 }
 
-export async function getEmployeeBenefits(companyId: string): Promise<EmployeeBenefit[]> {
+export async function getCompanyBenefits(companyId: string): Promise<CompanyBenefit[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('company_benefits')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('nome', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as CompanyBenefit[]
+}
+
+export async function getActiveCompanyBenefits(companyId: string): Promise<CompanyBenefit[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('company_benefits')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('ativo', true)
+    .order('nome', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as CompanyBenefit[]
+}
+
+export async function getEmployeesWithBenefits(companyId: string): Promise<EmployeeWithBenefits[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, nome, cargo, departamento, status, vale_transporte, vale_refeicao, plano_saude, salario')
+    .select('id, nome, cargo, status, salario, employee_benefits(benefit_id, valor_override)')
     .eq('company_id', companyId)
     .in('status', ['ativo', 'experiencia', 'admissao'])
     .order('nome', { ascending: true })
-
   if (error) throw error
-  return (data ?? []) as unknown as EmployeeBenefit[]
+  return (data ?? []) as unknown as EmployeeWithBenefits[]
 }

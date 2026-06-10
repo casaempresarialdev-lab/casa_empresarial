@@ -12,16 +12,26 @@ const FGTS = 0.08          // 8%
 const INSS_PATRONAL = 0.20 // 20%
 const RAT = 0.02           // 2% (médio — varia por atividade)
 const SISTEMA_S = 0.058    // 5,8% (Sesc, Senai, Sesi, Sebrae, etc.)
+const DIAS_UTEIS_MES = 22  // estimativa para benefícios por dia
 
 function calcEncargos(salario: number) {
   const fgts = salario * FGTS
   const inss = salario * INSS_PATRONAL
   const rat = salario * RAT
   const sistemaS = salario * SISTEMA_S
-  const ferias = salario / 12 + salario / 12 / 3  // 1/12 + 1/3 do mês
+  const ferias = salario / 12 + salario / 12 / 3
   const decimo = salario / 12
   const total = fgts + inss + rat + sistemaS + ferias + decimo
   return { fgts, inss, rat, sistemaS, ferias, decimo, total }
+}
+
+function calcBeneficios(emp: EmployeeEncargo): number {
+  return emp.employee_benefits
+    .filter(eb => !eb.benefit.desconta_salario) // só custo puro da empresa
+    .reduce((sum, eb) => {
+      const valor = eb.valor_override ?? eb.benefit.valor
+      return sum + (eb.benefit.por_dia_trabalhado ? valor * DIAS_UTEIS_MES : valor)
+    }, 0)
 }
 
 function fmtCurrency(v: number) {
@@ -41,6 +51,7 @@ export function EncargosClient({ employees }: Props) {
 
   const totalFolha = employees.reduce((s, e) => s + (e.salario ?? 0), 0)
   const totalEncargos = employees.reduce((s, e) => s + calcEncargos(e.salario ?? 0).total, 0)
+  const totalBeneficios = employees.reduce((s, e) => s + calcBeneficios(e), 0)
 
   return (
     <>
@@ -56,18 +67,22 @@ export function EncargosClient({ employees }: Props) {
       </div>
 
       {/* Resumo geral */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-4 gap-3 mb-6">
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total salários</p>
           <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha)}</p>
         </div>
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total encargos estimados</p>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total encargos</p>
           <p className="text-xl font-bold mt-1" style={{ color: '#C0392B' }}>{fmtCurrency(totalEncargos)}</p>
         </div>
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total benefícios</p>
+          <p className="text-xl font-bold mt-1" style={{ color: '#8E44AD' }}>{fmtCurrency(totalBeneficios)}</p>
+        </div>
+        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Custo total empresa</p>
-          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha + totalEncargos)}</p>
+          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha + totalEncargos + totalBeneficios)}</p>
         </div>
       </div>
 
@@ -123,6 +138,7 @@ export function EncargosClient({ employees }: Props) {
                 <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>RAT+S</th>
                 <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>13º/Fér.</th>
                 <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Total enc.</th>
+                <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Benefícios</th>
                 <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Custo total</th>
               </tr>
             </thead>
@@ -142,7 +158,10 @@ export function EncargosClient({ employees }: Props) {
                     <td className="px-4 py-3 text-right text-xs" style={{ color: 'var(--color-text-secondary)' }}>{fmtCurrency(enc.rat + enc.sistemaS)}</td>
                     <td className="px-4 py-3 text-right text-xs" style={{ color: 'var(--color-text-secondary)' }}>{fmtCurrency(enc.ferias + enc.decimo)}</td>
                     <td className="px-4 py-3 text-right font-semibold" style={{ color: '#C0392B' }}>{fmtCurrency(enc.total)}</td>
-                    <td className="px-4 py-3 text-right font-bold" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(sal + enc.total)}</td>
+                    <td className="px-4 py-3 text-right font-semibold" style={{ color: '#8E44AD' }}>
+                      {fmtCurrency(calcBeneficios(emp))}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(sal + enc.total + calcBeneficios(emp))}</td>
                   </tr>
                 )
               })}
@@ -153,7 +172,8 @@ export function EncargosClient({ employees }: Props) {
                   TOTAIS
                 </td>
                 <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#C0392B' }}>{fmtCurrency(totalEncargos)}</td>
-                <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha + totalEncargos)}</td>
+                <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#8E44AD' }}>{fmtCurrency(totalBeneficios)}</td>
+                <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha + totalEncargos + totalBeneficios)}</td>
               </tr>
             </tfoot>
           </table>

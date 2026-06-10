@@ -6,7 +6,26 @@ import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createPayrollEntryAction, updatePayrollEntryAction } from '../actions'
-import type { PayrollEntry, EmployeeForPayroll } from '../queries'
+import type { PayrollEntry, EmployeeForPayroll, BenefitForPayroll } from '../queries'
+
+const DIAS_UTEIS_MES = 22
+
+function benefitValue(eb: BenefitForPayroll): number {
+  const v = eb.valor_override ?? eb.benefit.valor
+  return eb.benefit.por_dia_trabalhado ? v * DIAS_UTEIS_MES : v
+}
+
+function calcBenefDesc(emp: EmployeeForPayroll): number {
+  return emp.employee_benefits
+    .filter(eb => eb.benefit.desconta_salario)
+    .reduce((s, eb) => s + benefitValue(eb), 0)
+}
+
+function calcBenefPatronal(emp: EmployeeForPayroll): number {
+  return emp.employee_benefits
+    .filter(eb => !eb.benefit.desconta_salario)
+    .reduce((s, eb) => s + benefitValue(eb), 0)
+}
 
 interface Props {
   open: boolean
@@ -51,11 +70,15 @@ export function ModalFolha({ open, onClose, companyId, entry, employees, mesAno 
   const outros = parseFloat(descontoOutros.replace(',', '.')) || 0
   const liquido = Math.max(0, baseNum + extras + noturno + bonusNum - faltas - inss - irrf - vt - outros)
 
+  const selectedEmp = employees.find(e => e.id === employeeId) ?? null
+
   function onEmployeeChange(id: string) {
     setEmployeeId(id)
     const emp = employees.find(e => e.id === id)
     if (emp && !isEdit) {
       setSalarioBase(emp.salario ? fmt(emp.salario) : '')
+      const disc = calcBenefDesc(emp)
+      setDescontoOutros(disc > 0 ? fmt(disc) : '')
     }
   }
 
@@ -184,6 +207,40 @@ export function ModalFolha({ open, onClose, companyId, entry, employees, mesAno 
             </div>
           </div>
         </div>
+
+        {/* Benefícios do catálogo (referência) */}
+        {selectedEmp && selectedEmp.employee_benefits.length > 0 && (
+          <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: '#E8DAEF', backgroundColor: '#F9F0FF' }}>
+            <p className="text-xs font-semibold" style={{ color: '#6C3483' }}>BENEFÍCIOS (catálogo)</p>
+            {selectedEmp.employee_benefits
+              .filter(eb => eb.benefit.desconta_salario)
+              .map(eb => (
+                <div key={eb.benefit_id} className="flex justify-between text-xs" style={{ color: '#6C3483' }}>
+                  <span>{eb.benefit.nome} <span className="opacity-60">(desconto do funcionário)</span></span>
+                  <span>-{fmt(benefitValue(eb))}</span>
+                </div>
+              ))}
+            {selectedEmp.employee_benefits
+              .filter(eb => !eb.benefit.desconta_salario)
+              .map(eb => (
+                <div key={eb.benefit_id} className="flex justify-between text-xs" style={{ color: '#8E44AD' }}>
+                  <span>{eb.benefit.nome} <span className="opacity-60">(custo patronal)</span></span>
+                  <span>{fmt(benefitValue(eb))}</span>
+                </div>
+              ))}
+            {calcBenefDesc(selectedEmp) > 0 && (
+              <p className="text-xs pt-1 border-t" style={{ borderColor: '#D7BDE2', color: '#6C3483' }}>
+                Descontos de benefícios pré-carregados em &quot;Outros descontos&quot; (editável).
+              </p>
+            )}
+            {calcBenefPatronal(selectedEmp) > 0 && (
+              <p className="text-xs" style={{ color: '#8E44AD' }}>
+                Custo patronal total em benefícios:{' '}
+                <strong>{calcBenefPatronal(selectedEmp).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Líquido calculado */}
         <div className="flex items-center justify-between px-4 py-3 rounded-xl"

@@ -34,6 +34,17 @@ export async function getPayrollEntries(companyId: string, mesAno: string): Prom
   return (data ?? []) as unknown as PayrollEntry[]
 }
 
+export type BenefitForPayroll = {
+  benefit_id: string
+  valor_override: number | null
+  benefit: {
+    nome: string
+    valor: number
+    por_dia_trabalhado: boolean
+    desconta_salario: boolean
+  }
+}
+
 export type EmployeeForPayroll = {
   id: string
   nome: string
@@ -42,13 +53,20 @@ export type EmployeeForPayroll = {
   tipo_contrato: string | null
   vale_transporte: boolean
   vale_refeicao: boolean
+  employee_benefits: BenefitForPayroll[]
 }
 
 export async function getActiveEmployeesForPayroll(companyId: string): Promise<EmployeeForPayroll[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, nome, cargo, salario, tipo_contrato, vale_transporte, vale_refeicao')
+    .select(`
+      id, nome, cargo, salario, tipo_contrato, vale_transporte, vale_refeicao,
+      employee_benefits(
+        benefit_id, valor_override,
+        benefit:benefit_id(nome, valor, por_dia_trabalhado, desconta_salario)
+      )
+    `)
     .eq('company_id', companyId)
     .in('status', ['ativo', 'experiencia'])
     .order('nome', { ascending: true })
