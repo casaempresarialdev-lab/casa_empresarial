@@ -21,7 +21,6 @@ const TAB_STYLE = (active: boolean) => ({
   padding: '0.5rem 1rem',
   fontSize: '0.875rem',
   fontWeight: 500,
-  borderBottom: active ? '2px solid var(--color-primary-darker)' : '2px solid transparent',
   color: active ? 'var(--color-primary-darker)' : 'var(--color-text-muted)',
   cursor: 'pointer',
   background: 'none',
