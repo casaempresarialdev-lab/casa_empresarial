@@ -134,7 +134,6 @@ export function EscalaClient({ schedules, employees, companyId, mes, ano }: Prop
             ))}
           </div>
           <Button variant="ghost" onClick={() => setModalMesOpen(true)}>📅 Escala do mês</Button>
-          <Button onClick={() => openAdd()}>+ Novo turno</Button>
         </div>
       </div>
 

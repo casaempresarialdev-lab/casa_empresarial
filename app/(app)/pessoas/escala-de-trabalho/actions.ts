@@ -87,15 +87,25 @@ export async function createMonthlyScheduleAction(companyId: string, formData: F
   const datasExcluidasRaw = formData.get('datas_excluidas') as string
   const datasExcluidas = new Set<string>(datasExcluidasRaw ? JSON.parse(datasExcluidasRaw) : [])
 
-  const [ano, mes] = mesAno.split('-').map(Number)
-  const totalDias = new Date(ano, mes, 0).getDate()
+  const [anoInicio, mesInicio] = mesAno.split('-').map(Number)
+  const mesesReplicar = Math.max(1, Math.min(60, parseInt(formData.get('meses_replicar') as string) || 1))
 
   const registros: { company_id: string; employee_id: string; data: string; turno: string | null; hora_inicio: string | null; hora_fim: string | null }[] = []
-  for (let d = 1; d <= totalDias; d++) {
-    const date = new Date(ano, mes - 1, d)
-    const dataStr = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    if (diasSemana.includes(date.getDay()) && !datasExcluidas.has(dataStr)) {
-      registros.push({ company_id: companyId, employee_id: employeeId, data: dataStr, turno, hora_inicio: horaInicio, hora_fim: horaFim })
+
+  for (let m = 0; m < mesesReplicar; m++) {
+    let mes = mesInicio + m
+    let ano = anoInicio
+    while (mes > 12) { mes -= 12; ano++ }
+
+    const totalDias = new Date(ano, mes, 0).getDate()
+    for (let d = 1; d <= totalDias; d++) {
+      const date = new Date(ano, mes - 1, d)
+      const dataStr = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      // Folgas específicas só se aplicam ao primeiro mês
+      const excluida = m === 0 && datasExcluidas.has(dataStr)
+      if (diasSemana.includes(date.getDay()) && !excluida) {
+        registros.push({ company_id: companyId, employee_id: employeeId, data: dataStr, turno, hora_inicio: horaInicio, hora_fim: horaFim })
+      }
     }
   }
 

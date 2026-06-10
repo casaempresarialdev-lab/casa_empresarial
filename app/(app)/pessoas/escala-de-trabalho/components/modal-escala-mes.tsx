@@ -48,6 +48,7 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
   const [excluidas, setExcluidas]       = useState<Set<string>>(new Set())
   const [periodoInicio, setPeriodoInicio] = useState('')
   const [periodoFim, setPeriodoFim]     = useState('')
+  const [mesesReplicar, setMesesReplicar] = useState(1)
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
 
@@ -60,6 +61,7 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
     setExcluidas(new Set())
     setPeriodoInicio('')
     setPeriodoFim('')
+    setMesesReplicar(1)
   }, [open])
 
   function applyPreset(value: string) {
@@ -90,6 +92,23 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
 
   const incluidas = todasDatas.filter(d => !excluidas.has(d))
   const folgas    = todasDatas.filter(d => excluidas.has(d))
+
+  // Calcula total de turnos considerando replicação (meses extras sem exclusões específicas)
+  const totalTurnos = useMemo(() => {
+    if (diasSemana.length === 0) return 0
+    let count = incluidas.length
+    for (let m = 1; m < mesesReplicar; m++) {
+      let curMes = mes + m
+      let curAno = ano
+      while (curMes > 12) { curMes -= 12; curAno++ }
+      const totalDias = new Date(curAno, curMes, 0).getDate()
+      for (let d = 1; d <= totalDias; d++) {
+        const date = new Date(curAno, curMes - 1, d)
+        if (diasSemana.includes(date.getDay())) count++
+      }
+    }
+    return count
+  }, [incluidas.length, diasSemana, mesesReplicar, mes, ano])
 
   function toggleExcluida(data: string) {
     setExcluidas(prev => {
@@ -141,6 +160,7 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
     fd.set('turno', turno)
     fd.set('hora_inicio', horaInicio)
     fd.set('hora_fim', horaFim)
+    fd.set('meses_replicar', String(mesesReplicar))
 
     const result = await createMonthlyScheduleAction(companyId, fd)
     setLoading(false)
@@ -337,6 +357,55 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
           </div>
         )}
 
+        {/* Replicar por N meses */}
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <div className="px-4 py-3" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>REPLICAR ESCALA POR</p>
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: 'Este mês', val: 1 },
+                { label: '3 meses',  val: 3 },
+                { label: '6 meses',  val: 6 },
+                { label: '1 ano',    val: 12 },
+                { label: '2 anos',   val: 24 },
+              ].map(({ label, val }) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setMesesReplicar(val)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                  style={{
+                    backgroundColor: mesesReplicar === val ? 'var(--color-primary)' : 'white',
+                    borderColor: mesesReplicar === val ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)',
+                    color: mesesReplicar === val ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={mesesReplicar}
+                  onChange={e => setMesesReplicar(Math.max(1, Math.min(60, parseInt(e.target.value) || 1)))}
+                  className="w-14 px-2 py-1.5 rounded-lg border text-xs text-center"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                />
+                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>meses</span>
+              </div>
+            </div>
+            {mesesReplicar > 1 && (
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                As folgas específicas se aplicam apenas ao 1º mês. Os seguintes usarão apenas o padrão de dias da semana.
+              </p>
+            )}
+          </div>
+        </div>
+
         {error && (
           <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{error}</p>
         )}
@@ -344,7 +413,11 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
         <div className="flex gap-3 justify-end pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button type="submit" loading={loading} disabled={incluidas.length === 0}>
-            {incluidas.length > 0 ? `Gerar ${incluidas.length} turnos` : 'Selecione os dias'}
+            {incluidas.length > 0
+              ? mesesReplicar > 1
+                ? `Gerar ${totalTurnos} turnos (${mesesReplicar} meses)`
+                : `Gerar ${incluidas.length} turnos`
+              : 'Selecione os dias'}
           </Button>
         </div>
       </form>
