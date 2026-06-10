@@ -92,6 +92,19 @@ export async function deleteSchedulePeriodAction(
   return { success: true, count: count ?? 0 }
 }
 
+// Returns ISO week number (1-53) for a date string 'YYYY-MM-DD'
+function isoWeek(dateStr: string): number {
+  const d = new Date(Date.UTC(
+    parseInt(dateStr.slice(0, 4)),
+    parseInt(dateStr.slice(5, 7)) - 1,
+    parseInt(dateStr.slice(8, 10)),
+  ))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil((((d.valueOf() - yearStart.valueOf()) / 86400000) + 1) / 7)
+}
+
 export async function createMonthlyScheduleAction(companyId: string, formData: FormData) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
@@ -115,6 +128,34 @@ export async function createMonthlyScheduleAction(companyId: string, formData: F
 
   const [anoInicio, mesInicio] = mesAno.split('-').map(Number)
   const mesesReplicar = Math.max(1, Math.min(60, parseInt(formData.get('meses_replicar') as string) || 1))
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  // Detecta padrão de semanas alternadas a partir das exclusões do mês 0.
+  // Mapeia quais semanas ISO do mês 0 ficaram totalmente excluídas (folga integral).
+  const weekSlots = new Map<number, { total: number; excl: number }>()
+  const totalDias0 = new Date(anoInicio, mesInicio, 0).getDate()
+  for (let d = 1; d <= totalDias0; d++) {
+    const date = new Date(anoInicio, mesInicio - 1, d)
+    if (!diasSemana.includes(date.getDay())) continue
+    const ds = `${anoInicio}-${pad(mesInicio)}-${pad(d)}`
+    const w = isoWeek(ds)
+    if (!weekSlots.has(w)) weekSlots.set(w, { total: 0, excl: 0 })
+    const slot = weekSlots.get(w)!
+    slot.total++
+    if (datasExcluidas.has(ds)) slot.excl++
+  }
+
+  const allWeeks   = [...weekSlots.keys()].sort((a, b) => a - b)
+  const firstWeek  = allWeeks[0] ?? 0
+  const offWeeks   = allWeeks.filter(w => {
+    const s = weekSlots.get(w)!
+    return s.total > 0 && s.excl === s.total
+  })
+
+  // Verifica se todas as semanas de folga têm o mesmo offset relativo (padrão alternado)
+  const offsets   = offWeeks.map(w => ((w - firstWeek) % 2 + 2) % 2)
+  const isPattern = offsets.length > 0 && offsets.every(o => o === offsets[0])
+  const offOffset = isPattern ? offsets[0] : -1
 
   const registros: { company_id: string; employee_id: string; data: string; turno: string | null; hora_inicio: string | null; hora_fim: string | null }[] = []
 
@@ -125,10 +166,22 @@ export async function createMonthlyScheduleAction(companyId: string, formData: F
 
     const totalDias = new Date(ano, mes, 0).getDate()
     for (let d = 1; d <= totalDias; d++) {
-      const date = new Date(ano, mes - 1, d)
-      const dataStr = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      // Folgas específicas só se aplicam ao primeiro mês
-      const excluida = m === 0 && datasExcluidas.has(dataStr)
+      const date   = new Date(ano, mes - 1, d)
+      const dataStr = `${ano}-${pad(mes)}-${pad(d)}`
+
+      let excluida: boolean
+      if (m === 0) {
+        // Mês base: usa as exclusões exatas marcadas pelo usuário
+        excluida = datasExcluidas.has(dataStr)
+      } else if (offOffset >= 0) {
+        // Meses seguintes: replica o padrão de semanas alternadas detectado
+        const relOffset = ((isoWeek(dataStr) - firstWeek) % 2 + 2) % 2
+        excluida = relOffset === offOffset
+      } else {
+        // Sem padrão detectado: sem exclusões nos meses seguintes
+        excluida = false
+      }
+
       if (diasSemana.includes(date.getDay()) && !excluida) {
         registros.push({ company_id: companyId, employee_id: employeeId, data: dataStr, turno, hora_inicio: horaInicio, hora_fim: horaFim })
       }
