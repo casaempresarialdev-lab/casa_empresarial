@@ -146,6 +146,11 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
     return `${d}/${pad(mes)}`
   }
 
+  function diaSemanaChip(data: string) {
+    const [y, m, d] = data.split('-').map(Number)
+    return DIAS[new Date(y, m - 1, d).getDay()].label
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (incluidas.length === 0) { setError('Nenhuma data incluída após aplicar as folgas.'); return }
@@ -302,15 +307,17 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
                     type="button"
                     onClick={() => toggleExcluida(data)}
                     title={isExcluida ? 'Clique para incluir' : 'Clique para marcar como folga'}
-                    className="px-2 py-1 rounded text-xs font-medium transition-all"
+                    className="px-2 py-1.5 rounded font-medium transition-all flex flex-col items-center leading-tight"
                     style={{
                       backgroundColor: isExcluida ? '#FDEDEC' : 'var(--color-primary)',
                       color: isExcluida ? '#C0392B' : 'var(--color-primary-darker)',
                       textDecoration: isExcluida ? 'line-through' : 'none',
                       opacity: isExcluida ? 0.75 : 1,
+                      minWidth: '2.75rem',
                     }}
                   >
-                    {formatChip(data)}
+                    <span style={{ fontSize: '0.625rem', opacity: 0.75 }}>{diaSemanaChip(data)}</span>
+                    <span style={{ fontSize: '0.7rem' }}>{formatChip(data)}</span>
                   </button>
                 )
               })}
