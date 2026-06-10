@@ -198,6 +198,102 @@ export async function updatePayrollEntryAction(entryId: string, formData: FormDa
   return { success: true }
 }
 
+export async function generatePayrollForMonthAction(companyId: string, mesAno: string) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+
+  type EmpBenefit = {
+    valor_override: number | null
+    benefit: { valor: number; por_dia_trabalhado: boolean; desconta_salario: boolean }
+  }
+
+  const [{ data: employees }, { data: existing }] = await Promise.all([
+    admin
+      .from('employees')
+      .select(`
+        id, salario,
+        employee_benefits(
+          valor_override,
+          benefit:benefit_id(valor, por_dia_trabalhado, desconta_salario)
+        )
+      `)
+      .eq('company_id', companyId)
+      .in('status', ['ativo', 'experiencia']),
+    admin
+      .from('payroll_entries')
+      .select('employee_id')
+      .eq('company_id', companyId)
+      .eq('mes_ano', mesAno),
+  ])
+
+  const existingIds = new Set((existing ?? []).map((e: { employee_id: string }) => e.employee_id))
+  const toCreate = (employees ?? []).filter(
+    (e: { id: string; salario: number | null }) => !existingIds.has(e.id) && (e.salario ?? 0) > 0
+  )
+
+  if (toCreate.length === 0) {
+    return { success: true, created: 0, skipped: existingIds.size }
+  }
+
+  const DIAS_UTEIS = 22
+  const INSS_FAIXAS = [
+    { limite: 1412.00, aliq: 0.075 },
+    { limite: 2666.68, aliq: 0.09 },
+    { limite: 4000.03, aliq: 0.12 },
+    { limite: 7786.02, aliq: 0.14 },
+  ]
+
+  function calcInss(salario: number): number {
+    let inss = 0
+    let limiteAnterior = 0
+    const base = Math.min(salario, 7786.02)
+    for (const { limite, aliq } of INSS_FAIXAS) {
+      if (base <= limiteAnterior) break
+      inss += (Math.min(base, limite) - limiteAnterior) * aliq
+      limiteAnterior = limite
+    }
+    return Math.round(inss * 100) / 100
+  }
+
+  const entries = (toCreate as unknown as { id: string; salario: number; employee_benefits: EmpBenefit[] }[])
+    .map(emp => {
+      const sal = emp.salario ?? 0
+      const descontoOutros = (emp.employee_benefits ?? [])
+        .filter(eb => eb.benefit.desconta_salario)
+        .reduce((s, eb) => {
+          const v = eb.valor_override ?? eb.benefit.valor
+          return s + (eb.benefit.por_dia_trabalhado ? v * DIAS_UTEIS : v)
+        }, 0)
+      const inss = calcInss(sal)
+      const liquido = Math.max(0, sal - inss - Math.round(descontoOutros * 100) / 100)
+      return {
+        company_id: companyId,
+        employee_id: emp.id,
+        mes_ano: mesAno,
+        salario_base: sal,
+        horas_extras: 0,
+        adicional_noturno: 0,
+        bonus: 0,
+        desconto_faltas: 0,
+        desconto_inss: inss,
+        desconto_irrf: 0,
+        desconto_vt: 0,
+        desconto_outros: Math.round(descontoOutros * 100) / 100,
+        salario_liquido: Math.round(liquido * 100) / 100,
+        status: 'rascunho',
+        observacao: null,
+      }
+    })
+
+  const { error } = await admin.from('payroll_entries').insert(entries)
+  if (error) return { error: error.message }
+
+  revalidatePath('/pessoas/folha-de-pagamento')
+  return { success: true, created: toCreate.length, skipped: existingIds.size }
+}
+
 export async function deletePayrollEntryAction(entryId: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
