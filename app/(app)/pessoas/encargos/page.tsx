@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getEncargosEmployees } from './queries'
+import { getEncargosEmployees, getEncargosAliquotas } from './queries'
 import { EncargosClient } from './components/encargos-client'
 
 export const dynamic = 'force-dynamic'
@@ -15,11 +15,14 @@ export default async function EncargosPage() {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const employees = await getEncargosEmployees(companyId)
+  const [employees, aliquotas] = await Promise.all([
+    getEncargosEmployees(companyId),
+    getEncargosAliquotas(companyId),
+  ])
 
   return (
     <div className="max-w-6xl mx-auto">
-      <EncargosClient employees={employees} />
+      <EncargosClient employees={employees} aliquotas={aliquotas} companyId={companyId} />
     </div>
   )
 }

@@ -1,5 +1,28 @@
 import { createAdminClient } from '@/lib/supabase/server'
 
+export type AliquotaRow = {
+  id: string
+  company_id: string
+  nome: string
+  percentual: number
+  ativo: boolean
+  ordem: number
+  created_at: string
+}
+
+export async function getEncargosAliquotas(companyId: string): Promise<AliquotaRow[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('company_encargos_aliquotas')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('ordem', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return (data ?? []) as AliquotaRow[]
+}
+
 export type EmployeeEncargo = {
   id: string
   nome: string
