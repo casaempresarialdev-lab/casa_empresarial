@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { createMonthlyScheduleAction } from '../actions'
+import { createMonthlyScheduleAction, deleteSchedulePeriodAction } from '../actions'
 
 interface Props {
   open: boolean
@@ -49,6 +49,10 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
   const [periodoInicio, setPeriodoInicio] = useState('')
   const [periodoFim, setPeriodoFim]     = useState('')
   const [mesesReplicar, setMesesReplicar] = useState(1)
+  const [deleteInicio, setDeleteInicio] = useState('')
+  const [deleteFim, setDeleteFim]       = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteMsg, setDeleteMsg]       = useState('')
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
 
@@ -62,6 +66,9 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
     setPeriodoInicio('')
     setPeriodoFim('')
     setMesesReplicar(1)
+    setDeleteInicio('')
+    setDeleteFim('')
+    setDeleteMsg('')
   }, [open])
 
   function applyPreset(value: string) {
@@ -139,6 +146,26 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
 
   function limparExcluidas() {
     setExcluidas(new Set())
+  }
+
+  async function handleDeletePeriod() {
+    if (!employeeId) { setDeleteMsg('Selecione um funcionário primeiro.'); return }
+    if (!deleteInicio || !deleteFim) { setDeleteMsg('Informe o período completo.'); return }
+    if (!confirm(`Apagar todos os turnos de ${deleteInicio} até ${deleteFim}? Esta ação não pode ser desfeita.`)) return
+
+    setDeleteLoading(true)
+    setDeleteMsg('')
+    const result = await deleteSchedulePeriodAction(companyId, employeeId, deleteInicio, deleteFim)
+    setDeleteLoading(false)
+
+    if ('error' in result) {
+      setDeleteMsg(result.error ?? 'Erro ao apagar registros.')
+    } else {
+      setDeleteMsg(`${result.count} turno(s) apagado(s) com sucesso.`)
+      setDeleteInicio('')
+      setDeleteFim('')
+      router.refresh()
+    }
   }
 
   function formatChip(data: string) {
@@ -326,7 +353,7 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
             {/* Atalho: excluir período */}
             <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
               <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-                EXCLUIR PERÍODO (férias, folgas em bloco)
+                FOLGAS NA GERAÇÃO (exclui dias do lote acima)
               </p>
               <div className="flex gap-2 items-end">
                 <div className="flex-1">
@@ -409,6 +436,48 @@ export function ModalEscalaMes({ open, onClose, companyId, mes, ano, employees }
               <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                 As folgas específicas se aplicam apenas ao 1º mês. Os seguintes usarão apenas o padrão de dias da semana.
               </p>
+            )}
+          </div>
+        </div>
+
+        {/* Apagar registros existentes */}
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#FADBD8' }}>
+          <div className="px-4 py-3" style={{ backgroundColor: '#FDEDEC' }}>
+            <p className="text-xs font-semibold" style={{ color: '#C0392B' }}>APAGAR REGISTROS EXISTENTES</p>
+            <p className="text-xs mt-0.5" style={{ color: '#E74C3C' }}>
+              Remove turnos já cadastrados no banco para o funcionário selecionado.
+            </p>
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <label style={{ ...labelStyle, marginBottom: 2 }}>De</label>
+                <Input type="date" value={deleteInicio} onChange={e => { setDeleteInicio(e.target.value); setDeleteMsg('') }} />
+              </div>
+              <div className="flex-1">
+                <label style={{ ...labelStyle, marginBottom: 2 }}>Até</label>
+                <Input type="date" value={deleteFim} onChange={e => { setDeleteFim(e.target.value); setDeleteMsg('') }}
+                  min={deleteInicio || undefined}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="danger"
+                loading={deleteLoading}
+                disabled={!employeeId || !deleteInicio || !deleteFim}
+                onClick={handleDeletePeriod}
+              >
+                Apagar
+              </Button>
+            </div>
+            {!employeeId && (
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Selecione um funcionário para habilitar.</p>
+            )}
+            {deleteMsg && (
+              <p className="text-xs p-2 rounded" style={{
+                backgroundColor: deleteMsg.includes('sucesso') ? '#EAFAF1' : '#FDEDEC',
+                color: deleteMsg.includes('sucesso') ? '#1E8449' : '#C0392B',
+              }}>{deleteMsg}</p>
             )}
           </div>
         </div>

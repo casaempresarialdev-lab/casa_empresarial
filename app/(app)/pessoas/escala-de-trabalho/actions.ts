@@ -66,6 +66,32 @@ export async function deleteScheduleAction(scheduleId: string) {
   return { success: true }
 }
 
+export async function deleteSchedulePeriodAction(
+  companyId: string,
+  employeeId: string,
+  dataInicio: string,
+  dataFim: string,
+) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+  if (!employeeId) return { error: 'Selecione um funcionário.' }
+  if (!dataInicio || !dataFim) return { error: 'Informe o período completo.' }
+  if (dataInicio > dataFim) return { error: 'Data inicial deve ser anterior à final.' }
+
+  const admin = createAdminClient()
+  const { error, count } = await admin
+    .from('work_schedules')
+    .delete({ count: 'exact' })
+    .eq('company_id', companyId)
+    .eq('employee_id', employeeId)
+    .gte('data', dataInicio)
+    .lte('data', dataFim)
+
+  if (error) return { error: error.message }
+  revalidatePath('/pessoas/escala-de-trabalho')
+  return { success: true, count: count ?? 0 }
+}
+
 export async function createMonthlyScheduleAction(companyId: string, formData: FormData) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
