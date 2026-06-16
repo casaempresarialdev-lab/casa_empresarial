@@ -6,15 +6,19 @@ export type PayrollEntry = {
   employee_id: string
   mes_ano: string
   salario_base: number
+  periculosidade_valor: number
   horas_extras: number
+  horas_extras_feriado: number
   adicional_noturno: number
   bonus: number
   desconto_faltas: number
   desconto_inss: number
   desconto_irrf: number
   desconto_vt: number
+  desconto_adiantamento: number
   desconto_outros: number
   salario_liquido: number
+  dias_trabalhados: number | null
   status: 'rascunho' | 'fechado' | 'pago'
   observacao: string | null
   created_at: string
@@ -51,8 +55,11 @@ export type EmployeeForPayroll = {
   cargo: string | null
   salario: number | null
   tipo_contrato: string | null
+  tem_periculosidade: boolean
   vale_transporte: boolean
   vale_refeicao: boolean
+  vale_transporte_valor: number
+  dias_trabalhados_vt: number
   employee_benefits: BenefitForPayroll[]
 }
 
@@ -61,7 +68,9 @@ export async function getActiveEmployeesForPayroll(companyId: string): Promise<E
   const { data, error } = await admin
     .from('employees')
     .select(`
-      id, nome, cargo, salario, tipo_contrato, vale_transporte, vale_refeicao,
+      id, nome, cargo, salario, tipo_contrato,
+      tem_periculosidade, vale_transporte, vale_refeicao,
+      vale_transporte_valor, dias_trabalhados_vt,
       employee_benefits(
         benefit_id, valor_override,
         benefit:benefit_id(nome, valor, por_dia_trabalhado, desconta_salario)

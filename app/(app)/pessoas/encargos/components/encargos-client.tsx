@@ -13,7 +13,6 @@ interface Props {
   companyId: string
 }
 
-// Fallback usado quando a empresa ainda não inicializou alíquotas
 const FALLBACK_ALIQUOTAS: AliquotaRow[] = [
   { id: '', company_id: '', nome: 'FGTS', percentual: 8.00, ativo: true, ordem: 1, created_at: '' },
   { id: '', company_id: '', nome: 'INSS Patronal', percentual: 20.00, ativo: true, ordem: 2, created_at: '' },
@@ -25,10 +24,15 @@ const FALLBACK_ALIQUOTAS: AliquotaRow[] = [
 
 const DIAS_UTEIS_MES = 22
 
-function calcEncargos(salario: number, aliquotas: AliquotaRow[]): number {
+function calcFgts(salario: number, aliquotas: AliquotaRow[]): number {
+  const fgts = aliquotas.find(a => a.ativo && a.nome.toUpperCase().includes('FGTS'))
+  return salario * ((fgts?.percentual ?? 8) / 100)
+}
+
+function calcOutrosEncargos(salario: number, aliquotas: AliquotaRow[]): number {
   return aliquotas
-    .filter(a => a.ativo)
-    .reduce((sum, a) => sum + salario * (a.percentual / 100), 0)
+    .filter(a => a.ativo && !a.nome.toUpperCase().includes('FGTS'))
+    .reduce((s, a) => s + salario * (a.percentual / 100), 0)
 }
 
 function calcBeneficios(emp: EmployeeEncargo): number {
@@ -48,6 +52,43 @@ function fmtPct(v: number) {
   return `${v.toFixed(2).replace('.', ',')}%`
 }
 
+// ── CSV Export ──
+function buildCustoCsv(employees: EmployeeEncargo[], aliquotas: AliquotaRow[]): string {
+  const header = [
+    'Funcionário', 'Cargo', 'Salário', 'FGTS (8%)', 'Outros Encargos', 'Total Encargos',
+    'Benefícios Patronais', 'Custo Total',
+  ].join(';')
+
+  const rows = employees.map(emp => {
+    const sal  = emp.salario ?? 0
+    const fgts = calcFgts(sal, aliquotas)
+    const out  = calcOutrosEncargos(sal, aliquotas)
+    const ben  = calcBeneficios(emp)
+    return [
+      emp.nome,
+      emp.cargo ?? '',
+      sal.toFixed(2).replace('.', ','),
+      fgts.toFixed(2).replace('.', ','),
+      out.toFixed(2).replace('.', ','),
+      (fgts + out).toFixed(2).replace('.', ','),
+      ben.toFixed(2).replace('.', ','),
+      (sal + fgts + out + ben).toFixed(2).replace('.', ','),
+    ].join(';')
+  })
+
+  return [header, ...rows].join('\n')
+}
+
+function downloadCsv(content: string, filename: string) {
+  const blob = new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function EncargosClient({ employees, aliquotas, companyId }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -58,14 +99,18 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
 
   const usingFallback = aliquotas.length === 0
   const effectiveAliquotas = usingFallback ? FALLBACK_ALIQUOTAS : aliquotas
-  const totalPct = effectiveAliquotas.filter(a => a.ativo).reduce((s, a) => s + a.percentual, 0)
+  const totalPct  = effectiveAliquotas.filter(a => a.ativo).reduce((s, a) => s + a.percentual, 0)
+  const fgtsPct   = effectiveAliquotas.find(a => a.ativo && a.nome.toUpperCase().includes('FGTS'))?.percentual ?? 8
+  const outrosPct = totalPct - fgtsPct
 
   const filtered = employees.filter(e =>
     !search || e.nome.toLowerCase().includes(search.toLowerCase())
   )
 
-  const totalFolha = employees.reduce((s, e) => s + (e.salario ?? 0), 0)
-  const totalEncargos = employees.reduce((s, e) => s + calcEncargos(e.salario ?? 0, effectiveAliquotas), 0)
+  const totalFolha      = employees.reduce((s, e) => s + (e.salario ?? 0), 0)
+  const totalFgts       = employees.reduce((s, e) => s + calcFgts(e.salario ?? 0, effectiveAliquotas), 0)
+  const totalOutrosEnc  = employees.reduce((s, e) => s + calcOutrosEncargos(e.salario ?? 0, effectiveAliquotas), 0)
+  const totalEncargos   = totalFgts + totalOutrosEnc
   const totalBeneficios = employees.reduce((s, e) => s + calcBeneficios(e), 0)
 
   function openAdd() { setEditingAliquota(null); setModalOpen(true) }
@@ -88,6 +133,10 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
     else router.refresh()
   }
 
+  function handleExportCsv() {
+    downloadCsv(buildCustoCsv(employees, effectiveAliquotas), 'custo-funcionarios.csv')
+  }
+
   return (
     <>
       {/* Header */}
@@ -97,9 +146,12 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
             Encargos Trabalhistas
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            Estimativa de encargos patronais por funcionário
+            Estimativa de custo patronal por funcionário
           </p>
         </div>
+        {employees.length > 0 && (
+          <Button variant="ghost" onClick={handleExportCsv}>↓ Exportar custo CSV</Button>
+        )}
       </div>
 
       {/* Cards de resumo */}
@@ -109,13 +161,14 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
           <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha)}</p>
         </div>
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total encargos</p>
-          <p className="text-xl font-bold mt-1" style={{ color: '#C0392B' }}>{fmtCurrency(totalEncargos)}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{fmtPct(totalPct)} sobre salário</p>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>FGTS mensal</p>
+          <p className="text-xl font-bold mt-1" style={{ color: '#E67E22' }}>{fmtCurrency(totalFgts)}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{fmtPct(fgtsPct)} sobre salário</p>
         </div>
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total benefícios</p>
-          <p className="text-xl font-bold mt-1" style={{ color: '#8E44AD' }}>{fmtCurrency(totalBeneficios)}</p>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Outros encargos + prov.</p>
+          <p className="text-xl font-bold mt-1" style={{ color: '#C0392B' }}>{fmtCurrency(totalOutrosEnc)}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{fmtPct(outrosPct)} sobre salário</p>
         </div>
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Custo total empresa</p>
@@ -131,7 +184,9 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
               ALÍQUOTAS DE ENCARGOS
             </p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-              Total ativo: <strong style={{ color: '#C0392B' }}>{fmtPct(totalPct)}</strong> sobre o salário bruto
+              Total ativo: <strong style={{ color: '#C0392B' }}>{fmtPct(totalPct)}</strong> sobre o salário
+              {' '}· FGTS: <strong style={{ color: '#E67E22' }}>{fmtPct(fgtsPct)}</strong>
+              {' '}· Outros: <strong style={{ color: '#C0392B' }}>{fmtPct(outrosPct)}</strong>
             </p>
           </div>
           <Button size="sm" onClick={openAdd}>+ Nova alíquota</Button>
@@ -181,8 +236,14 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
                     </td>
                     <td className="px-3 py-2" style={{ color: a.ativo ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
                       {a.nome}
+                      {a.nome.toUpperCase().includes('FGTS') && (
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#FEF3E7', color: '#E67E22' }}>
+                          depósito mensal
+                        </span>
+                      )}
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold" style={{ color: a.ativo ? '#C0392B' : 'var(--color-text-muted)' }}>
+                    <td className="px-3 py-2 text-right font-semibold"
+                      style={{ color: a.ativo ? (a.nome.toUpperCase().includes('FGTS') ? '#E67E22' : '#C0392B') : 'var(--color-text-muted)' }}>
                       {fmtPct(a.percentual)}
                     </td>
                     <td className="px-3 py-2">
@@ -212,7 +273,7 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
         )}
 
         <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
-          * Estimativa. Valores reais variam conforme RAT/FAP, atividade e regime tributário.
+          * Estimativa. Valores reais variam conforme RAT/FAP, atividade e regime tributário. FGTS = depósito mensal obrigatório. Demais itens = provisões e contribuições patronais.
         </p>
       </div>
 
@@ -228,7 +289,7 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
         />
       </div>
 
-      {/* Tabela de funcionários */}
+      {/* Tabela custo por funcionário */}
       {employees.length === 0 ? (
         <div className="rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
@@ -242,18 +303,22 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
               <tr>
                 <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
                 <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Salário</th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                  Encargos <span style={{ fontWeight: 400, opacity: 0.7 }}>({fmtPct(totalPct)})</span>
+                <th className="text-right px-4 py-3 font-medium" style={{ color: '#E67E22' }}>
+                  FGTS <span style={{ fontWeight: 400, opacity: 0.7 }}>({fmtPct(fgtsPct)})</span>
                 </th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Benefícios</th>
+                <th className="text-right px-4 py-3 font-medium" style={{ color: '#C0392B' }}>
+                  Outros enc. <span style={{ fontWeight: 400, opacity: 0.7 }}>({fmtPct(outrosPct)})</span>
+                </th>
+                <th className="text-right px-4 py-3 font-medium" style={{ color: '#8E44AD' }}>Benefícios</th>
                 <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Custo total</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(emp => {
-                const sal = emp.salario ?? 0
-                const enc = calcEncargos(sal, effectiveAliquotas)
-                const ben = calcBeneficios(emp)
+                const sal  = emp.salario ?? 0
+                const fgts = calcFgts(sal, effectiveAliquotas)
+                const out  = calcOutrosEncargos(sal, effectiveAliquotas)
+                const ben  = calcBeneficios(emp)
                 return (
                   <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
                     <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
@@ -265,14 +330,17 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
                     <td className="px-4 py-3 text-right" style={{ color: 'var(--color-text-primary)' }}>
                       {fmtCurrency(sal)}
                     </td>
+                    <td className="px-4 py-3 text-right font-semibold" style={{ color: '#E67E22' }}>
+                      {fmtCurrency(fgts)}
+                    </td>
                     <td className="px-4 py-3 text-right font-semibold" style={{ color: '#C0392B' }}>
-                      {fmtCurrency(enc)}
+                      {fmtCurrency(out)}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold" style={{ color: '#8E44AD' }}>
                       {fmtCurrency(ben)}
                     </td>
                     <td className="px-4 py-3 text-right font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                      {fmtCurrency(sal + enc + ben)}
+                      {fmtCurrency(sal + fgts + out + ben)}
                     </td>
                   </tr>
                 )
@@ -283,8 +351,11 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
                 <td colSpan={2} className="px-4 py-3 text-right font-semibold text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                   TOTAIS
                 </td>
+                <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#E67E22' }}>
+                  {fmtCurrency(totalFgts)}
+                </td>
                 <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#C0392B' }}>
-                  {fmtCurrency(totalEncargos)}
+                  {fmtCurrency(totalOutrosEnc)}
                 </td>
                 <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#8E44AD' }}>
                   {fmtCurrency(totalBeneficios)}

@@ -14,16 +14,22 @@ function num(fd: FormData, key: string): number {
 }
 
 function calcLiquido(fd: FormData): number {
-  const base = num(fd, 'salario_base')
-  const extras = num(fd, 'horas_extras')
-  const noturno = num(fd, 'adicional_noturno')
-  const bonus = num(fd, 'bonus')
-  const faltas = num(fd, 'desconto_faltas')
-  const inss = num(fd, 'desconto_inss')
-  const irrf = num(fd, 'desconto_irrf')
-  const vt = num(fd, 'desconto_vt')
-  const outros = num(fd, 'desconto_outros')
-  return Math.max(0, base + extras + noturno + bonus - faltas - inss - irrf - vt - outros)
+  const base       = num(fd, 'salario_base')
+  const pericul    = num(fd, 'periculosidade_valor')
+  const extras     = num(fd, 'horas_extras')
+  const extrasFer  = num(fd, 'horas_extras_feriado')
+  const noturno    = num(fd, 'adicional_noturno')
+  const bonus      = num(fd, 'bonus')
+  const faltas     = num(fd, 'desconto_faltas')
+  const inss       = num(fd, 'desconto_inss')
+  const irrf       = num(fd, 'desconto_irrf')
+  const vt         = num(fd, 'desconto_vt')
+  const adiant     = num(fd, 'desconto_adiantamento')
+  const outros     = num(fd, 'desconto_outros')
+  return Math.max(0,
+    base + pericul + extras + extrasFer + noturno + bonus
+    - faltas - inss - irrf - vt - adiant - outros
+  )
 }
 
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
@@ -44,7 +50,6 @@ async function syncPayrollTransactions(
 ) {
   const refPrefix = `payroll_entry:${entryId}`
 
-  // Remove existing transactions from this entry before re-creating
   await admin.from('transactions')
     .delete()
     .eq('company_id', companyId)
@@ -62,7 +67,6 @@ async function syncPayrollTransactions(
   const mesLabel = mesAnoLabel(mesAno)
   const dataComp = `${mesAno.split('-')[0]}-${mesAno.split('-')[1]}-01`
 
-  // Salary transaction
   await admin.from('transactions').insert({
     company_id: companyId,
     descricao: `Salário — ${nomeEmp} — ${mesLabel}`,
@@ -74,7 +78,6 @@ async function syncPayrollTransactions(
     detalhes: `${refPrefix}:salary`,
   })
 
-  // Employer-paid benefits transaction (if any)
   type EmpBenefit = {
     valor_override: number | null
     benefit: { valor: number; por_dia_trabalhado: boolean; desconta_salario: boolean }
@@ -127,18 +130,22 @@ export async function createPayrollEntryAction(companyId: string, formData: Form
     company_id: companyId,
     employee_id: employeeId,
     mes_ano: mesAno,
-    salario_base:       num(formData, 'salario_base'),
-    horas_extras:       num(formData, 'horas_extras'),
-    adicional_noturno:  num(formData, 'adicional_noturno'),
-    bonus:              num(formData, 'bonus'),
-    desconto_faltas:    num(formData, 'desconto_faltas'),
-    desconto_inss:      num(formData, 'desconto_inss'),
-    desconto_irrf:      num(formData, 'desconto_irrf'),
-    desconto_vt:        num(formData, 'desconto_vt'),
-    desconto_outros:    num(formData, 'desconto_outros'),
-    salario_liquido:    liquido,
+    salario_base:          num(formData, 'salario_base'),
+    periculosidade_valor:  num(formData, 'periculosidade_valor'),
+    horas_extras:          num(formData, 'horas_extras'),
+    horas_extras_feriado:  num(formData, 'horas_extras_feriado'),
+    adicional_noturno:     num(formData, 'adicional_noturno'),
+    bonus:                 num(formData, 'bonus'),
+    desconto_faltas:       num(formData, 'desconto_faltas'),
+    desconto_inss:         num(formData, 'desconto_inss'),
+    desconto_irrf:         num(formData, 'desconto_irrf'),
+    desconto_vt:           num(formData, 'desconto_vt'),
+    desconto_adiantamento: num(formData, 'desconto_adiantamento'),
+    desconto_outros:       num(formData, 'desconto_outros'),
+    salario_liquido:       liquido,
+    dias_trabalhados:      formData.get('dias_trabalhados') ? parseInt(formData.get('dias_trabalhados') as string) : null,
     status,
-    observacao:         (formData.get('observacao') as string) || null,
+    observacao:            (formData.get('observacao') as string) || null,
   }).select('id').single()
 
   if (error) return { error: error.message }
@@ -158,7 +165,6 @@ export async function updatePayrollEntryAction(entryId: string, formData: FormDa
 
   const admin = createAdminClient()
 
-  // Fetch existing entry to get companyId + employeeId + mesAno
   const { data: existing } = await admin
     .from('payroll_entries')
     .select('company_id, employee_id, mes_ano')
@@ -166,18 +172,22 @@ export async function updatePayrollEntryAction(entryId: string, formData: FormDa
     .single()
 
   const { error } = await admin.from('payroll_entries').update({
-    salario_base:       num(formData, 'salario_base'),
-    horas_extras:       num(formData, 'horas_extras'),
-    adicional_noturno:  num(formData, 'adicional_noturno'),
-    bonus:              num(formData, 'bonus'),
-    desconto_faltas:    num(formData, 'desconto_faltas'),
-    desconto_inss:      num(formData, 'desconto_inss'),
-    desconto_irrf:      num(formData, 'desconto_irrf'),
-    desconto_vt:        num(formData, 'desconto_vt'),
-    desconto_outros:    num(formData, 'desconto_outros'),
-    salario_liquido:    liquido,
+    salario_base:          num(formData, 'salario_base'),
+    periculosidade_valor:  num(formData, 'periculosidade_valor'),
+    horas_extras:          num(formData, 'horas_extras'),
+    horas_extras_feriado:  num(formData, 'horas_extras_feriado'),
+    adicional_noturno:     num(formData, 'adicional_noturno'),
+    bonus:                 num(formData, 'bonus'),
+    desconto_faltas:       num(formData, 'desconto_faltas'),
+    desconto_inss:         num(formData, 'desconto_inss'),
+    desconto_irrf:         num(formData, 'desconto_irrf'),
+    desconto_vt:           num(formData, 'desconto_vt'),
+    desconto_adiantamento: num(formData, 'desconto_adiantamento'),
+    desconto_outros:       num(formData, 'desconto_outros'),
+    salario_liquido:       liquido,
+    dias_trabalhados:      formData.get('dias_trabalhados') ? parseInt(formData.get('dias_trabalhados') as string) : null,
     status,
-    observacao:         (formData.get('observacao') as string) || null,
+    observacao:            (formData.get('observacao') as string) || null,
   }).eq('id', entryId)
 
   if (error) return { error: error.message }
@@ -213,7 +223,7 @@ export async function generatePayrollForMonthAction(companyId: string, mesAno: s
     admin
       .from('employees')
       .select(`
-        id, salario,
+        id, salario, tem_periculosidade,
         employee_benefits(
           valor_override,
           benefit:benefit_id(valor, por_dia_trabalhado, desconta_salario)
@@ -257,35 +267,43 @@ export async function generatePayrollForMonthAction(companyId: string, mesAno: s
     return Math.round(inss * 100) / 100
   }
 
-  const entries = (toCreate as unknown as { id: string; salario: number; employee_benefits: EmpBenefit[] }[])
-    .map(emp => {
-      const sal = emp.salario ?? 0
-      const descontoOutros = (emp.employee_benefits ?? [])
+  type EmpRow = { id: string; salario: number; tem_periculosidade: boolean; employee_benefits: EmpBenefit[] }
+  const entries = (toCreate as unknown as EmpRow[]).map(emp => {
+    const sal = emp.salario ?? 0
+    const pericul = emp.tem_periculosidade ? Math.round(sal * 0.30 * 100) / 100 : 0
+    const bruto = sal + pericul
+    const descontoOutros = Math.round(
+      (emp.employee_benefits ?? [])
         .filter(eb => eb.benefit.desconta_salario)
         .reduce((s, eb) => {
           const v = eb.valor_override ?? eb.benefit.valor
           return s + (eb.benefit.por_dia_trabalhado ? v * DIAS_UTEIS : v)
-        }, 0)
-      const inss = calcInss(sal)
-      const liquido = Math.max(0, sal - inss - Math.round(descontoOutros * 100) / 100)
-      return {
-        company_id: companyId,
-        employee_id: emp.id,
-        mes_ano: mesAno,
-        salario_base: sal,
-        horas_extras: 0,
-        adicional_noturno: 0,
-        bonus: 0,
-        desconto_faltas: 0,
-        desconto_inss: inss,
-        desconto_irrf: 0,
-        desconto_vt: 0,
-        desconto_outros: Math.round(descontoOutros * 100) / 100,
-        salario_liquido: Math.round(liquido * 100) / 100,
-        status: 'rascunho',
-        observacao: null,
-      }
-    })
+        }, 0) * 100
+    ) / 100
+    const inss = calcInss(bruto)
+    const liquido = Math.max(0, bruto - inss - descontoOutros)
+    return {
+      company_id: companyId,
+      employee_id: emp.id,
+      mes_ano: mesAno,
+      salario_base: sal,
+      periculosidade_valor: pericul,
+      horas_extras: 0,
+      horas_extras_feriado: 0,
+      adicional_noturno: 0,
+      bonus: 0,
+      desconto_faltas: 0,
+      desconto_inss: inss,
+      desconto_irrf: 0,
+      desconto_vt: 0,
+      desconto_adiantamento: 0,
+      desconto_outros: descontoOutros,
+      salario_liquido: Math.round(liquido * 100) / 100,
+      dias_trabalhados: null,
+      status: 'rascunho',
+      observacao: null,
+    }
+  })
 
   const { error } = await admin.from('payroll_entries').insert(entries)
   if (error) return { error: error.message }
@@ -300,7 +318,6 @@ export async function deletePayrollEntryAction(entryId: string) {
 
   const admin = createAdminClient()
 
-  // Remove associated transactions
   const { data: existing } = await admin
     .from('payroll_entries')
     .select('company_id')

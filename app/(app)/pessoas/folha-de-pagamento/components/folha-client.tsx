@@ -8,7 +8,7 @@ import { deletePayrollEntryAction, generatePayrollForMonthAction } from '../acti
 import type { PayrollEntry, EmployeeForPayroll } from '../queries'
 import type { AliquotaRow } from '../../encargos/queries'
 
-// INSS empregado 2024 — tabela progressiva
+// INSS empregado 2024 — tabela progressiva (usado na Prévia como estimativa)
 const INSS_FAIXAS = [
   { limite: 1412.00, aliq: 0.075 },
   { limite: 2666.68, aliq: 0.09 },
@@ -77,6 +77,50 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }>
   fechado:  { label: 'Fechado',  bg: '#EBF5FB', text: '#2471A3' },
   pago:     { label: 'Pago',     bg: '#E9F7EF', text: '#1E8449' },
 }
+
+// ── CSV Export ──────────────────────────────────────────────────────────────
+function buildCsv(entries: PayrollEntry[], mesAno: string): string {
+  const header = [
+    'Mês/Ano', 'Funcionário', 'Cargo',
+    'Sal. Base', 'Periculosidade', 'HE Conv.', 'HE Feriado', 'Ad. Noturno', 'Outros Adic.',
+    'INSS', 'IRRF', 'Vale-Transporte', 'Adiantamento', 'Faltas', 'Outros Desc.',
+    'Sal. Líquido', 'Dias Trab.', 'Status',
+  ].join(';')
+
+  const rows = entries.map(e => [
+    mesAno,
+    e.employee?.nome ?? '',
+    e.employee?.cargo ?? '',
+    e.salario_base.toFixed(2).replace('.', ','),
+    (e.periculosidade_valor ?? 0).toFixed(2).replace('.', ','),
+    e.horas_extras.toFixed(2).replace('.', ','),
+    (e.horas_extras_feriado ?? 0).toFixed(2).replace('.', ','),
+    e.adicional_noturno.toFixed(2).replace('.', ','),
+    e.bonus.toFixed(2).replace('.', ','),
+    e.desconto_inss.toFixed(2).replace('.', ','),
+    e.desconto_irrf.toFixed(2).replace('.', ','),
+    e.desconto_vt.toFixed(2).replace('.', ','),
+    (e.desconto_adiantamento ?? 0).toFixed(2).replace('.', ','),
+    e.desconto_faltas.toFixed(2).replace('.', ','),
+    e.desconto_outros.toFixed(2).replace('.', ','),
+    e.salario_liquido.toFixed(2).replace('.', ','),
+    e.dias_trabalhados != null ? String(e.dias_trabalhados) : '',
+    e.status,
+  ].join(';'))
+
+  return [header, ...rows].join('\n')
+}
+
+function downloadCsv(content: string, filename: string) {
+  const blob = new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   entries: PayrollEntry[]
@@ -150,9 +194,17 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
     }
   }
 
-  // ── Holerites tab summary ──
-  const totalBruto = entries.reduce((s, e) => s + e.salario_base + e.horas_extras + e.adicional_noturno + e.bonus, 0)
-  const totalDescontos = entries.reduce((s, e) => s + e.desconto_faltas + e.desconto_inss + e.desconto_irrf + e.desconto_vt + e.desconto_outros, 0)
+  function handleExportCsv() {
+    const csv = buildCsv(entries, mesAno)
+    const label = mesAnoLabel(mesAno).replace(' ', '-')
+    downloadCsv(csv, `folha-${label}.csv`)
+  }
+
+  // ── Summary totals ──
+  const totalBruto = entries.reduce((s, e) =>
+    s + e.salario_base + (e.periculosidade_valor ?? 0) + e.horas_extras + (e.horas_extras_feriado ?? 0) + e.adicional_noturno + e.bonus, 0)
+  const totalDescontos = entries.reduce((s, e) =>
+    s + e.desconto_faltas + e.desconto_inss + e.desconto_irrf + e.desconto_vt + (e.desconto_adiantamento ?? 0) + e.desconto_outros, 0)
   const totalLiquido = entries.reduce((s, e) => s + e.salario_liquido, 0)
 
   const counts = {
@@ -161,32 +213,35 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
     pago:     entries.filter(e => e.status === 'pago').length,
   }
 
-  // ── Prévia tab data ──
+  // ── Prévia tab ──
   const entryByEmployee = new Map(entries.map(e => [e.employee_id, e]))
 
   const previewRows = employees.map(emp => {
     const sal = emp.salario ?? 0
-    const inss = calcInssProgressivo(sal)
+    const pericul = emp.tem_periculosidade ? Math.round(sal * 0.30 * 100) / 100 : 0
+    const bruto = sal + pericul
+    const inss = calcInssProgressivo(bruto)
     const outrosDesc = Math.round(calcBenefDesc(emp.employee_benefits) * 100) / 100
-    const liquido = Math.max(0, sal - inss - outrosDesc)
-    const encargos = calcEncargos(sal, effectiveAliquotas)
+    const liquido = Math.max(0, bruto - inss - outrosDesc)
+    const encargos = calcEncargos(bruto, effectiveAliquotas)
     const benefPatronal = Math.round(calcBenefPatronal(emp.employee_benefits) * 100) / 100
-    const custoTotal = sal + encargos + benefPatronal
-    return { emp, sal, inss, outrosDesc, liquido, encargos, benefPatronal, custoTotal, entry: entryByEmployee.get(emp.id) }
+    const custoTotal = bruto + encargos + benefPatronal
+    return { emp, sal, pericul, bruto, inss, outrosDesc, liquido, encargos, benefPatronal, custoTotal, entry: entryByEmployee.get(emp.id) }
   })
 
   const semHolerite = previewRows.filter(r => !r.entry).length
   const prevTotals = previewRows.reduce(
     (t, r) => ({
-      sal: t.sal + r.sal,
-      inss: t.inss + r.inss,
-      outros: t.outros + r.outrosDesc,
-      liquido: t.liquido + r.liquido,
-      encargos: t.encargos + r.encargos,
-      benefPatronal: t.benefPatronal + r.benefPatronal,
-      custo: t.custo + r.custoTotal,
+      bruto:       t.bruto + r.bruto,
+      pericul:     t.pericul + r.pericul,
+      inss:        t.inss + r.inss,
+      outros:      t.outros + r.outrosDesc,
+      liquido:     t.liquido + r.liquido,
+      encargos:    t.encargos + r.encargos,
+      benefPat:    t.benefPat + r.benefPatronal,
+      custo:       t.custo + r.custoTotal,
     }),
-    { sal: 0, inss: 0, outros: 0, liquido: 0, encargos: 0, benefPatronal: 0, custo: 0 }
+    { bruto: 0, pericul: 0, inss: 0, outros: 0, liquido: 0, encargos: 0, benefPat: 0, custo: 0 }
   )
 
   const TAB_BTN = (active: boolean): React.CSSProperties => ({
@@ -220,6 +275,11 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
             </span>
             <button onClick={nextMonth} className="text-sm font-bold hover:opacity-70" style={{ color: 'var(--color-text-muted)' }}>›</button>
           </div>
+          {tab === 'holerites' && entries.length > 0 && (
+            <Button variant="ghost" onClick={handleExportCsv}>
+              ↓ Exportar CSV
+            </Button>
+          )}
           <Button onClick={openAdd}>+ Novo holerite</Button>
         </div>
       </div>
@@ -279,14 +339,15 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
           </div>
 
           <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-            <table className="w-full min-w-[700px] text-sm">
+            <table className="w-full min-w-[780px] text-sm">
               <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <tr>
                   <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
-                  <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Salário base</th>
+                  <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Sal. base</th>
                   <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Proventos</th>
                   <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Descontos</th>
                   <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Líquido</th>
+                  <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Dias</th>
                   <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -294,15 +355,15 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
               <tbody>
                 {entries.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center py-10 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={8} className="text-center py-10 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                       Nenhum holerite para {mesAnoLabel(mesAno)}.
                     </td>
                   </tr>
                 )}
                 {entries.map(e => {
                   const cfg = STATUS_CONFIG[e.status]
-                  const proventos = e.horas_extras + e.adicional_noturno + e.bonus
-                  const descontos = e.desconto_faltas + e.desconto_inss + e.desconto_irrf + e.desconto_vt + e.desconto_outros
+                  const proventos = (e.periculosidade_valor ?? 0) + e.horas_extras + (e.horas_extras_feriado ?? 0) + e.adicional_noturno + e.bonus
+                  const descontos = e.desconto_faltas + e.desconto_inss + e.desconto_irrf + e.desconto_vt + (e.desconto_adiantamento ?? 0) + e.desconto_outros
                   return (
                     <tr key={e.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
                       <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
@@ -318,6 +379,9 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
                       </td>
                       <td className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                         {fmtCurrency(e.salario_liquido)}
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                        {e.dias_trabalhados != null ? e.dias_trabalhados : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
@@ -337,13 +401,30 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
               </tbody>
             </table>
           </div>
+
+          {/* Exportar para contabilidade */}
+          {entries.length > 0 && (
+            <div className="mt-4 flex items-center justify-between p-4 rounded-xl border"
+              style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  Enviar para a contabilidade
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                  Exporta a folha do mês em CSV com todos os campos — envie para o contador processar.
+                </p>
+              </div>
+              <Button variant="ghost" onClick={handleExportCsv}>
+                ↓ Exportar CSV
+              </Button>
+            </div>
+          )}
         </>
       )}
 
       {/* ────── ABA PRÉVIA ────── */}
       {tab === 'previa' && (
         <>
-          {/* Cards de resumo da prévia */}
           <div className="grid grid-cols-4 gap-3 mb-5">
             <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
               <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total a pagar (líquido)</p>
@@ -351,12 +432,13 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
               <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>o que o funcionário recebe</p>
             </div>
             <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Encargos patronais (est.)</p>
-              <p className="text-xl font-bold mt-1" style={{ color: '#C0392B' }}>{fmtCurrency(prevTotals.encargos)}</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Bruto total (est.)</p>
+              <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(prevTotals.bruto)}</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>inclui periculosidade</p>
             </div>
             <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Benefícios patronais</p>
-              <p className="text-xl font-bold mt-1" style={{ color: '#8E44AD' }}>{fmtCurrency(prevTotals.benefPatronal)}</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Encargos patronais (est.)</p>
+              <p className="text-xl font-bold mt-1" style={{ color: '#C0392B' }}>{fmtCurrency(prevTotals.encargos)}</p>
             </div>
             <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
               <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Custo total empresa</p>
@@ -364,19 +446,18 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
             </div>
           </div>
 
-          {/* Aviso */}
           <div className="mb-4 p-3 rounded-lg text-xs" style={{ backgroundColor: '#EBF5FB', color: '#2471A3' }}>
-            Estimativas baseadas nos dados cadastrados. INSS calculado pela tabela progressiva 2024. IRRF não estimado (varia com dependentes). Encargos patronais calculados com as alíquotas de Encargos Trabalhistas.
-            {rawAliquotas.length === 0 && ' (usando alíquotas padrão CLT — inicialize em Encargos para personalizar)'}
+            Estimativas baseadas nos dados cadastrados. INSS calculado sobre o bruto (inclui periculosidade) pela tabela progressiva 2024. IRRF não estimado (varia com dependentes). Periculosidade = 30% do salário quando configurado no cadastro.
+            {rawAliquotas.length === 0 && ' Encargos usando alíquotas padrão CLT — inicialize em Encargos para personalizar.'}
           </div>
 
-          {/* Tabela prévia */}
           <div className="rounded-xl border overflow-x-auto mb-4" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
             <table className="w-full min-w-[900px] text-sm">
               <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <tr>
                   <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
                   <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Salário</th>
+                  <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Pericul.</th>
                   <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>INSS (est.)</th>
                   <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Outros desc.</th>
                   <th className="text-right px-4 py-3 font-medium" style={{ color: '#1E8449' }}>Líquido</th>
@@ -387,18 +468,21 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
               <tbody>
                 {previewRows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center py-10 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={8} className="text-center py-10 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                       Nenhum funcionário ativo com salário cadastrado.
                     </td>
                   </tr>
                 )}
-                {previewRows.map(({ emp, sal, inss, outrosDesc, liquido, custoTotal, entry }) => (
+                {previewRows.map(({ emp, sal, pericul, inss, outrosDesc, liquido, custoTotal, entry }) => (
                   <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
                     <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
                       <div className="font-medium">{emp.nome}</div>
                       {emp.cargo && <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{emp.cargo}</div>}
                     </td>
                     <td className="px-4 py-3 text-right" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(sal)}</td>
+                    <td className="px-4 py-3 text-right text-xs" style={{ color: pericul > 0 ? '#E67E22' : 'var(--color-text-muted)' }}>
+                      {pericul > 0 ? `+${fmtCurrency(pericul)}` : '—'}
+                    </td>
                     <td className="px-4 py-3 text-right text-xs" style={{ color: '#C0392B' }}>-{fmtCurrency(inss)}</td>
                     <td className="px-4 py-3 text-right text-xs" style={{ color: outrosDesc > 0 ? '#C0392B' : 'var(--color-text-muted)' }}>
                       {outrosDesc > 0 ? `-${fmtCurrency(outrosDesc)}` : '—'}
@@ -424,8 +508,10 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
               </tbody>
               <tfoot style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <tr>
-                  <td className="px-4 py-3 text-right font-semibold text-xs" style={{ color: 'var(--color-text-secondary)' }}>TOTAIS</td>
-                  <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(prevTotals.sal)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-xs" colSpan={2} style={{ color: 'var(--color-text-secondary)' }}>TOTAIS</td>
+                  <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#E67E22' }}>
+                    {prevTotals.pericul > 0 ? `+${fmtCurrency(prevTotals.pericul)}` : '—'}
+                  </td>
                   <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#C0392B' }}>-{fmtCurrency(prevTotals.inss)}</td>
                   <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#C0392B' }}>
                     {prevTotals.outros > 0 ? `-${fmtCurrency(prevTotals.outros)}` : '—'}
@@ -438,7 +524,6 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
             </table>
           </div>
 
-          {/* Botão gerar folha */}
           <div className="flex items-center justify-between p-4 rounded-xl border"
             style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
             <div>
@@ -447,15 +532,11 @@ export function FolhaClient({ entries, employees, aliquotas: rawAliquotas, compa
               </p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
                 {semHolerite > 0
-                  ? `Cria ${semHolerite} holerite(s) com os valores estimados acima. Status inicial: Rascunho.`
+                  ? `Cria ${semHolerite} holerite(s) com os valores estimados acima (periculosidade inclusa). Status: Rascunho.`
                   : 'Todos os funcionários já têm holerite neste mês.'}
               </p>
             </div>
-            <Button
-              onClick={handleGenerate}
-              loading={generating}
-              disabled={semHolerite === 0}
-            >
+            <Button onClick={handleGenerate} loading={generating} disabled={semHolerite === 0}>
               Gerar {semHolerite > 0 ? `${semHolerite} holerite(s)` : ''}
             </Button>
           </div>
