@@ -10,25 +10,6 @@ import type { PayrollEntry, EmployeeForPayroll, BenefitForPayroll } from '../que
 
 const DIAS_UTEIS_MES = 22
 
-// INSS empregado 2024 — tabela progressiva
-const INSS_FAIXAS = [
-  { limite: 1412.00, aliq: 0.075 },
-  { limite: 2666.68, aliq: 0.09 },
-  { limite: 4000.03, aliq: 0.12 },
-  { limite: 7786.02, aliq: 0.14 },
-]
-function calcInssProgressivo(salario: number): number {
-  let inss = 0
-  let limiteAnterior = 0
-  const base = Math.min(salario, 7786.02)
-  for (const { limite, aliq } of INSS_FAIXAS) {
-    if (base <= limiteAnterior) break
-    inss += (Math.min(base, limite) - limiteAnterior) * aliq
-    limiteAnterior = limite
-  }
-  return Math.round(inss * 100) / 100
-}
-
 function benefitValue(eb: BenefitForPayroll): number {
   const v = eb.valor_override ?? eb.benefit.valor
   return eb.benefit.por_dia_trabalhado ? v * DIAS_UTEIS_MES : v
@@ -97,8 +78,6 @@ export function ModalFolha({ open, onClose, companyId, entry, employees, mesAno 
     if (emp && !isEdit) {
       const sal = emp.salario ?? 0
       setSalarioBase(sal > 0 ? fmt(sal) : '')
-      const inss = calcInssProgressivo(sal)
-      setDescontoInss(inss > 0 ? fmt(inss) : '')
       const disc = calcBenefDesc(emp)
       setDescontoOutros(disc > 0 ? fmt(disc) : '')
     }
@@ -208,7 +187,7 @@ export function ModalFolha({ open, onClose, companyId, entry, employees, mesAno 
           <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>DESCONTOS</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label style={labelStyle}>INSS <span style={{ fontWeight: 400, opacity: 0.7 }}>(pré-calculado)</span></label>
+              <label style={labelStyle}>INSS <span style={{ fontWeight: 400, opacity: 0.7 }}>(após retorno da contabilidade)</span></label>
               <Input value={descontoInss} onChange={e => setDescontoInss(e.target.value)} placeholder="0,00" inputMode="decimal" />
             </div>
             <div>

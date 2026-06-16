@@ -17,6 +17,18 @@ function formatCpf(value: string) {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
 }
 
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+function fmtDate(iso: string | null) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
 interface Props {
   open: boolean
   onClose: () => void
@@ -26,44 +38,89 @@ interface Props {
 }
 
 const GRAU_OPTIONS = [
-  'Fundamental Incompleto',
-  'Fundamental Completo',
-  'Médio Incompleto',
-  'Médio Completo',
-  'Técnico',
-  'Superior Incompleto',
-  'Superior Completo',
-  'Pós-graduação',
-  'Mestrado',
-  'Doutorado',
+  'Fundamental Incompleto', 'Fundamental Completo', 'Médio Incompleto', 'Médio Completo',
+  'Técnico', 'Superior Incompleto', 'Superior Completo', 'Pós-graduação', 'Mestrado', 'Doutorado',
 ]
+
+function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="flex items-center gap-3 cursor-pointer select-none">
+      <div
+        onClick={() => onChange(!value)}
+        className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+        style={{ backgroundColor: value ? 'var(--color-primary-dark)' : '#D1D5DB' }}
+      >
+        <span className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
+          style={{ left: value ? '1.25rem' : '0.125rem' }} />
+      </div>
+      <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
+    </label>
+  )
+}
 
 export function ModalFuncionario({ open, onClose, companyId, employee, companyBenefits }: Props) {
   const router = useRouter()
   const isEdit = !!employee
 
+  // Identificação
   const [nome, setNome] = useState('')
   const [cpf, setCpf] = useState('')
   const [rg, setRg] = useState('')
+  const [nascimento, setNascimento] = useState('')
   const [telefone, setTelefone] = useState('')
   const [email, setEmail] = useState('')
+
+  // Profissional
   const [cargo, setCargo] = useState('')
-  const [departamento, setDepartamento] = useState('')
-  const [salario, setSalario] = useState('')
-  const [status, setStatus] = useState('admissao')
-  const [dataAdmissao, setDataAdmissao] = useState('')
-  const [dataExperienciaFim, setDataExperienciaFim] = useState('')
-  const [dataDemissao, setDataDemissao] = useState('')
+  const [localTrabalho, setLocalTrabalho] = useState('')
   const [tipoContrato, setTipoContrato] = useState('')
+  const [status, setStatus] = useState('admissao')
   const [grauInstrucao, setGrauInstrucao] = useState('')
-  const [valeTransporte, setValeTransporte] = useState(false)
-  const [valeRefeicao, setValeRefeicao] = useState(false)
+  const [departamento, setDepartamento] = useState('')
+
+  // Remuneração
+  const [salario, setSalario] = useState('')
+  const [temPericulosidade, setTemPericulosidade] = useState(false)
+  const [valeAlimentacao, setValeAlimentacao] = useState('')
+  const [valeTransporte, setValeTransporte] = useState('')
+  const [diasVt, setDiasVt] = useState('22')
   const [planoSaude, setPlanoSaude] = useState(false)
+
+  // Datas
+  const [dataAdmissao, setDataAdmissao] = useState('')
+  const [fimExp1, setFimExp1] = useState('')
+  const [fimExp2, setFimExp2] = useState('')
+  const [vctoFerias, setVctoFerias] = useState('')
+  const [exame, setExame] = useState('')
+  const [statusContrato, setStatusContrato] = useState('')
+  const [dataDemissao, setDataDemissao] = useState('')
+
+  // Documentos
+  const [pisPasep, setPisPasep] = useState('')
+  const [matricula, setMatricula] = useState('')
+  const [dadosBancarios, setDadosBancarios] = useState('')
+
+  // Benefícios e PIN
+  const [selectedBenefitIds, setSelectedBenefitIds] = useState<string[]>([])
   const [pin, setPin] = useState('')
   const [pinAtivo, setPinAtivo] = useState(false)
-  const [selectedBenefitIds, setSelectedBenefitIds] = useState<string[]>([])
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Calcula datas de experiência automaticamente quando admissão muda
+  function onAdmissaoChange(val: string) {
+    setDataAdmissao(val)
+    if (!val) { setFimExp1(''); setFimExp2(''); setVctoFerias(''); return }
+    if (!fimExp1) setFimExp1(addDays(val, 44))
+    if (!fimExp1 && !fimExp2) setFimExp2(addDays(addDays(val, 44), 44))
+    if (!vctoFerias) setVctoFerias(addDays(val, 364))
+  }
+
+  function onFimExp1Change(val: string) {
+    setFimExp1(val)
+    if (val && !fimExp2) setFimExp2(addDays(val, 44))
+  }
 
   useEffect(() => {
     if (!open) return
@@ -72,29 +129,43 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
       setNome(employee.nome)
       setCpf(employee.cpf ? formatCpf(employee.cpf) : '')
       setRg(employee.rg ?? '')
+      setNascimento(employee.nascimento ?? '')
       setTelefone(employee.telefone ?? '')
       setEmail(employee.email ?? '')
       setCargo(employee.cargo ?? '')
+      setLocalTrabalho(employee.local_trabalho ?? '')
+      setTipoContrato(employee.tipo_contrato ?? '')
+      setStatus(employee.status)
+      setGrauInstrucao(employee.grau_instrucao ?? '')
       setDepartamento(employee.departamento ?? '')
       setSalario(employee.salario !== null ? String(employee.salario) : '')
-      setStatus(employee.status)
-      setDataAdmissao(employee.data_admissao ?? '')
-      setDataExperienciaFim(employee.data_experiencia_fim ?? '')
-      setDataDemissao(employee.data_demissao ?? '')
-      setTipoContrato(employee.tipo_contrato ?? '')
-      setGrauInstrucao(employee.grau_instrucao ?? '')
-      setValeTransporte(employee.vale_transporte)
-      setValeRefeicao(employee.vale_refeicao)
+      setTemPericulosidade(employee.tem_periculosidade)
+      setValeAlimentacao(employee.vale_alimentacao_valor > 0 ? String(employee.vale_alimentacao_valor) : '')
+      setValeTransporte(employee.vale_transporte_valor > 0 ? String(employee.vale_transporte_valor) : '')
+      setDiasVt(String(employee.dias_trabalhados_vt ?? 22))
       setPlanoSaude(employee.plano_saude)
+      setDataAdmissao(employee.data_admissao ?? '')
+      setFimExp1(employee.fim_experiencia_1 ?? '')
+      setFimExp2(employee.fim_experiencia_2 ?? '')
+      setVctoFerias(employee.vcto_ferias ?? '')
+      setExame(employee.exame_periodico ?? '')
+      setStatusContrato(employee.status_contrato ?? '')
+      setDataDemissao(employee.data_demissao ?? '')
+      setPisPasep(employee.pis_pasep ?? '')
+      setMatricula(employee.matricula ?? '')
+      setDadosBancarios(employee.dados_bancarios ?? '')
       setPin(employee.pin ?? '')
       setPinAtivo(employee.pin_ativo ?? false)
       setSelectedBenefitIds(employee.employee_benefits?.map(b => b.benefit_id) ?? [])
     } else {
-      setNome(''); setCpf(''); setRg(''); setTelefone(''); setEmail('')
-      setCargo(''); setDepartamento(''); setSalario(''); setStatus('admissao')
-      setDataAdmissao(''); setDataExperienciaFim(''); setDataDemissao('')
-      setTipoContrato(''); setGrauInstrucao('')
-      setValeTransporte(false); setValeRefeicao(false); setPlanoSaude(false)
+      setNome(''); setCpf(''); setRg(''); setNascimento(''); setTelefone(''); setEmail('')
+      setCargo(''); setLocalTrabalho(''); setTipoContrato(''); setStatus('admissao')
+      setGrauInstrucao(''); setDepartamento('')
+      setSalario(''); setTemPericulosidade(false); setValeAlimentacao(''); setValeTransporte('')
+      setDiasVt('22'); setPlanoSaude(false)
+      setDataAdmissao(''); setFimExp1(''); setFimExp2(''); setVctoFerias(''); setExame('')
+      setStatusContrato(''); setDataDemissao('')
+      setPisPasep(''); setMatricula(''); setDadosBancarios('')
       setPin(''); setPinAtivo(false); setSelectedBenefitIds([])
     }
   }, [open, employee])
@@ -108,20 +179,31 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
     fd.set('nome', nome)
     fd.set('cpf', cpf)
     fd.set('rg', rg)
+    fd.set('nascimento', nascimento)
     fd.set('telefone', telefone)
     fd.set('email', email)
     fd.set('cargo', cargo)
+    fd.set('local_trabalho', localTrabalho)
     fd.set('departamento', departamento)
-    fd.set('salario', salario)
-    fd.set('status', status)
-    fd.set('data_admissao', dataAdmissao)
-    fd.set('data_experiencia_fim', dataExperienciaFim)
-    fd.set('data_demissao', dataDemissao)
     fd.set('tipo_contrato', tipoContrato)
+    fd.set('status', status)
     fd.set('grau_instrucao', grauInstrucao)
-    fd.set('vale_transporte', String(valeTransporte))
-    fd.set('vale_refeicao', String(valeRefeicao))
+    fd.set('salario', salario)
+    fd.set('tem_periculosidade', String(temPericulosidade))
+    fd.set('vale_alimentacao_valor', valeAlimentacao)
+    fd.set('vale_transporte_valor', valeTransporte)
+    fd.set('dias_trabalhados_vt', diasVt)
     fd.set('plano_saude', String(planoSaude))
+    fd.set('data_admissao', dataAdmissao)
+    fd.set('fim_experiencia_1', fimExp1)
+    fd.set('fim_experiencia_2', fimExp2)
+    fd.set('vcto_ferias', vctoFerias)
+    fd.set('exame_periodico', exame)
+    fd.set('status_contrato', statusContrato)
+    fd.set('data_demissao', dataDemissao)
+    fd.set('pis_pasep', pisPasep)
+    fd.set('matricula', matricula)
+    fd.set('dados_bancarios', dadosBancarios)
     fd.set('pin', pin)
     fd.set('pin_ativo', String(pinAtivo))
     fd.set('benefit_ids', JSON.stringify(selectedBenefitIds))
@@ -136,101 +218,76 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
     onClose()
   }
 
-  const labelStyle = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }
-  const sectionTitle = { color: 'var(--color-primary-darker)', fontSize: '0.8rem', fontWeight: 600, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--color-bg-surface)' }
+  const lbl: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }
+  const sec: React.CSSProperties = { color: 'var(--color-primary-darker)', fontSize: '0.75rem', fontWeight: 700, marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--color-bg-surface)', letterSpacing: '0.05em' }
 
-  function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
-    return (
-      <label className="flex items-center gap-3 cursor-pointer select-none">
-        <div
-          onClick={() => onChange(!value)}
-          className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
-          style={{ backgroundColor: value ? 'var(--color-primary-dark)' : '#D1D5DB' }}
-        >
-          <span
-            className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
-            style={{ left: value ? '1.25rem' : '0.125rem' }}
-          />
-        </div>
-        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
-      </label>
-    )
-  }
+  const periculosidadeValor = salario && temPericulosidade
+    ? (parseFloat(salario.replace(',', '.')) * 0.3).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : null
+
+  const concederAte = vctoFerias ? fmtDate(
+    (() => { const d = new Date(vctoFerias); d.setDate(d.getDate() + 330); return d.toISOString().split('T')[0] })()
+  ) : null
 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Editar Funcionário' : 'Novo Funcionário'}>
       <form onSubmit={handleSubmit} className="space-y-5">
 
-        {/* Dados Pessoais */}
+        {/* 1 — Identificação */}
         <div>
-          <p style={sectionTitle}>Dados Pessoais</p>
+          <p style={sec}>1. IDENTIFICAÇÃO</p>
           <div className="space-y-3">
             <div>
-              <label style={labelStyle}>Nome completo *</label>
-              <Input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome completo" required />
+              <label style={lbl}>Nome completo *</label>
+              <Input value={nome} onChange={e => setNome(e.target.value.toUpperCase())} placeholder="NOME COMPLETO" required />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label style={labelStyle}>CPF</label>
-                <Input
-                  value={cpf}
-                  onChange={e => setCpf(formatCpf(e.target.value))}
-                  placeholder="000.000.000-00"
-                />
+                <label style={lbl}>CPF</label>
+                <Input value={cpf} onChange={e => setCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" />
               </div>
               <div>
-                <label style={labelStyle}>RG</label>
+                <label style={lbl}>RG</label>
                 <Input value={rg} onChange={e => setRg(e.target.value)} placeholder="RG" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label style={labelStyle}>Telefone</label>
-                <Input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" />
+                <label style={lbl}>Data de Nascimento</label>
+                <Input type="date" value={nascimento} onChange={e => setNascimento(e.target.value)} />
               </div>
               <div>
-                <label style={labelStyle}>E-mail</label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" />
+                <label style={lbl}>Telefone</label>
+                <Input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(21) 99999-0000" />
               </div>
             </div>
             <div>
-              <label style={labelStyle}>Grau de Instrução</label>
-              <select
-                value={grauInstrucao}
-                onChange={e => setGrauInstrucao(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border text-sm"
-                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-              >
-                <option value="">Selecionar...</option>
-                {GRAU_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
+              <label style={lbl}>E-mail</label>
+              <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" />
             </div>
           </div>
         </div>
 
-        {/* Dados Profissionais */}
+        {/* 2 — Dados Profissionais */}
         <div>
-          <p style={sectionTitle}>Dados Profissionais</p>
+          <p style={sec}>2. DADOS PROFISSIONAIS</p>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label style={labelStyle}>Cargo</label>
-                <Input value={cargo} onChange={e => setCargo(e.target.value)} placeholder="Ex: Vendedor" />
+                <label style={lbl}>Cargo</label>
+                <Input value={cargo} onChange={e => setCargo(e.target.value)} placeholder="Ex: Recepcionista" />
               </div>
               <div>
-                <label style={labelStyle}>Departamento</label>
-                <Input value={departamento} onChange={e => setDepartamento(e.target.value)} placeholder="Ex: Comercial" />
+                <label style={lbl}>Local de Trabalho</label>
+                <Input value={localTrabalho} onChange={e => setLocalTrabalho(e.target.value)} placeholder="Ex: Canal ABM" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label style={labelStyle}>Tipo de Contrato</label>
-                <select
-                  value={tipoContrato}
-                  onChange={e => setTipoContrato(e.target.value)}
+                <label style={lbl}>Tipo de Contrato</label>
+                <select value={tipoContrato} onChange={e => setTipoContrato(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                >
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
                   <option value="">Selecionar...</option>
                   <option value="clt">CLT</option>
                   <option value="pj">PJ</option>
@@ -239,13 +296,10 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>Status</label>
-                <select
-                  value={status}
-                  onChange={e => setStatus(e.target.value)}
+                <label style={lbl}>Status</label>
+                <select value={status} onChange={e => setStatus(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                >
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
                   <option value="admissao">Admissão</option>
                   <option value="experiencia">Experiência</option>
                   <option value="ativo">Ativo</option>
@@ -254,37 +308,158 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
                 </select>
               </div>
             </div>
-            <div>
-              <label style={labelStyle}>Salário (R$)</label>
-              <Input
-                value={salario}
-                onChange={e => setSalario(e.target.value)}
-                placeholder="0,00"
-                inputMode="decimal"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={lbl}>Departamento</label>
+                <Input value={departamento} onChange={e => setDepartamento(e.target.value)} placeholder="Ex: Operacional" />
+              </div>
+              <div>
+                <label style={lbl}>Grau de Instrução</label>
+                <select value={grauInstrucao} onChange={e => setGrauInstrucao(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                  <option value="">Selecionar...</option>
+                  {GRAU_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3 — Remuneração */}
+        <div>
+          <p style={sec}>3. REMUNERAÇÃO</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={lbl}>Salário Bruto (R$)</label>
+                <Input value={salario} onChange={e => setSalario(e.target.value)} placeholder="0,00" inputMode="decimal" />
+              </div>
+              <div className="flex flex-col justify-end">
+                <Toggle value={temPericulosidade} onChange={setTemPericulosidade} label="Adicional de periculosidade (30%)" />
+                {periculosidadeValor && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>= {periculosidadeValor}</p>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label style={labelStyle}>Data de Admissão</label>
-                <Input type="date" value={dataAdmissao} onChange={e => setDataAdmissao(e.target.value)} />
+                <label style={lbl}>Vale-Alimentação (R$/mês)</label>
+                <Input value={valeAlimentacao} onChange={e => setValeAlimentacao(e.target.value)} placeholder="0,00" inputMode="decimal" />
               </div>
               <div>
-                <label style={labelStyle}>Fim Período de Experiência</label>
-                <Input type="date" value={dataExperienciaFim} onChange={e => setDataExperienciaFim(e.target.value)} />
+                <label style={lbl}>Vale-Transporte (R$/mês)</label>
+                <Input value={valeTransporte} onChange={e => setValeTransporte(e.target.value)} placeholder="0,00" inputMode="decimal" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={lbl}>Dias trabalhados (base 6% VT)</label>
+                <select value={diasVt} onChange={e => setDiasVt(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                  <option value="15">15 dias</option>
+                  <option value="22">22 dias</option>
+                </select>
+              </div>
+              <div className="flex flex-col justify-end">
+                <Toggle value={planoSaude} onChange={setPlanoSaude} label="Plano de saúde" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 4 — Datas Trabalhistas */}
+        <div>
+          <p style={sec}>4. DATAS TRABALHISTAS</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={lbl}>Data de Admissão</label>
+                <Input type="date" value={dataAdmissao} onChange={e => onAdmissaoChange(e.target.value)} />
+              </div>
+              <div>
+                <label style={lbl}>Status do Contrato</label>
+                <select value={statusContrato} onChange={e => setStatusContrato(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                  <option value="">Selecionar...</option>
+                  <option value="assinado">Assinado</option>
+                  <option value="nao_tem">Não tem</option>
+                  <option value="nao_assinado">Não assinado</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg space-y-3" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <p className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                PERÍODO DE EXPERIÊNCIA <span style={{ fontWeight: 400, opacity: 0.7 }}>(calculado automaticamente — ajuste se necessário)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={lbl}>Fim do 1º período</label>
+                  <Input type="date" value={fimExp1} onChange={e => onFimExp1Change(e.target.value)} />
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Ex: 45 dias, 30 dias, 60 dias após admissão</p>
+                </div>
+                <div>
+                  <label style={lbl}>Fim do 2º período</label>
+                  <Input type="date" value={fimExp2} onChange={e => setFimExp2(e.target.value)} />
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Total até 90 dias por lei</p>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={lbl}>Vencimento de Férias</label>
+                <Input type="date" value={vctoFerias} onChange={e => setVctoFerias(e.target.value)} />
+                {concederAte && (
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Conceder até: {concederAte}</p>
+                )}
+              </div>
+              <div>
+                <label style={lbl}>Próximo Exame Periódico</label>
+                <Input type="date" value={exame} onChange={e => setExame(e.target.value)} />
               </div>
             </div>
             {(status === 'demitido' || status === 'inativo') && (
               <div>
-                <label style={labelStyle}>Data de Demissão</label>
+                <label style={lbl}>Data de Demissão</label>
                 <Input type="date" value={dataDemissao} onChange={e => setDataDemissao(e.target.value)} />
               </div>
             )}
           </div>
         </div>
 
-        {/* Benefícios */}
+        {/* 5 — Documentos e Dados Bancários */}
         <div>
-          <p style={sectionTitle}>Benefícios</p>
+          <p style={sec}>5. DOCUMENTOS E DADOS BANCÁRIOS</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={lbl}>PIS / PASEP</label>
+                <Input value={pisPasep} onChange={e => setPisPasep(e.target.value)} placeholder="000.00000.00-0" />
+              </div>
+              <div>
+                <label style={lbl}>Matrícula</label>
+                <Input value={matricula} onChange={e => setMatricula(e.target.value)} placeholder="Nº funcional" />
+              </div>
+            </div>
+            <div>
+              <label style={lbl}>Dados Bancários</label>
+              <textarea
+                value={dadosBancarios}
+                onChange={e => setDadosBancarios(e.target.value)}
+                placeholder="Banco, agência, conta corrente e/ou chave PIX"
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 6 — Benefícios do catálogo */}
+        <div>
+          <p style={sec}>6. BENEFÍCIOS</p>
           {companyBenefits.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
               Nenhum benefício cadastrado. Acesse Pessoas → Benefícios para criar o catálogo.
@@ -294,22 +469,12 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
               {companyBenefits.map(b => {
                 const checked = selectedBenefitIds.includes(b.id)
                 return (
-                  <label
-                    key={b.id}
-                    className="flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors"
-                    style={{
-                      borderColor: checked ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)',
-                      backgroundColor: checked ? 'var(--color-primary)' : 'white',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
+                  <label key={b.id} className="flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors"
+                    style={{ borderColor: checked ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)', backgroundColor: checked ? 'var(--color-primary)' : 'white' }}>
+                    <input type="checkbox" checked={checked}
                       onChange={e => setSelectedBenefitIds(prev =>
                         e.target.checked ? [...prev, b.id] : prev.filter(id => id !== b.id)
-                      )}
-                      className="mt-0.5"
-                    />
+                      )} className="mt-0.5" />
                     <div>
                       <p className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>{b.nome}</p>
                       <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
@@ -324,39 +489,24 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
           )}
         </div>
 
-        {/* Acesso ao Portal de Ponto */}
+        {/* 7 — Acesso ao Portal de Ponto */}
         <div>
-          <p style={sectionTitle}>Acesso ao Portal de Ponto</p>
+          <p style={sec}>7. ACESSO AO PORTAL DE PONTO</p>
           <div className="space-y-3">
             <Toggle value={pinAtivo} onChange={setPinAtivo} label="Permitir registro de ponto pelo colaborador" />
             {pinAtivo && (
               <div>
-                <label style={labelStyle}>PIN de acesso (4 dígitos)</label>
+                <label style={lbl}>PIN de acesso (4 dígitos)</label>
                 <div className="flex gap-2 items-center">
-                  <Input
-                    value={pin}
-                    onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                    placeholder="0000"
-                    inputMode="numeric"
-                    maxLength={4}
-                    className="w-28 text-center text-lg tracking-widest font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPin(String(Math.floor(1000 + Math.random() * 9000)))}
+                  <Input value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="0000" inputMode="numeric" maxLength={4}
+                    className="w-28 text-center text-lg tracking-widest font-mono" />
+                  <button type="button" onClick={() => setPin(String(Math.floor(1000 + Math.random() * 9000)))}
                     className="text-xs px-3 py-2 rounded-lg border transition-colors hover:bg-gray-50"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
-                  >
+                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}>
                     Gerar PIN
                   </button>
                 </div>
-                <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                  O colaborador usa este PIN em{' '}
-                  <span className="font-mono" style={{ color: 'var(--color-primary-darker)' }}>
-                    /registrar-ponto
-                  </span>{' '}
-                  junto ao CNPJ da empresa.
-                </p>
               </div>
             )}
           </div>

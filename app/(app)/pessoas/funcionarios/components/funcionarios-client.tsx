@@ -8,178 +8,381 @@ import { deleteEmployeeAction } from '../actions'
 import type { Employee } from '../queries'
 import type { CompanyBenefit } from '../../beneficios/queries'
 
+const TODAY = new Date()
+TODAY.setHours(0, 0, 0, 0)
+
+function parseDate(iso: string | null): Date | null {
+  if (!iso) return null
+  const d = new Date(iso + 'T00:00:00')
+  return isNaN(d.getTime()) ? null : d
+}
+
+function fmtDate(iso: string | null) {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function fmtCurrency(v: number | null) {
+  if (!v || v === 0) return '—'
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function diffDays(d: Date): number {
+  return Math.ceil((d.getTime() - TODAY.getTime()) / 86400000)
+}
+
+type AlertLevel = 'danger' | 'warning' | null
+
+function getRowAlert(emp: Employee): AlertLevel {
+  const ferias = parseDate(emp.vcto_ferias)
+  const exame = parseDate(emp.exame_periodico)
+  const exp2 = parseDate(emp.fim_experiencia_2)
+  if (ferias && diffDays(ferias) < 0) return 'danger'
+  if (exame && diffDays(exame) < 0) return 'danger'
+  if (ferias && diffDays(ferias) <= 30) return 'warning'
+  if (exame && diffDays(exame) <= 30) return 'warning'
+  if (exp2 && diffDays(exp2) >= 0 && diffDays(exp2) <= 7) return 'warning'
+  return null
+}
+
+function getFeriasAlert(emp: Employee): AlertLevel {
+  const d = parseDate(emp.vcto_ferias)
+  if (!d) return null
+  const diff = diffDays(d)
+  if (diff < 0) return 'danger'
+  if (diff <= 30) return 'warning'
+  return null
+}
+
+function getExameAlert(emp: Employee): AlertLevel {
+  const d = parseDate(emp.exame_periodico)
+  if (!d) return null
+  const diff = diffDays(d)
+  if (diff < 0) return 'danger'
+  if (diff <= 30) return 'warning'
+  return null
+}
+
+function getExpAlert(emp: Employee): AlertLevel {
+  const d = parseDate(emp.fim_experiencia_2)
+  if (!d) return null
+  const diff = diffDays(d)
+  if (diff >= 0 && diff <= 7) return 'warning'
+  return null
+}
+
+const CONTRATO_CFG: Record<string, { label: string; bg: string; color: string }> = {
+  assinado:     { label: 'assinado',      bg: '#E9F7EF', color: '#1E8449' },
+  nao_tem:      { label: 'não tem',       bg: '#FDEDEC', color: '#C0392B' },
+  nao_assinado: { label: 'não assinado',  bg: '#FEF9E7', color: '#9A7D0A' },
+}
+
+const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> = {
+  admissao:    { label: 'Admissão',    bg: '#EBF5FB', color: '#2471A3' },
+  experiencia: { label: 'Experiência', bg: '#FEF9E7', color: '#9A7D0A' },
+  ativo:       { label: 'Ativo',       bg: '#E9F7EF', color: '#1E8449' },
+  inativo:     { label: 'Inativo',     bg: '#F4F6F7', color: '#717D7E' },
+  demitido:    { label: 'Demitido',    bg: '#FDEDEC', color: '#C0392B' },
+}
+
+function AlertIcon({ level }: { level: AlertLevel }) {
+  if (!level) return null
+  return (
+    <span style={{ color: level === 'danger' ? '#C0392B' : '#9A7D0A', fontSize: '0.8rem', marginRight: 3 }}>
+      {level === 'danger' ? '⚠' : '△'}
+    </span>
+  )
+}
+
+function DateCell({ iso, alert }: { iso: string | null; alert: AlertLevel }) {
+  return (
+    <span style={{ color: alert === 'danger' ? '#C0392B' : alert === 'warning' ? '#9A7D0A' : 'inherit' }}>
+      {alert && <AlertIcon level={alert} />}
+      {fmtDate(iso)}
+    </span>
+  )
+}
+
 interface Props {
   employees: Employee[]
   companyId: string
   companyBenefits: CompanyBenefit[]
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  admissao: 'Admissão',
-  experiencia: 'Experiência',
-  ativo: 'Ativo',
-  inativo: 'Inativo',
-  demitido: 'Demitido',
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  admissao: '#E9F5FE',
-  experiencia: '#FEF9E7',
-  ativo: '#E9F7EF',
-  inativo: '#F2F3F4',
-  demitido: '#FDEDEC',
-}
-
-const STATUS_TEXT: Record<string, string> = {
-  admissao: '#2980B9',
-  experiencia: '#D4AC0D',
-  ativo: '#1E8449',
-  inativo: '#717D7E',
-  demitido: '#C0392B',
-}
-
-const CONTRATO_LABELS: Record<string, string> = {
-  clt: 'CLT',
-  pj: 'PJ',
-  estagio: 'Estágio',
-  menor_aprendiz: 'Menor Aprendiz',
-}
-
-function cpfMask(cpf: string | null) {
-  if (!cpf) return '—'
-  const d = cpf.replace(/\D/g, '')
-  if (d.length !== 11) return cpf
-  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
-}
-
 export function FuncionariosClient({ employees, companyId, companyBenefits }: Props) {
   const router = useRouter()
+  const [tab, setTab] = useState<'ativos' | 'inativos'>('ativos')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
+  const [editing, setEditing] = useState<Employee | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState('')
-  const [search, setSearch] = useState('')
 
-  const q = search.toLowerCase()
-  const filtered = employees.filter(e =>
-    e.nome.toLowerCase().includes(q) ||
-    (e.cargo ?? '').toLowerCase().includes(q) ||
-    (e.departamento ?? '').toLowerCase().includes(q) ||
-    (e.cpf ?? '').includes(q)
-  )
+  const ativos = employees.filter(e => ['admissao', 'experiencia', 'ativo'].includes(e.status))
+  const inativos = employees.filter(e => ['inativo', 'demitido'].includes(e.status))
+  const rows = tab === 'ativos' ? ativos : inativos
 
-  function openAdd() { setEditingEmployee(null); setModalOpen(true) }
-  function openEdit(e: Employee) { setEditingEmployee(e); setModalOpen(true) }
+  const folhaBruta = ativos.reduce((s, e) => s + (e.salario ?? 0), 0)
+  const custoEstimado = ativos.reduce((s, e) => {
+    const sal = e.salario ?? 0
+    const peric = e.tem_periculosidade ? sal * 0.3 : 0
+    return s + sal + peric + e.vale_alimentacao_valor + e.vale_transporte_valor
+  }, 0)
+  const alertasFerias = ativos.filter(e => getFeriasAlert(e) !== null).length
+  const alertasExame = ativos.filter(e => getExameAlert(e) !== null).length
+
+  const totSalario = rows.reduce((s, e) => s + (e.salario ?? 0), 0)
+  const totPericul = rows.reduce((s, e) => s + (e.tem_periculosidade ? (e.salario ?? 0) * 0.3 : 0), 0)
+  const totVA = rows.reduce((s, e) => s + e.vale_alimentacao_valor, 0)
+  const totVT = rows.reduce((s, e) => s + e.vale_transporte_valor, 0)
+  const totCusto = rows.reduce((s, e) => {
+    const sal = e.salario ?? 0
+    const peric = e.tem_periculosidade ? sal * 0.3 : 0
+    return s + sal + peric + e.vale_alimentacao_valor + e.vale_transporte_valor
+  }, 0)
+
+  function openEdit(e: Employee) { setEditing(e); setModalOpen(true) }
+  function openAdd() { setEditing(null); setModalOpen(true) }
 
   async function handleDelete(e: Employee) {
     if (!confirm(`Excluir ${e.nome}? Esta ação não pode ser desfeita.`)) return
     setDeletingId(e.id)
-    setDeleteError('')
     const result = await deleteEmployeeAction(e.id)
     setDeletingId(null)
-    if ('error' in result) setDeleteError(result.error ?? 'Erro ao excluir.')
+    if ('error' in result) alert(result.error)
     else router.refresh()
   }
 
+  const TAB_BTN = (active: boolean): React.CSSProperties => ({
+    padding: '0.5rem 1.25rem',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    color: active ? 'var(--color-primary-darker)' : 'var(--color-text-muted)',
+    cursor: 'pointer',
+    background: 'none',
+    border: 'none',
+    borderBottom: active ? '2px solid var(--color-primary-darker)' : '2px solid transparent',
+  })
+
+  const GRP: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', textAlign: 'center', padding: '4px 8px' }
+  const COL: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.7rem', fontWeight: 500, padding: '4px 8px', whiteSpace: 'nowrap' }
+
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Funcionários
+            Controle de Funcionários
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            Colaboradores da empresa
+            Cadastro e acompanhamento da equipe CLT
           </p>
         </div>
         <Button onClick={openAdd}>+ Novo funcionário</Button>
       </div>
 
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Buscar por nome, cargo, departamento ou CPF..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full px-4 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-        />
+      {/* Cards de métricas */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Funcionários ativos</p>
+          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{ativos.length}</p>
+          {inativos.length > 0 && (
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+              + {inativos.length} inativo{inativos.length > 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
+        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Folha bruta</p>
+          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>
+            {folhaBruta.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Sal. bruto dos ativos</p>
+        </div>
+        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Custo estimado</p>
+          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>
+            {custoEstimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Inclui pericul. + benefícios</p>
+        </div>
+        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>Alertas</p>
+          <div className="flex flex-col gap-1">
+            {alertasFerias > 0 ? (
+              <span className="text-sm font-bold" style={{ color: '#C0392B' }}>⚠ {alertasFerias} férias</span>
+            ) : (
+              <span className="text-xs" style={{ color: '#1E8449' }}>✓ Férias ok</span>
+            )}
+            {alertasExame > 0 ? (
+              <span className="text-sm font-bold" style={{ color: '#9A7D0A' }}>△ {alertasExame} exame{alertasExame > 1 ? 's' : ''}</span>
+            ) : (
+              <span className="text-xs" style={{ color: '#1E8449' }}>✓ Exames ok</span>
+            )}
+          </div>
+        </div>
       </div>
 
-      {deleteError && (
-        <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>
-          {deleteError}
-        </p>
-      )}
+      {/* Tabs */}
+      <div className="flex border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
+        <button style={TAB_BTN(tab === 'ativos')} onClick={() => setTab('ativos')}>
+          Ativos ({ativos.length})
+        </button>
+        <button style={TAB_BTN(tab === 'inativos')} onClick={() => setTab('inativos')}>
+          Inativos ({inativos.length})
+        </button>
+      </div>
 
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-        <table className="w-full min-w-[700px] text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>CPF</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Cargo</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Contrato</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-              <th className="px-4 py-3" />
+      {/* Tabela com duplo cabeçalho */}
+      <div className="rounded-b-xl rounded-tr-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', borderTop: 'none', backgroundColor: 'white' }}>
+        <table className="w-full text-sm" style={{ minWidth: 960 }}>
+          <thead>
+            {/* Linha 1 — grupos */}
+            <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <th colSpan={3} />
+              <th colSpan={2} style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Remuneração</th>
+              <th colSpan={2} style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Benefícios</th>
+              <th style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Custo Est.</th>
+              <th colSpan={3} style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Datas Críticas</th>
+              <th style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Contrato</th>
+              <th />
+            </tr>
+            {/* Linha 2 — colunas */}
+            <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <th style={{ ...COL, textAlign: 'left', minWidth: 170, position: 'sticky', left: 0, backgroundColor: 'var(--color-bg-surface)', zIndex: 2 }}>Nome</th>
+              <th style={{ ...COL, textAlign: 'left', minWidth: 110 }}>Cargo</th>
+              <th style={{ ...COL, textAlign: 'left', minWidth: 100 }}>Local</th>
+              <th style={{ ...COL, textAlign: 'right', minWidth: 80, borderLeft: '2px solid #E5E7EB' }}>Salário</th>
+              <th style={{ ...COL, textAlign: 'right', minWidth: 70 }}>Pericul.</th>
+              <th style={{ ...COL, textAlign: 'right', minWidth: 70, borderLeft: '2px solid #E5E7EB' }}>VA</th>
+              <th style={{ ...COL, textAlign: 'right', minWidth: 70 }}>VT</th>
+              <th style={{ ...COL, textAlign: 'right', minWidth: 84, borderLeft: '2px solid #E5E7EB' }}>Custo Total</th>
+              <th style={{ ...COL, textAlign: 'right', minWidth: 78, borderLeft: '2px solid #E5E7EB' }}>Admissão</th>
+              <th style={{ ...COL, textAlign: 'right', minWidth: 78 }}>Vcto Férias</th>
+              <th style={{ ...COL, textAlign: 'right', minWidth: 78 }}>Exame</th>
+              <th style={{ ...COL, textAlign: 'center', minWidth: 90, borderLeft: '2px solid #E5E7EB' }}>Status</th>
+              <th style={{ minWidth: 90 }} />
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  {search ? 'Nenhum resultado para a busca.' : 'Nenhum funcionário cadastrado.'}
+                <td colSpan={13} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                  {tab === 'ativos' ? 'Nenhum funcionário ativo cadastrado.' : 'Nenhum funcionário inativo.'}
                 </td>
               </tr>
             )}
-            {filtered.map((e) => (
-              <tr key={e.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                  <div>{e.nome}</div>
-                  {e.departamento && (
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{e.departamento}</div>
-                  )}
-                </td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{cpfMask(e.cpf)}</td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{e.cargo ?? '—'}</td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                  {e.tipo_contrato ? CONTRATO_LABELS[e.tipo_contrato] ?? e.tipo_contrato : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                    style={{
-                      backgroundColor: STATUS_COLORS[e.status] ?? '#F2F3F4',
-                      color: STATUS_TEXT[e.status] ?? '#717D7E',
-                    }}
-                  >
-                    {STATUS_LABELS[e.status] ?? e.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(e)}>Editar</Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      loading={deletingId === e.id}
-                      onClick={() => handleDelete(e)}
-                    >
-                      Excluir
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {rows.map((emp, idx) => {
+              const alert = getRowAlert(emp)
+              const feriasAlert = getFeriasAlert(emp)
+              const exameAlert = getExameAlert(emp)
+              const expAlert = getExpAlert(emp)
+              const sal = emp.salario ?? 0
+              const pericul = emp.tem_periculosidade ? Math.round(sal * 0.3 * 100) / 100 : 0
+              const custo = sal + pericul + emp.vale_alimentacao_valor + emp.vale_transporte_valor
+              const contrato = emp.status_contrato ? CONTRATO_CFG[emp.status_contrato] : null
+              const statusCfg = STATUS_CFG[emp.status]
+              const rowBg = alert === 'danger' ? '#FEF2F2' : alert === 'warning' ? '#FFFBEB' : idx % 2 === 0 ? 'white' : '#FAFAFA'
+
+              return (
+                <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
+                  <td className="px-3 py-2.5" style={{ position: 'sticky', left: 0, backgroundColor: rowBg, zIndex: 1 }}>
+                    <div className="flex items-start gap-1">
+                      {alert && <AlertIcon level={alert} />}
+                      <div>
+                        <p className="font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</p>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs mt-0.5"
+                          style={{ backgroundColor: statusCfg.bg, color: statusCfg.color, fontSize: '0.65rem' }}>
+                          {statusCfg.label}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{emp.cargo ?? '—'}</td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>{emp.local_trabalho ?? '—'}</td>
+                  <td className="px-3 py-2.5 text-right text-xs font-medium" style={{ color: 'var(--color-text-primary)', borderLeft: '2px solid #F3F4F6' }}>
+                    {fmtCurrency(sal)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-xs" style={{ color: pericul > 0 ? '#8E44AD' : 'var(--color-text-muted)' }}>
+                    {pericul > 0 ? fmtCurrency(pericul) : '—'}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-xs" style={{ color: 'var(--color-text-secondary)', borderLeft: '2px solid #F3F4F6' }}>
+                    {fmtCurrency(emp.vale_alimentacao_valor)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {fmtCurrency(emp.vale_transporte_valor)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-xs font-semibold" style={{ color: '#1E8449', borderLeft: '2px solid #F3F4F6' }}>
+                    {fmtCurrency(custo)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-xs" style={{ borderLeft: '2px solid #F3F4F6' }}>
+                    <DateCell iso={emp.data_admissao} alert={expAlert} />
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-xs">
+                    <DateCell iso={emp.vcto_ferias} alert={feriasAlert} />
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-xs">
+                    <DateCell iso={emp.exame_periodico} alert={exameAlert} />
+                  </td>
+                  <td className="px-3 py-2.5 text-center" style={{ borderLeft: '2px solid #F3F4F6' }}>
+                    {contrato ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: contrato.bg, color: contrato.color, fontSize: '0.65rem' }}>
+                        {contrato.label}
+                      </span>
+                    ) : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>—</span>}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-1 justify-end">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(emp)}>Editar</Button>
+                      <Button variant="danger" size="sm" loading={deletingId === emp.id} onClick={() => handleDelete(emp)}>✕</Button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr style={{ backgroundColor: 'var(--color-bg-surface)', borderTop: '2px solid #E5E7EB' }}>
+                <td className="px-3 py-2 text-xs font-bold" style={{ color: 'var(--color-text-secondary)', position: 'sticky', left: 0, backgroundColor: 'var(--color-bg-surface)', zIndex: 1 }}>
+                  TOTAL — {rows.length} {tab === 'ativos' ? 'ativo' : 'inativo'}{rows.length !== 1 ? 's' : ''}
+                </td>
+                <td colSpan={2} />
+                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: 'var(--color-text-primary)', borderLeft: '2px solid #E5E7EB' }}>
+                  {fmtCurrency(totSalario)}
+                </td>
+                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: totPericul > 0 ? '#8E44AD' : 'var(--color-text-muted)' }}>
+                  {totPericul > 0 ? fmtCurrency(totPericul) : '—'}
+                </td>
+                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: 'var(--color-text-secondary)', borderLeft: '2px solid #E5E7EB' }}>
+                  {fmtCurrency(totVA)}
+                </td>
+                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: 'var(--color-text-secondary)' }}>
+                  {fmtCurrency(totVT)}
+                </td>
+                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: '#1E8449', borderLeft: '2px solid #E5E7EB' }}>
+                  {fmtCurrency(totCusto)}
+                </td>
+                <td colSpan={5} />
+              </tr>
+            </tfoot>
+          )}
         </table>
+      </div>
+
+      {/* Legenda */}
+      <div className="flex items-center gap-6 mt-3 px-1">
+        <span className="text-xs" style={{ color: '#C0392B' }}>⚠ Férias vencidas ou exame vencido</span>
+        <span className="text-xs" style={{ color: '#9A7D0A' }}>△ Atenção — prazo ≤ 30 dias</span>
+        <span className="text-xs" style={{ color: '#9A7D0A' }}>△ Fim de experiência em ≤ 7 dias</span>
       </div>
 
       <ModalFuncionario
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         companyId={companyId}
-        employee={editingEmployee}
+        employee={editing}
         companyBenefits={companyBenefits}
       />
     </>
