@@ -13,10 +13,7 @@ export type Employee = {
   departamento: string | null
   local_trabalho: string | null
   salario: number | null
-  tem_periculosidade: boolean
-  dias_trabalhados_vt: number
-  vale_alimentacao_valor: number
-  vale_transporte_valor: number
+  plano_saude: boolean
   status: 'admissao' | 'experiencia' | 'ativo' | 'inativo' | 'demitido'
   data_admissao: string | null
   data_experiencia_fim: string | null
@@ -30,9 +27,11 @@ export type Employee = {
   tipo_contrato: 'clt' | 'pj' | 'estagio' | 'menor_aprendiz' | null
   pis_pasep: string | null
   matricula: string | null
+  serie_ctps: string | null
+  certificado_reservista: string | null
+  dependentes: number
   dados_bancarios: string | null
   grau_instrucao: string | null
-  plano_saude: boolean
   pin: string | null
   pin_ativo: boolean
   created_at: string

@@ -25,7 +25,6 @@ function dec(fd: FormData, key: string): number | null {
 function parseEmployeeFields(formData: FormData) {
   const dataAdmissao = (formData.get('data_admissao') as string) || null
 
-  // Auto-calcular datas de experiência a partir da admissão se não fornecidas manualmente
   const fimExp1Raw = (formData.get('fim_experiencia_1') as string) || null
   const fimExp2Raw = (formData.get('fim_experiencia_2') as string) || null
 
@@ -39,14 +38,11 @@ function parseEmployeeFields(formData: FormData) {
     fim_experiencia_2 = addDays(fim_experiencia_1, 44)
   }
 
-  // Vencimento de férias: manual ou admissão + 364 dias
   const vctoFeriasRaw = (formData.get('vcto_ferias') as string) || null
   const vcto_ferias = vctoFeriasRaw || (dataAdmissao ? addDays(dataAdmissao, 364) : null)
   const conceder_ferias_ate = vcto_ferias ? addDays(vcto_ferias, 330) : null
 
-  const valeAlim = dec(formData, 'vale_alimentacao_valor') ?? 0
-  const valeTransp = dec(formData, 'vale_transporte_valor') ?? 0
-  const salario = dec(formData, 'salario')
+  const depRaw = parseInt((formData.get('dependentes') as string) || '0')
 
   return {
     nome: (formData.get('nome') as string)?.toUpperCase() || '',
@@ -58,11 +54,8 @@ function parseEmployeeFields(formData: FormData) {
     cargo: (formData.get('cargo') as string) || null,
     departamento: (formData.get('departamento') as string) || null,
     local_trabalho: (formData.get('local_trabalho') as string) || null,
-    salario,
-    tem_periculosidade: formData.get('tem_periculosidade') === 'true',
-    dias_trabalhados_vt: parseInt((formData.get('dias_trabalhados_vt') as string) || '22') || 22,
-    vale_alimentacao_valor: valeAlim,
-    vale_transporte_valor: valeTransp,
+    salario: dec(formData, 'salario'),
+    plano_saude: formData.get('plano_saude') === 'true',
     status: (formData.get('status') as string) || 'admissao',
     data_admissao: dataAdmissao,
     fim_experiencia_1,
@@ -75,9 +68,11 @@ function parseEmployeeFields(formData: FormData) {
     tipo_contrato: (formData.get('tipo_contrato') as string) || null,
     pis_pasep: (formData.get('pis_pasep') as string) || null,
     matricula: (formData.get('matricula') as string) || null,
+    serie_ctps: (formData.get('serie_ctps') as string) || null,
+    certificado_reservista: (formData.get('certificado_reservista') as string) || null,
+    dependentes: isNaN(depRaw) ? 0 : depRaw,
     dados_bancarios: (formData.get('dados_bancarios') as string) || null,
     grau_instrucao: (formData.get('grau_instrucao') as string) || null,
-    plano_saude: formData.get('plano_saude') === 'true',
     pin: (formData.get('pin') as string) || null,
     pin_ativo: formData.get('pin_ativo') === 'true',
   }

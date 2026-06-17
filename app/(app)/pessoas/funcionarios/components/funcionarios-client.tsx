@@ -36,13 +36,13 @@ type AlertLevel = 'danger' | 'warning' | null
 
 function getRowAlert(emp: Employee): AlertLevel {
   const ferias = parseDate(emp.vcto_ferias)
-  const exame = parseDate(emp.exame_periodico)
-  const exp2 = parseDate(emp.fim_experiencia_2)
+  const exame  = parseDate(emp.exame_periodico)
+  const exp2   = parseDate(emp.fim_experiencia_2)
   if (ferias && diffDays(ferias) < 0) return 'danger'
-  if (exame && diffDays(exame) < 0) return 'danger'
+  if (exame  && diffDays(exame)  < 0) return 'danger'
   if (ferias && diffDays(ferias) <= 30) return 'warning'
-  if (exame && diffDays(exame) <= 30) return 'warning'
-  if (exp2 && diffDays(exp2) >= 0 && diffDays(exp2) <= 7) return 'warning'
+  if (exame  && diffDays(exame)  <= 30) return 'warning'
+  if (exp2   && diffDays(exp2) >= 0 && diffDays(exp2) <= 7) return 'warning'
   return null
 }
 
@@ -73,9 +73,9 @@ function getExpAlert(emp: Employee): AlertLevel {
 }
 
 const CONTRATO_CFG: Record<string, { label: string; bg: string; color: string }> = {
-  assinado:     { label: 'assinado',      bg: '#E9F7EF', color: '#1E8449' },
-  nao_tem:      { label: 'não tem',       bg: '#FDEDEC', color: '#C0392B' },
-  nao_assinado: { label: 'não assinado',  bg: '#FEF9E7', color: '#9A7D0A' },
+  assinado:     { label: 'assinado',     bg: '#E9F7EF', color: '#1E8449' },
+  nao_tem:      { label: 'não tem',      bg: '#FDEDEC', color: '#C0392B' },
+  nao_assinado: { label: 'não assinado', bg: '#FEF9E7', color: '#9A7D0A' },
 }
 
 const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> = {
@@ -117,31 +117,19 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
   const [editing, setEditing] = useState<Employee | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const ativos = employees.filter(e => ['admissao', 'experiencia', 'ativo'].includes(e.status))
+  const ativos   = employees.filter(e => ['admissao', 'experiencia', 'ativo'].includes(e.status))
   const inativos = employees.filter(e => ['inativo', 'demitido'].includes(e.status))
-  const rows = tab === 'ativos' ? ativos : inativos
+  const rows     = tab === 'ativos' ? ativos : inativos
 
-  const folhaBruta = ativos.reduce((s, e) => s + (e.salario ?? 0), 0)
-  const custoEstimado = ativos.reduce((s, e) => {
-    const sal = e.salario ?? 0
-    const peric = e.tem_periculosidade ? sal * 0.3 : 0
-    return s + sal + peric + e.vale_alimentacao_valor + e.vale_transporte_valor
-  }, 0)
-  const alertasFerias = ativos.filter(e => getFeriasAlert(e) !== null).length
-  const alertasExame = ativos.filter(e => getExameAlert(e) !== null).length
+  const folhaBruta      = ativos.reduce((s, e) => s + (e.salario ?? 0), 0)
+  const comBeneficios   = ativos.filter(e => e.employee_benefits.length > 0).length
+  const alertasFerias   = ativos.filter(e => getFeriasAlert(e) !== null).length
+  const alertasExame    = ativos.filter(e => getExameAlert(e) !== null).length
 
   const totSalario = rows.reduce((s, e) => s + (e.salario ?? 0), 0)
-  const totPericul = rows.reduce((s, e) => s + (e.tem_periculosidade ? (e.salario ?? 0) * 0.3 : 0), 0)
-  const totVA = rows.reduce((s, e) => s + e.vale_alimentacao_valor, 0)
-  const totVT = rows.reduce((s, e) => s + e.vale_transporte_valor, 0)
-  const totCusto = rows.reduce((s, e) => {
-    const sal = e.salario ?? 0
-    const peric = e.tem_periculosidade ? sal * 0.3 : 0
-    return s + sal + peric + e.vale_alimentacao_valor + e.vale_transporte_valor
-  }, 0)
 
   function openEdit(e: Employee) { setEditing(e); setModalOpen(true) }
-  function openAdd() { setEditing(null); setModalOpen(true) }
+  function openAdd()              { setEditing(null); setModalOpen(true) }
 
   async function handleDelete(e: Employee) {
     if (!confirm(`Excluir ${e.nome}? Esta ação não pode ser desfeita.`)) return
@@ -163,8 +151,14 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
     borderBottom: active ? '2px solid var(--color-primary-darker)' : '2px solid transparent',
   })
 
-  const GRP: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', textAlign: 'center', padding: '4px 8px' }
-  const COL: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.7rem', fontWeight: 500, padding: '4px 8px', whiteSpace: 'nowrap' }
+  const TH: React.CSSProperties = {
+    color: 'var(--color-text-secondary)',
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    padding: '8px 12px',
+    whiteSpace: 'nowrap',
+    backgroundColor: 'var(--color-bg-surface)',
+  }
 
   return (
     <>
@@ -197,14 +191,14 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
           <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>
             {folhaBruta.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Sal. bruto dos ativos</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Salários dos ativos</p>
         </div>
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Custo estimado</p>
-          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>
-            {custoEstimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Com benefícios</p>
+          <p className="text-xl font-bold mt-1" style={{ color: '#8E44AD' }}>{comBeneficios}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {ativos.length > 0 ? `de ${ativos.length} funcionários` : 'nenhum ativo'}
           </p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Inclui pericul. + benefícios</p>
         </div>
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
           <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>Alertas</p>
@@ -233,55 +227,37 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
         </button>
       </div>
 
-      {/* Tabela com duplo cabeçalho */}
+      {/* Tabela */}
       <div className="rounded-b-xl rounded-tr-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', borderTop: 'none', backgroundColor: 'white' }}>
-        <table className="w-full text-sm" style={{ minWidth: 960 }}>
+        <table className="w-full text-sm" style={{ minWidth: 760 }}>
           <thead>
-            {/* Linha 1 — grupos */}
-            <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <th colSpan={3} />
-              <th colSpan={2} style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Remuneração</th>
-              <th colSpan={2} style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Benefícios</th>
-              <th style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Custo Est.</th>
-              <th colSpan={3} style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Datas Críticas</th>
-              <th style={{ ...GRP, borderLeft: '2px solid #E5E7EB' }}>Contrato</th>
-              <th />
-            </tr>
-            {/* Linha 2 — colunas */}
-            <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <th style={{ ...COL, textAlign: 'left', minWidth: 170, position: 'sticky', left: 0, backgroundColor: 'var(--color-bg-surface)', zIndex: 2 }}>Nome</th>
-              <th style={{ ...COL, textAlign: 'left', minWidth: 110 }}>Cargo</th>
-              <th style={{ ...COL, textAlign: 'left', minWidth: 100 }}>Local</th>
-              <th style={{ ...COL, textAlign: 'right', minWidth: 80, borderLeft: '2px solid #E5E7EB' }}>Salário</th>
-              <th style={{ ...COL, textAlign: 'right', minWidth: 70 }}>Pericul.</th>
-              <th style={{ ...COL, textAlign: 'right', minWidth: 70, borderLeft: '2px solid #E5E7EB' }}>VA</th>
-              <th style={{ ...COL, textAlign: 'right', minWidth: 70 }}>VT</th>
-              <th style={{ ...COL, textAlign: 'right', minWidth: 84, borderLeft: '2px solid #E5E7EB' }}>Custo Total</th>
-              <th style={{ ...COL, textAlign: 'right', minWidth: 78, borderLeft: '2px solid #E5E7EB' }}>Admissão</th>
-              <th style={{ ...COL, textAlign: 'right', minWidth: 78 }}>Vcto Férias</th>
-              <th style={{ ...COL, textAlign: 'right', minWidth: 78 }}>Exame</th>
-              <th style={{ ...COL, textAlign: 'center', minWidth: 90, borderLeft: '2px solid #E5E7EB' }}>Status</th>
-              <th style={{ minWidth: 90 }} />
+            <tr>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 180, position: 'sticky', left: 0, zIndex: 2 }}>Nome</th>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 120 }}>Cargo</th>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 110 }}>Local</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 100, borderLeft: '2px solid #E5E7EB' }}>Salário</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 85, borderLeft: '2px solid #E5E7EB' }}>Admissão</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 85 }}>Vcto Férias</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 85 }}>Exame</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 100, borderLeft: '2px solid #E5E7EB' }}>Contrato</th>
+              <th style={{ ...TH, minWidth: 90 }} />
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={13} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                   {tab === 'ativos' ? 'Nenhum funcionário ativo cadastrado.' : 'Nenhum funcionário inativo.'}
                 </td>
               </tr>
             )}
             {rows.map((emp, idx) => {
-              const alert = getRowAlert(emp)
-              const feriasAlert = getFeriasAlert(emp)
-              const exameAlert = getExameAlert(emp)
-              const expAlert = getExpAlert(emp)
-              const sal = emp.salario ?? 0
-              const pericul = emp.tem_periculosidade ? Math.round(sal * 0.3 * 100) / 100 : 0
-              const custo = sal + pericul + emp.vale_alimentacao_valor + emp.vale_transporte_valor
-              const contrato = emp.status_contrato ? CONTRATO_CFG[emp.status_contrato] : null
-              const statusCfg = STATUS_CFG[emp.status]
+              const alert        = getRowAlert(emp)
+              const feriasAlert  = getFeriasAlert(emp)
+              const exameAlert   = getExameAlert(emp)
+              const expAlert     = getExpAlert(emp)
+              const contrato     = emp.status_contrato ? CONTRATO_CFG[emp.status_contrato] : null
+              const statusCfg    = STATUS_CFG[emp.status]
               const rowBg = alert === 'danger' ? '#FEF2F2' : alert === 'warning' ? '#FFFBEB' : idx % 2 === 0 ? 'white' : '#FAFAFA'
 
               return (
@@ -301,19 +277,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
                   <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{emp.cargo ?? '—'}</td>
                   <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>{emp.local_trabalho ?? '—'}</td>
                   <td className="px-3 py-2.5 text-right text-xs font-medium" style={{ color: 'var(--color-text-primary)', borderLeft: '2px solid #F3F4F6' }}>
-                    {fmtCurrency(sal)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-xs" style={{ color: pericul > 0 ? '#8E44AD' : 'var(--color-text-muted)' }}>
-                    {pericul > 0 ? fmtCurrency(pericul) : '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-xs" style={{ color: 'var(--color-text-secondary)', borderLeft: '2px solid #F3F4F6' }}>
-                    {fmtCurrency(emp.vale_alimentacao_valor)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                    {fmtCurrency(emp.vale_transporte_valor)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-xs font-semibold" style={{ color: '#1E8449', borderLeft: '2px solid #F3F4F6' }}>
-                    {fmtCurrency(custo)}
+                    {fmtCurrency(emp.salario)}
                   </td>
                   <td className="px-3 py-2.5 text-right text-xs" style={{ borderLeft: '2px solid #F3F4F6' }}>
                     <DateCell iso={emp.data_admissao} alert={expAlert} />
@@ -351,18 +315,6 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
                 <td colSpan={2} />
                 <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: 'var(--color-text-primary)', borderLeft: '2px solid #E5E7EB' }}>
                   {fmtCurrency(totSalario)}
-                </td>
-                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: totPericul > 0 ? '#8E44AD' : 'var(--color-text-muted)' }}>
-                  {totPericul > 0 ? fmtCurrency(totPericul) : '—'}
-                </td>
-                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: 'var(--color-text-secondary)', borderLeft: '2px solid #E5E7EB' }}>
-                  {fmtCurrency(totVA)}
-                </td>
-                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: 'var(--color-text-secondary)' }}>
-                  {fmtCurrency(totVT)}
-                </td>
-                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: '#1E8449', borderLeft: '2px solid #E5E7EB' }}>
-                  {fmtCurrency(totCusto)}
                 </td>
                 <td colSpan={5} />
               </tr>

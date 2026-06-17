@@ -62,53 +62,51 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
   const router = useRouter()
   const isEdit = !!employee
 
-  // Identificação
-  const [nome, setNome] = useState('')
-  const [cpf, setCpf] = useState('')
-  const [rg, setRg] = useState('')
+  // 1 — Identificação
+  const [nome, setNome]             = useState('')
+  const [cpf, setCpf]               = useState('')
+  const [rg, setRg]                 = useState('')
   const [nascimento, setNascimento] = useState('')
-  const [telefone, setTelefone] = useState('')
-  const [email, setEmail] = useState('')
+  const [telefone, setTelefone]     = useState('')
+  const [email, setEmail]           = useState('')
 
-  // Profissional
-  const [cargo, setCargo] = useState('')
+  // 2 — Dados Profissionais
+  const [cargo, setCargo]               = useState('')
   const [localTrabalho, setLocalTrabalho] = useState('')
   const [tipoContrato, setTipoContrato] = useState('')
-  const [status, setStatus] = useState('admissao')
+  const [status, setStatus]             = useState('admissao')
   const [grauInstrucao, setGrauInstrucao] = useState('')
   const [departamento, setDepartamento] = useState('')
 
-  // Remuneração
-  const [salario, setSalario] = useState('')
-  const [temPericulosidade, setTemPericulosidade] = useState(false)
-  const [valeAlimentacao, setValeAlimentacao] = useState('')
-  const [valeTransporte, setValeTransporte] = useState('')
-  const [diasVt, setDiasVt] = useState('22')
+  // 3 — Remuneração
+  const [salario, setSalario]       = useState('')
   const [planoSaude, setPlanoSaude] = useState(false)
 
-  // Datas
+  // 4 — Datas Trabalhistas
   const [dataAdmissao, setDataAdmissao] = useState('')
-  const [fimExp1, setFimExp1] = useState('')
-  const [fimExp2, setFimExp2] = useState('')
-  const [vctoFerias, setVctoFerias] = useState('')
-  const [exame, setExame] = useState('')
+  const [fimExp1, setFimExp1]           = useState('')
+  const [fimExp2, setFimExp2]           = useState('')
+  const [vctoFerias, setVctoFerias]     = useState('')
+  const [exame, setExame]               = useState('')
   const [statusContrato, setStatusContrato] = useState('')
   const [dataDemissao, setDataDemissao] = useState('')
 
-  // Documentos
-  const [pisPasep, setPisPasep] = useState('')
-  const [matricula, setMatricula] = useState('')
-  const [dadosBancarios, setDadosBancarios] = useState('')
+  // 5 — Documentos
+  const [pisPasep, setPisPasep]                       = useState('')
+  const [matricula, setMatricula]                     = useState('')
+  const [serieCtps, setSerieCtps]                     = useState('')
+  const [certReservista, setCertReservista]           = useState('')
+  const [dependentes, setDependentes]                 = useState('0')
+  const [dadosBancarios, setDadosBancarios]           = useState('')
 
-  // Benefícios e PIN
+  // 6 — Benefícios e PIN
   const [selectedBenefitIds, setSelectedBenefitIds] = useState<string[]>([])
-  const [pin, setPin] = useState('')
+  const [pin, setPin]           = useState('')
   const [pinAtivo, setPinAtivo] = useState(false)
 
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
 
-  // Calcula datas de experiência automaticamente quando admissão muda
   function onAdmissaoChange(val: string) {
     setDataAdmissao(val)
     if (!val) { setFimExp1(''); setFimExp2(''); setVctoFerias(''); return }
@@ -139,10 +137,6 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
       setGrauInstrucao(employee.grau_instrucao ?? '')
       setDepartamento(employee.departamento ?? '')
       setSalario(employee.salario !== null ? String(employee.salario) : '')
-      setTemPericulosidade(employee.tem_periculosidade)
-      setValeAlimentacao(employee.vale_alimentacao_valor > 0 ? String(employee.vale_alimentacao_valor) : '')
-      setValeTransporte(employee.vale_transporte_valor > 0 ? String(employee.vale_transporte_valor) : '')
-      setDiasVt(String(employee.dias_trabalhados_vt ?? 22))
       setPlanoSaude(employee.plano_saude)
       setDataAdmissao(employee.data_admissao ?? '')
       setFimExp1(employee.fim_experiencia_1 ?? '')
@@ -153,6 +147,9 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
       setDataDemissao(employee.data_demissao ?? '')
       setPisPasep(employee.pis_pasep ?? '')
       setMatricula(employee.matricula ?? '')
+      setSerieCtps(employee.serie_ctps ?? '')
+      setCertReservista(employee.certificado_reservista ?? '')
+      setDependentes(String(employee.dependentes ?? 0))
       setDadosBancarios(employee.dados_bancarios ?? '')
       setPin(employee.pin ?? '')
       setPinAtivo(employee.pin_ativo ?? false)
@@ -161,11 +158,11 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
       setNome(''); setCpf(''); setRg(''); setNascimento(''); setTelefone(''); setEmail('')
       setCargo(''); setLocalTrabalho(''); setTipoContrato(''); setStatus('admissao')
       setGrauInstrucao(''); setDepartamento('')
-      setSalario(''); setTemPericulosidade(false); setValeAlimentacao(''); setValeTransporte('')
-      setDiasVt('22'); setPlanoSaude(false)
+      setSalario(''); setPlanoSaude(false)
       setDataAdmissao(''); setFimExp1(''); setFimExp2(''); setVctoFerias(''); setExame('')
       setStatusContrato(''); setDataDemissao('')
-      setPisPasep(''); setMatricula(''); setDadosBancarios('')
+      setPisPasep(''); setMatricula(''); setSerieCtps(''); setCertReservista('')
+      setDependentes('0'); setDadosBancarios('')
       setPin(''); setPinAtivo(false); setSelectedBenefitIds([])
     }
   }, [open, employee])
@@ -189,10 +186,6 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
     fd.set('status', status)
     fd.set('grau_instrucao', grauInstrucao)
     fd.set('salario', salario)
-    fd.set('tem_periculosidade', String(temPericulosidade))
-    fd.set('vale_alimentacao_valor', valeAlimentacao)
-    fd.set('vale_transporte_valor', valeTransporte)
-    fd.set('dias_trabalhados_vt', diasVt)
     fd.set('plano_saude', String(planoSaude))
     fd.set('data_admissao', dataAdmissao)
     fd.set('fim_experiencia_1', fimExp1)
@@ -203,6 +196,9 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
     fd.set('data_demissao', dataDemissao)
     fd.set('pis_pasep', pisPasep)
     fd.set('matricula', matricula)
+    fd.set('serie_ctps', serieCtps)
+    fd.set('certificado_reservista', certReservista)
+    fd.set('dependentes', dependentes)
     fd.set('dados_bancarios', dadosBancarios)
     fd.set('pin', pin)
     fd.set('pin_ativo', String(pinAtivo))
@@ -220,10 +216,6 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
 
   const lbl: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }
   const sec: React.CSSProperties = { color: 'var(--color-primary-darker)', fontSize: '0.75rem', fontWeight: 700, marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--color-bg-surface)', letterSpacing: '0.05em' }
-
-  const periculosidadeValor = salario && temPericulosidade
-    ? (parseFloat(salario.replace(',', '.')) * 0.3).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    : null
 
   const concederAte = vctoFerias ? fmtDate(
     (() => { const d = new Date(vctoFerias); d.setDate(d.getDate() + 330); return d.toISOString().split('T')[0] })()
@@ -329,44 +321,18 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
         {/* 3 — Remuneração */}
         <div>
           <p style={sec}>3. REMUNERAÇÃO</p>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={lbl}>Salário Bruto (R$)</label>
-                <Input value={salario} onChange={e => setSalario(e.target.value)} placeholder="0,00" inputMode="decimal" />
-              </div>
-              <div className="flex flex-col justify-end">
-                <Toggle value={temPericulosidade} onChange={setTemPericulosidade} label="Adicional de periculosidade (30%)" />
-                {periculosidadeValor && (
-                  <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>= {periculosidadeValor}</p>
-                )}
-              </div>
+          <div className="grid grid-cols-2 gap-3 items-end">
+            <div>
+              <label style={lbl}>Salário Bruto (R$)</label>
+              <Input value={salario} onChange={e => setSalario(e.target.value)} placeholder="0,00" inputMode="decimal" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={lbl}>Vale-Alimentação (R$/mês)</label>
-                <Input value={valeAlimentacao} onChange={e => setValeAlimentacao(e.target.value)} placeholder="0,00" inputMode="decimal" />
-              </div>
-              <div>
-                <label style={lbl}>Vale-Transporte (R$/mês)</label>
-                <Input value={valeTransporte} onChange={e => setValeTransporte(e.target.value)} placeholder="0,00" inputMode="decimal" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={lbl}>Dias trabalhados (base 6% VT)</label>
-                <select value={diasVt} onChange={e => setDiasVt(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
-                  <option value="15">15 dias</option>
-                  <option value="22">22 dias</option>
-                </select>
-              </div>
-              <div className="flex flex-col justify-end">
-                <Toggle value={planoSaude} onChange={setPlanoSaude} label="Plano de saúde" />
-              </div>
+            <div className="pb-1">
+              <Toggle value={planoSaude} onChange={setPlanoSaude} label="Plano de saúde" />
             </div>
           </div>
+          <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
+            Vale-alimentação e vale-transporte são configurados em Benefícios e vinculados no item 6.
+          </p>
         </div>
 
         {/* 4 — Datas Trabalhistas */}
@@ -441,6 +407,26 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
               <div>
                 <label style={lbl}>Matrícula</label>
                 <Input value={matricula} onChange={e => setMatricula(e.target.value)} placeholder="Nº funcional" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label style={lbl}>Série da CTPS</label>
+                <Input value={serieCtps} onChange={e => setSerieCtps(e.target.value)} placeholder="Ex: 001" />
+              </div>
+              <div>
+                <label style={lbl}>Cert. de Reservista</label>
+                <Input value={certReservista} onChange={e => setCertReservista(e.target.value)} placeholder="Nº / categoria" />
+              </div>
+              <div>
+                <label style={lbl}>Dependentes</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={dependentes}
+                  onChange={e => setDependentes(e.target.value)}
+                  placeholder="0"
+                />
               </div>
             </div>
             <div>
