@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalFuncionario } from './modal-funcionario'
+import { ModalViewFuncionario } from './modal-view-funcionario'
 import { deleteEmployeeAction } from '../actions'
 import type { Employee } from '../queries'
 import type { CompanyBenefit } from '../../beneficios/queries'
@@ -17,15 +18,17 @@ function parseDate(iso: string | null): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-function fmtDate(iso: string | null) {
+function fmtDate(iso: string | null): string {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
 }
 
-function fmtCurrency(v: number | null) {
-  if (!v || v === 0) return '—'
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+function fmtCpf(cpf: string | null): string {
+  if (!cpf) return '—'
+  const d = cpf.replace(/\D/g, '')
+  if (d.length !== 11) return cpf
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
 }
 
 function diffDays(d: Date): number {
@@ -72,6 +75,13 @@ function getExpAlert(emp: Employee): AlertLevel {
   return null
 }
 
+const TIPO_CFG: Record<string, { label: string; bg: string; color: string }> = {
+  clt:            { label: 'CLT',            bg: '#EBF5FB', color: '#2471A3' },
+  pj:             { label: 'PJ',             bg: '#F4F6F7', color: '#566573' },
+  estagio:        { label: 'Estágio',        bg: '#FEF9E7', color: '#9A7D0A' },
+  menor_aprendiz: { label: 'Menor Aprendiz', bg: '#E9F7EF', color: '#1E8449' },
+}
+
 const CONTRATO_CFG: Record<string, { label: string; bg: string; color: string }> = {
   assinado:     { label: 'assinado',     bg: '#E9F7EF', color: '#1E8449' },
   nao_tem:      { label: 'não tem',      bg: '#FDEDEC', color: '#C0392B' },
@@ -112,24 +122,32 @@ interface Props {
 
 export function FuncionariosClient({ employees, companyId, companyBenefits }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'ativos' | 'inativos'>('ativos')
+  const [tab, setTab]           = useState<'ativos' | 'inativos'>('ativos')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editing, setEditing] = useState<Employee | null>(null)
+  const [editing, setEditing]   = useState<Employee | null>(null)
+  const [viewing, setViewing]   = useState<Employee | null>(null)
+  const [viewOpen, setViewOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const ativos   = employees.filter(e => ['admissao', 'experiencia', 'ativo'].includes(e.status))
   const inativos = employees.filter(e => ['inativo', 'demitido'].includes(e.status))
   const rows     = tab === 'ativos' ? ativos : inativos
 
-  const folhaBruta      = ativos.reduce((s, e) => s + (e.salario ?? 0), 0)
-  const comBeneficios   = ativos.filter(e => e.employee_benefits.length > 0).length
-  const alertasFerias   = ativos.filter(e => getFeriasAlert(e) !== null).length
-  const alertasExame    = ativos.filter(e => getExameAlert(e) !== null).length
+  const folhaBruta    = ativos.reduce((s, e) => s + (e.salario ?? 0), 0)
+  const comBeneficios = ativos.filter(e => e.employee_benefits.length > 0).length
+  const alertasFerias = ativos.filter(e => getFeriasAlert(e) !== null).length
+  const alertasExame  = ativos.filter(e => getExameAlert(e) !== null).length
 
-  const totSalario = rows.reduce((s, e) => s + (e.salario ?? 0), 0)
-
+  function openView(e: Employee) { setViewing(e); setViewOpen(true) }
   function openEdit(e: Employee) { setEditing(e); setModalOpen(true) }
   function openAdd()              { setEditing(null); setModalOpen(true) }
+
+  function handleEditFromView() {
+    if (!viewing) return
+    setViewOpen(false)
+    setEditing(viewing)
+    setModalOpen(true)
+  }
 
   async function handleDelete(e: Employee) {
     if (!confirm(`Excluir ${e.nome}? Esta ação não pode ser desfeita.`)) return
@@ -229,76 +247,136 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
 
       {/* Tabela */}
       <div className="rounded-b-xl rounded-tr-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', borderTop: 'none', backgroundColor: 'white' }}>
-        <table className="w-full text-sm" style={{ minWidth: 760 }}>
+        <table className="w-full text-sm" style={{ minWidth: 1100 }}>
           <thead>
             <tr>
               <th style={{ ...TH, textAlign: 'left', minWidth: 180, position: 'sticky', left: 0, zIndex: 2 }}>Nome</th>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 110 }}>CPF</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 90 }}>Nasc.</th>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 120 }}>Telefone</th>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 160 }}>E-mail</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 120 }}>Cargo</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 110 }}>Local</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 100, borderLeft: '2px solid #E5E7EB' }}>Salário</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 85, borderLeft: '2px solid #E5E7EB' }}>Admissão</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 85 }}>Vcto Férias</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 85 }}>Exame</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 100, borderLeft: '2px solid #E5E7EB' }}>Contrato</th>
-              <th style={{ ...TH, minWidth: 90 }} />
+              <th style={{ ...TH, textAlign: 'left', minWidth: 110 }}>PIS/PASEP</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 80 }}>Matrícula</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 85, borderLeft: '2px solid #E5E7EB' }}>Admissão</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 85 }}>Vcto Férias</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 85 }}>Exame</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 110, borderLeft: '2px solid #E5E7EB' }}>Contrato</th>
+              <th style={{ ...TH, minWidth: 70 }} />
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={14} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                   {tab === 'ativos' ? 'Nenhum funcionário ativo cadastrado.' : 'Nenhum funcionário inativo.'}
                 </td>
               </tr>
             )}
             {rows.map((emp, idx) => {
-              const alert        = getRowAlert(emp)
-              const feriasAlert  = getFeriasAlert(emp)
-              const exameAlert   = getExameAlert(emp)
-              const expAlert     = getExpAlert(emp)
-              const contrato     = emp.status_contrato ? CONTRATO_CFG[emp.status_contrato] : null
-              const statusCfg    = STATUS_CFG[emp.status]
+              const alert       = getRowAlert(emp)
+              const feriasAlert = getFeriasAlert(emp)
+              const exameAlert  = getExameAlert(emp)
+              const expAlert    = getExpAlert(emp)
+              const tipoCfg     = emp.tipo_contrato ? TIPO_CFG[emp.tipo_contrato] : null
+              const contratoCfg = emp.status_contrato ? CONTRATO_CFG[emp.status_contrato] : null
+              const statusCfg   = STATUS_CFG[emp.status]
               const rowBg = alert === 'danger' ? '#FEF2F2' : alert === 'warning' ? '#FFFBEB' : idx % 2 === 0 ? 'white' : '#FAFAFA'
 
               return (
                 <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
+                  {/* Nome + status */}
                   <td className="px-3 py-2.5" style={{ position: 'sticky', left: 0, backgroundColor: rowBg, zIndex: 1 }}>
                     <div className="flex items-start gap-1">
                       {alert && <AlertIcon level={alert} />}
                       <div>
                         <p className="font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</p>
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs mt-0.5"
-                          style={{ backgroundColor: statusCfg.bg, color: statusCfg.color, fontSize: '0.65rem' }}>
+                          style={{ backgroundColor: statusCfg.bg, color: statusCfg.color, fontSize: '0.62rem' }}>
                           {statusCfg.label}
                         </span>
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{emp.cargo ?? '—'}</td>
-                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>{emp.local_trabalho ?? '—'}</td>
-                  <td className="px-3 py-2.5 text-right text-xs font-medium" style={{ color: 'var(--color-text-primary)', borderLeft: '2px solid #F3F4F6' }}>
-                    {fmtCurrency(emp.salario)}
+
+                  {/* CPF */}
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtCpf(emp.cpf)}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-xs" style={{ borderLeft: '2px solid #F3F4F6' }}>
+
+                  {/* Nascimento */}
+                  <td className="px-3 py-2.5 text-xs text-center" style={{ color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtDate(emp.nascimento)}
+                  </td>
+
+                  {/* Telefone */}
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {emp.telefone ?? '—'}
+                  </td>
+
+                  {/* E-mail */}
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {emp.email ?? '—'}
+                  </td>
+
+                  {/* Cargo */}
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {emp.cargo ?? '—'}
+                  </td>
+
+                  {/* Local */}
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    {emp.local_trabalho ?? '—'}
+                  </td>
+
+                  {/* PIS/PASEP */}
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                    {emp.pis_pasep ?? '—'}
+                  </td>
+
+                  {/* Matrícula */}
+                  <td className="px-3 py-2.5 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
+                    {emp.matricula ?? '—'}
+                  </td>
+
+                  {/* Admissão */}
+                  <td className="px-3 py-2.5 text-xs text-center" style={{ borderLeft: '2px solid #F3F4F6' }}>
                     <DateCell iso={emp.data_admissao} alert={expAlert} />
                   </td>
-                  <td className="px-3 py-2.5 text-right text-xs">
+
+                  {/* Vcto Férias */}
+                  <td className="px-3 py-2.5 text-xs text-center">
                     <DateCell iso={emp.vcto_ferias} alert={feriasAlert} />
                   </td>
-                  <td className="px-3 py-2.5 text-right text-xs">
+
+                  {/* Exame */}
+                  <td className="px-3 py-2.5 text-xs text-center">
                     <DateCell iso={emp.exame_periodico} alert={exameAlert} />
                   </td>
-                  <td className="px-3 py-2.5 text-center" style={{ borderLeft: '2px solid #F3F4F6' }}>
-                    {contrato ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: contrato.bg, color: contrato.color, fontSize: '0.65rem' }}>
-                        {contrato.label}
-                      </span>
-                    ) : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>—</span>}
+
+                  {/* Tipo + Status Contrato */}
+                  <td className="px-3 py-2.5" style={{ borderLeft: '2px solid #F3F4F6', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                      {tipoCfg ? (
+                        <span style={{ fontSize: '0.62rem', padding: '0.1rem 0.5rem', borderRadius: '999px', backgroundColor: tipoCfg.bg, color: tipoCfg.color, fontWeight: 600 }}>
+                          {tipoCfg.label}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>—</span>
+                      )}
+                      {contratoCfg && (
+                        <span style={{ fontSize: '0.58rem', padding: '0.05rem 0.4rem', borderRadius: '999px', backgroundColor: contratoCfg.bg, color: contratoCfg.color, fontWeight: 500 }}>
+                          {contratoCfg.label}
+                        </span>
+                      )}
+                    </div>
                   </td>
+
+                  {/* Ações */}
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1 justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(emp)}>Editar</Button>
+                      <Button variant="ghost" size="sm" onClick={() => openView(emp)}>🔍</Button>
                       <Button variant="danger" size="sm" loading={deletingId === emp.id} onClick={() => handleDelete(emp)}>✕</Button>
                     </div>
                   </td>
@@ -309,14 +387,9 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
           {rows.length > 0 && (
             <tfoot>
               <tr style={{ backgroundColor: 'var(--color-bg-surface)', borderTop: '2px solid #E5E7EB' }}>
-                <td className="px-3 py-2 text-xs font-bold" style={{ color: 'var(--color-text-secondary)', position: 'sticky', left: 0, backgroundColor: 'var(--color-bg-surface)', zIndex: 1 }}>
-                  TOTAL — {rows.length} {tab === 'ativos' ? 'ativo' : 'inativo'}{rows.length !== 1 ? 's' : ''}
+                <td className="px-3 py-2 text-xs font-bold" colSpan={14} style={{ color: 'var(--color-text-secondary)', position: 'sticky', left: 0, backgroundColor: 'var(--color-bg-surface)' }}>
+                  {rows.length} {tab === 'ativos' ? 'funcionário' : 'inativo'}{rows.length !== 1 ? 's' : ''}
                 </td>
-                <td colSpan={2} />
-                <td className="px-3 py-2 text-right text-xs font-bold" style={{ color: 'var(--color-text-primary)', borderLeft: '2px solid #E5E7EB' }}>
-                  {fmtCurrency(totSalario)}
-                </td>
-                <td colSpan={5} />
               </tr>
             </tfoot>
           )}
@@ -329,6 +402,14 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
         <span className="text-xs" style={{ color: '#9A7D0A' }}>△ Atenção — prazo ≤ 30 dias</span>
         <span className="text-xs" style={{ color: '#9A7D0A' }}>△ Fim de experiência em ≤ 7 dias</span>
       </div>
+
+      <ModalViewFuncionario
+        open={viewOpen}
+        employee={viewing}
+        onClose={() => setViewOpen(false)}
+        onEdit={handleEditFromView}
+        companyBenefits={companyBenefits}
+      />
 
       <ModalFuncionario
         open={modalOpen}
