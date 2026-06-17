@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalPrestador } from './modal-prestador'
+import { ModalViewPrestador } from './modal-view-prestador'
 import { deleteProviderAction } from '../actions'
 import type { ServiceProvider } from '../queries'
 
@@ -27,10 +28,18 @@ function formatValor(valor: number | null) {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function formatDate(iso: string | null) {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
 export function PrestadoresClient({ providers, companyId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<ServiceProvider | null>(null)
+  const [viewing, setViewing] = useState<ServiceProvider | null>(null)
+  const [viewOpen, setViewOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [search, setSearch] = useState('')
@@ -45,6 +54,14 @@ export function PrestadoresClient({ providers, companyId }: Props) {
 
   function openAdd() { setEditingProvider(null); setModalOpen(true) }
   function openEdit(p: ServiceProvider) { setEditingProvider(p); setModalOpen(true) }
+  function openView(p: ServiceProvider) { setViewing(p); setViewOpen(true) }
+
+  function handleEditFromView() {
+    if (!viewing) return
+    setViewOpen(false)
+    setEditingProvider(viewing)
+    setModalOpen(true)
+  }
 
   async function handleDelete(p: ServiceProvider) {
     if (!confirm(`Excluir ${p.nome}? Esta ação não pode ser desfeita.`)) return
@@ -88,26 +105,29 @@ export function PrestadoresClient({ providers, companyId }: Props) {
       )}
 
       <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-        <table className="w-full min-w-[650px] text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Tipo</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>CPF / CNPJ</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>CNPJ</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Serviço</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Início</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Valor/h</th>
+              <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Docs</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
                   {search ? 'Nenhum resultado para a busca.' : 'Nenhum prestador cadastrado.'}
                 </td>
               </tr>
             )}
-            {filtered.map((p) => (
+            {filtered.map((p) => {
+              const docCount = (p.documentos ?? []).filter(Boolean).length
+              return (
               <tr key={p.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
                 <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
                   <div>{p.nome}</div>
@@ -115,24 +135,18 @@ export function PrestadoresClient({ providers, companyId }: Props) {
                     <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{p.email}</div>
                   )}
                 </td>
-                <td className="px-4 py-3">
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                    style={{
-                      backgroundColor: p.tipo === 'PF' ? '#EBF5FB' : '#EAF4F4',
-                      color: p.tipo === 'PF' ? '#2471A3' : '#17A589',
-                    }}
-                  >
-                    {p.tipo}
-                  </span>
-                </td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
                   {formatDoc(p.tipo, p.cpf_cnpj)}
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{p.servico ?? '—'}</td>
+                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(p.data_inicio)}</td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{formatValor(p.valor)}</td>
+                <td className="px-4 py-3 text-center" style={{ color: 'var(--color-text-muted)' }}>
+                  {docCount > 0 ? <span title={`${docCount} documento(s)`}>📎 {docCount}</span> : '—'}
+                </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 justify-end">
+                  <div className="flex items-center gap-1 justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => openView(p)}>🔍</Button>
                     <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>Editar</Button>
                     <Button
                       variant="danger"
@@ -145,10 +159,18 @@ export function PrestadoresClient({ providers, companyId }: Props) {
                   </div>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
+
+      <ModalViewPrestador
+        open={viewOpen}
+        onClose={() => setViewOpen(false)}
+        onEdit={handleEditFromView}
+        provider={viewing}
+      />
 
       <ModalPrestador
         open={modalOpen}
