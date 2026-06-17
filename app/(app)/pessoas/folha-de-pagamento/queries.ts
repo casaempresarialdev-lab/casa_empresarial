@@ -52,9 +52,16 @@ export type BenefitForPayroll = {
 export type EmployeeForPayroll = {
   id: string
   nome: string
+  cpf: string | null
   cargo: string | null
   salario: number | null
   tipo_contrato: string | null
+  status_contrato: string | null
+  dependentes: number
+  data_admissao: string | null
+  vcto_ferias: string | null
+  conceder_ferias_ate: string | null
+  exame_periodico: string | null
   tem_periculosidade: boolean
   vale_transporte: boolean
   vale_refeicao: boolean
@@ -68,7 +75,8 @@ export async function getActiveEmployeesForPayroll(companyId: string): Promise<E
   const { data, error } = await admin
     .from('employees')
     .select(`
-      id, nome, cargo, salario, tipo_contrato,
+      id, nome, cpf, cargo, salario, tipo_contrato, status_contrato, dependentes,
+      data_admissao, vcto_ferias, conceder_ferias_ate, exame_periodico,
       tem_periculosidade, vale_transporte, vale_refeicao,
       vale_transporte_valor, dias_trabalhados_vt,
       employee_benefits(

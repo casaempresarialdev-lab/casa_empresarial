@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getPayrollEntries, getActiveEmployeesForPayroll } from './queries'
+import { getActiveEmployeesForPayroll } from './queries'
 import { getEncargosAliquotas } from '../encargos/queries'
 import { FolhaClient } from './components/folha-client'
 
@@ -26,8 +26,7 @@ export default async function FolhaPagamentoPage({
   const ano = params.ano ?? String(now.getFullYear())
   const mesAno = `${ano}-${mes}`
 
-  const [entries, employees, aliquotas] = await Promise.all([
-    getPayrollEntries(companyId, mesAno),
+  const [employees, aliquotas] = await Promise.all([
     getActiveEmployeesForPayroll(companyId),
     getEncargosAliquotas(companyId),
   ])
@@ -35,10 +34,8 @@ export default async function FolhaPagamentoPage({
   return (
     <div className="max-w-6xl mx-auto">
       <FolhaClient
-        entries={entries}
         employees={employees}
         aliquotas={aliquotas}
-        companyId={companyId}
         mesAno={mesAno}
       />
     </div>
