@@ -23,11 +23,6 @@ function formatDoc(tipo: string, doc: string | null) {
   return doc
 }
 
-function formatValor(valor: number | null) {
-  if (valor === null) return '—'
-  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-
 function formatDate(iso: string | null) {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
@@ -105,14 +100,13 @@ export function PrestadoresClient({ providers, companyId }: Props) {
       )}
 
       <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[700px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>CNPJ</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Serviço</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Início</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Valor/h</th>
               <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Docs</th>
               <th className="px-4 py-3" />
             </tr>
@@ -120,7 +114,7 @@ export function PrestadoresClient({ providers, companyId }: Props) {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
                   {search ? 'Nenhum resultado para a busca.' : 'Nenhum prestador cadastrado.'}
                 </td>
               </tr>
@@ -130,17 +124,13 @@ export function PrestadoresClient({ providers, companyId }: Props) {
               return (
               <tr key={p.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
                 <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                  <div>{p.nome}</div>
-                  {p.email && (
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{p.email}</div>
-                  )}
+                  {p.nome}
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
                   {formatDoc(p.tipo, p.cpf_cnpj)}
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{p.servico ?? '—'}</td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(p.data_inicio)}</td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{formatValor(p.valor)}</td>
                 <td className="px-4 py-3 text-center" style={{ color: 'var(--color-text-muted)' }}>
                   {docCount > 0 ? <span title={`${docCount} documento(s)`}>📎 {docCount}</span> : '—'}
                 </td>

@@ -26,6 +26,10 @@ interface Props {
 
 const EMPTY3 = <T,>(v: T): [T, T, T] => [v, v, v]
 
+// Propósito fixo de cada slot de upload.
+const SLOT_TITLES = ['Upload 1 — Identidade', 'Upload 2 — CNPJ', 'Upload 3 — Contrato']
+const SLOT_LABELS = ['Identidade', 'CNPJ', 'Contrato']
+
 export function ModalPrestador({ open, onClose, companyId, provider }: Props) {
   const router = useRouter()
   const isEdit = !!provider
@@ -41,7 +45,6 @@ export function ModalPrestador({ open, onClose, companyId, provider }: Props) {
   // 3 slots de documentos
   const [existingDocs, setExistingDocs] = useState<(ProviderDoc | null)[]>(EMPTY3(null))
   const [files, setFiles] = useState<(File | null)[]>(EMPTY3(null))
-  const [labels, setLabels] = useState<string[]>(EMPTY3(''))
   const [removeFlags, setRemoveFlags] = useState<boolean[]>(EMPTY3(false))
   const fileRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)]
 
@@ -63,14 +66,9 @@ export function ModalPrestador({ open, onClose, companyId, provider }: Props) {
       setValor(provider.valor !== null ? String(provider.valor) : '')
       setDataInicio(provider.data_inicio ?? '')
       setExistingDocs(provider.documentos ?? EMPTY3(null))
-      setLabels([
-        provider.documentos?.[0]?.label ?? '',
-        provider.documentos?.[1]?.label ?? '',
-        provider.documentos?.[2]?.label ?? '',
-      ])
     } else {
       setNome(''); setCnpj(''); setEmail(''); setTelefone(''); setServico(''); setValor(''); setDataInicio('')
-      setExistingDocs(EMPTY3(null)); setLabels(EMPTY3(''))
+      setExistingDocs(EMPTY3(null))
     }
   }, [open, provider]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -107,7 +105,7 @@ export function ModalPrestador({ open, onClose, companyId, provider }: Props) {
     for (let i = 0; i < 3; i++) {
       if (files[i]) fd.set(`file_${i}`, files[i]!)
       if (removeFlags[i]) fd.set(`remove_${i}`, 'true')
-      if (labels[i].trim()) fd.set(`label_${i}`, labels[i].trim())
+      fd.set(`label_${i}`, SLOT_LABELS[i])
     }
 
     const result = isEdit
@@ -176,9 +174,9 @@ export function ModalPrestador({ open, onClose, companyId, provider }: Props) {
               return (
                 <div key={i} className="p-3 rounded-lg border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: '#FAFAFA' }}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-medium shrink-0" style={{ color: 'var(--color-text-muted)' }}>Arquivo {i + 1}</span>
+                    <span className="text-xs font-semibold shrink-0" style={{ color: 'var(--color-text-secondary)' }}>{SLOT_TITLES[i]}</span>
                     {showExisting && (
-                      <span className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }} title={existing!.nome}>
+                      <span className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }} title={existing!.nome}>
                         📎 {existing!.nome}
                       </span>
                     )}
@@ -204,13 +202,6 @@ export function ModalPrestador({ open, onClose, companyId, provider }: Props) {
                       </button>
                     )}
                   </div>
-
-                  <Input
-                    value={labels[i]}
-                    onChange={e => setAt(setLabels, i, e.target.value)}
-                    placeholder="Descrição do documento (opcional)"
-                    className="mt-2 text-xs"
-                  />
                 </div>
               )
             })}
