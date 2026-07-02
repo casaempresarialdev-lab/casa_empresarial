@@ -7,6 +7,19 @@ import { Button } from '@/components/ui/button'
 import { createEmployeeAction } from '../../../funcionarios/actions'
 import type { CompanyBenefit } from '../../../beneficios/queries'
 
+const DOC_SLOTS = [
+  { key: 'foto',                   label: 'Foto',                        accept: 'image/*' },
+  { key: 'rg_cnh_frente',          label: 'RG Frente / CNH',             accept: 'image/*,application/pdf' },
+  { key: 'rg_verso',               label: 'RG Verso (opcional)',          accept: 'image/*,application/pdf' },
+  { key: 'exame_admissional',       label: 'Exame Admissional',           accept: 'image/*,application/pdf' },
+  { key: 'cpf',                    label: 'CPF',                         accept: 'image/*,application/pdf' },
+  { key: 'comprovante_residencia', label: 'Comprovante de Residência',    accept: 'image/*,application/pdf' },
+  { key: 'titulo_eleitor',         label: 'Título de Eleitor',           accept: 'image/*,application/pdf' },
+  { key: 'ctps',                   label: 'Carteira de Trabalho',        accept: 'image/*,application/pdf' },
+  { key: 'pis',                    label: 'PIS',                         accept: 'image/*,application/pdf' },
+  { key: 'certidao',               label: 'Certidão Nasc./Casamento',    accept: 'image/*,application/pdf' },
+] as const
+
 function formatCpf(value: string) {
   const d = value.replace(/\D/g, '').slice(0, 11)
   if (d.length <= 3) return d
@@ -98,6 +111,9 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
   const [pin, setPin]           = useState('')
   const [pinAtivo, setPinAtivo] = useState(false)
 
+  // 8 — Documentos
+  const [docFiles, setDocFiles] = useState<Record<string, File | null>>({})
+
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
@@ -150,6 +166,10 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
     fd.set('pin', pin)
     fd.set('pin_ativo', String(pinAtivo))
     fd.set('benefit_ids', JSON.stringify(selectedBenefitIds))
+    for (const slot of DOC_SLOTS) {
+      const file = docFiles[slot.key]
+      if (file) fd.set(`doc_${slot.key}`, file)
+    }
 
     const result = await createEmployeeAction(companyId, fd)
     setLoading(false)
@@ -435,6 +455,48 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
                 })}
               </div>
             )}
+          </div>
+
+          {/* 8 — Documentos */}
+          <div style={card}>
+            <p style={sec}>8. DOCUMENTOS</p>
+            <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
+              Todos os campos são opcionais. Aceita imagens (JPG, PNG) e PDF até 20 MB.
+            </p>
+            <div className="grid grid-cols-5 gap-3">
+              {DOC_SLOTS.map(slot => {
+                const file = docFiles[slot.key] ?? null
+                const isImage = file?.type.startsWith('image/')
+                const preview = isImage ? URL.createObjectURL(file!) : null
+                return (
+                  <div key={slot.key} className="border rounded-xl p-3 text-center flex flex-col items-center gap-2"
+                    style={{ borderColor: file ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)', backgroundColor: file ? 'var(--color-primary)' : 'white', minHeight: 120 }}>
+                    <p className="text-xs font-medium leading-tight" style={{ color: 'var(--color-text-secondary)' }}>{slot.label}</p>
+                    {file ? (
+                      <>
+                        {preview
+                          ? <img src={preview} alt={slot.label} className="w-14 h-14 object-cover rounded-lg border" />
+                          : <div className="w-14 h-14 rounded-lg flex items-center justify-center text-2xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>📄</div>
+                        }
+                        <p className="text-xs truncate w-full" style={{ color: 'var(--color-text-muted)' }} title={file.name}>{file.name}</p>
+                        <button type="button" onClick={() => setDocFiles(p => ({ ...p, [slot.key]: null }))}
+                          className="text-xs px-2 py-0.5 rounded border hover:bg-red-50"
+                          style={{ color: '#C0392B', borderColor: '#C0392B' }}>
+                          Remover
+                        </button>
+                      </>
+                    ) : (
+                      <label className="cursor-pointer flex flex-col items-center gap-1 flex-1 justify-center">
+                        <span className="text-2xl">📎</span>
+                        <span className="text-xs" style={{ color: 'var(--color-primary-darker)' }}>Selecionar</span>
+                        <input type="file" accept={slot.accept} className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) setDocFiles(p => ({ ...p, [slot.key]: f })); e.target.value = '' }} />
+                      </label>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           {/* 7 — Acesso ao Portal de Ponto */}

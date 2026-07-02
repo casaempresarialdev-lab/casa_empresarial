@@ -34,6 +34,16 @@ export type Employee = {
   grau_instrucao: string | null
   pin: string | null
   pin_ativo: boolean
+  foto_path: string | null
+  doc_rg_cnh_frente_path: string | null
+  doc_rg_verso_path: string | null
+  doc_exame_admissional_path: string | null
+  doc_cpf_path: string | null
+  doc_comprovante_residencia_path: string | null
+  doc_titulo_eleitor_path: string | null
+  doc_ctps_path: string | null
+  doc_pis_path: string | null
+  doc_certidao_path: string | null
   created_at: string
   updated_at: string
   employee_benefits: { benefit_id: string }[]

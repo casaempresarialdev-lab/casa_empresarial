@@ -5,9 +5,22 @@ import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { createEmployeeAction, updateEmployeeAction } from '../actions'
+import { createEmployeeAction, updateEmployeeAction, getEmployeeDocUrlAction } from '../actions'
 import type { Employee } from '../queries'
 import type { CompanyBenefit } from '../../beneficios/queries'
+
+const DOC_SLOTS = [
+  { key: 'foto',                   label: 'Foto',                        field: 'foto_path',                        accept: 'image/*' },
+  { key: 'rg_cnh_frente',          label: 'RG Frente / CNH',             field: 'doc_rg_cnh_frente_path',           accept: 'image/*,application/pdf' },
+  { key: 'rg_verso',               label: 'RG Verso (opcional)',          field: 'doc_rg_verso_path',                accept: 'image/*,application/pdf' },
+  { key: 'exame_admissional',       label: 'Exame Admissional',           field: 'doc_exame_admissional_path',       accept: 'image/*,application/pdf' },
+  { key: 'cpf',                    label: 'CPF',                         field: 'doc_cpf_path',                     accept: 'image/*,application/pdf' },
+  { key: 'comprovante_residencia', label: 'Comprovante de Residência',    field: 'doc_comprovante_residencia_path',  accept: 'image/*,application/pdf' },
+  { key: 'titulo_eleitor',         label: 'Título de Eleitor',           field: 'doc_titulo_eleitor_path',          accept: 'image/*,application/pdf' },
+  { key: 'ctps',                   label: 'Carteira de Trabalho',        field: 'doc_ctps_path',                    accept: 'image/*,application/pdf' },
+  { key: 'pis',                    label: 'PIS',                         field: 'doc_pis_path',                     accept: 'image/*,application/pdf' },
+  { key: 'certidao',               label: 'Certidão Nasc./Casamento',    field: 'doc_certidao_path',                accept: 'image/*,application/pdf' },
+] as const
 
 function formatCpf(value: string) {
   const d = value.replace(/\D/g, '').slice(0, 11)
@@ -104,6 +117,11 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
   const [pin, setPin]           = useState('')
   const [pinAtivo, setPinAtivo] = useState(false)
 
+  // 8 — Documentos
+  const [docFiles, setDocFiles]       = useState<Record<string, File | null>>({})
+  const [docRemovals, setDocRemovals] = useState<Record<string, boolean>>({})
+  const [docUrlLoading, setDocUrlLoading] = useState<Record<string, boolean>>({})
+
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
@@ -165,6 +183,9 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
       setDependentes('0'); setDadosBancarios('')
       setPin(''); setPinAtivo(false); setSelectedBenefitIds([])
     }
+    setDocFiles({})
+    setDocRemovals({})
+    setDocUrlLoading({})
   }, [open, employee])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -203,6 +224,11 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
     fd.set('pin', pin)
     fd.set('pin_ativo', String(pinAtivo))
     fd.set('benefit_ids', JSON.stringify(selectedBenefitIds))
+    for (const slot of DOC_SLOTS) {
+      const file = docFiles[slot.key]
+      if (file) fd.set(`doc_${slot.key}`, file)
+      if (docRemovals[slot.key]) fd.set(`remove_${slot.key}`, 'true')
+    }
 
     const result = isEdit
       ? await updateEmployeeAction(employee!.id, fd)
@@ -212,6 +238,14 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
     if ('error' in result) { setError(result.error ?? 'Erro ao salvar.'); return }
     router.refresh()
     onClose()
+  }
+
+  async function handleViewDoc(storagePath: string) {
+    setDocUrlLoading(p => ({ ...p, [storagePath]: true }))
+    const { url, error: e } = await getEmployeeDocUrlAction(storagePath)
+    setDocUrlLoading(p => ({ ...p, [storagePath]: false }))
+    if (url) window.open(url, '_blank')
+    else alert(e ?? 'Erro ao abrir documento.')
   }
 
   const lbl: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }
@@ -495,6 +529,82 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* 8 — Documentos */}
+        <div>
+          <p style={sec}>8. DOCUMENTOS</p>
+          <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
+            Aceita imagens (JPG, PNG) e PDF até 20 MB.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {DOC_SLOTS.map(slot => {
+              const existingPath = employee ? (employee[slot.field as keyof typeof employee] as string | null) : null
+              const newFile = docFiles[slot.key] ?? null
+              const removed = docRemovals[slot.key] ?? false
+              const isNewImage = newFile?.type.startsWith('image/')
+              const newPreview = isNewImage ? URL.createObjectURL(newFile!) : null
+              const loading = docUrlLoading[existingPath ?? ''] ?? false
+
+              return (
+                <div key={slot.key} className="border rounded-lg p-2.5 flex items-center gap-2"
+                  style={{ borderColor: (newFile || (existingPath && !removed)) ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)', backgroundColor: (newFile || (existingPath && !removed)) ? 'var(--color-primary)' : 'white' }}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>{slot.label}</p>
+                    {newFile ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {newPreview && <img src={newPreview} alt="" className="w-8 h-8 object-cover rounded" />}
+                        {!newPreview && <span className="text-base">📄</span>}
+                        <span className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{newFile.name}</span>
+                      </div>
+                    ) : existingPath && !removed ? (
+                      <p className="text-xs mt-0.5" style={{ color: '#1E8449' }}>✓ Documento salvo</p>
+                    ) : removed ? (
+                      <p className="text-xs mt-0.5" style={{ color: '#C0392B' }}>Será removido ao salvar</p>
+                    ) : (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Nenhum arquivo</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    {existingPath && !removed && !newFile && (
+                      <button type="button" onClick={() => handleViewDoc(existingPath)}
+                        className="text-xs px-2 py-0.5 rounded border hover:bg-gray-50"
+                        style={{ color: 'var(--color-primary-darker)', borderColor: 'var(--color-bg-surface)' }}>
+                        {loading ? '...' : 'Ver'}
+                      </button>
+                    )}
+                    {newFile ? (
+                      <button type="button" onClick={() => setDocFiles(p => ({ ...p, [slot.key]: null }))}
+                        className="text-xs px-2 py-0.5 rounded border"
+                        style={{ color: '#C0392B', borderColor: '#C0392B' }}>
+                        Cancelar
+                      </button>
+                    ) : removed ? (
+                      <button type="button" onClick={() => setDocRemovals(p => ({ ...p, [slot.key]: false }))}
+                        className="text-xs px-2 py-0.5 rounded border hover:bg-gray-50"
+                        style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-bg-surface)' }}>
+                        Desfazer
+                      </button>
+                    ) : (
+                      <label className="cursor-pointer text-xs px-2 py-0.5 rounded border text-center hover:bg-gray-50"
+                        style={{ color: 'var(--color-primary-darker)', borderColor: 'var(--color-bg-surface)' }}>
+                        {existingPath ? 'Trocar' : 'Selecionar'}
+                        <input type="file" accept={slot.accept} className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) { setDocFiles(p => ({ ...p, [slot.key]: f })); setDocRemovals(p => ({ ...p, [slot.key]: false })) }; e.target.value = '' }} />
+                      </label>
+                    )}
+                    {existingPath && !removed && !newFile && (
+                      <button type="button" onClick={() => setDocRemovals(p => ({ ...p, [slot.key]: true }))}
+                        className="text-xs px-2 py-0.5 rounded border"
+                        style={{ color: '#C0392B', borderColor: '#C0392B' }}>
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 
