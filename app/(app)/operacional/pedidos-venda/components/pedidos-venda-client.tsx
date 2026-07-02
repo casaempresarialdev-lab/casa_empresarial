@@ -116,7 +116,7 @@ export function PedidosVendaClient({ orders, contacts, products, companyId }: Pr
             Total em pedidos ativos: <span className="font-semibold" style={{ color: 'var(--color-primary-darker)' }}>{formatBRL(totalMes)}</span>
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo pedido</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       {/* Cards de status */}

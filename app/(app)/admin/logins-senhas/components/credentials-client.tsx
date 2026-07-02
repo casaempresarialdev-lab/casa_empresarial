@@ -70,7 +70,7 @@ export function CredentialsClient({ credentials, companyId }: Props) {
             Cofre de credenciais — senhas criptografadas
           </p>
         </div>
-        <Button onClick={openAdd}>+ Nova credencial</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       <div className="mb-4">

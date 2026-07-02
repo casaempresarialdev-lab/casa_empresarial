@@ -82,7 +82,7 @@ export function ProdutosClient({ products, companyId }: Props) {
             Catálogo de itens para venda
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo item</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       {/* Métricas */}

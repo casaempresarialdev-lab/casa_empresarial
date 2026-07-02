@@ -50,7 +50,7 @@ export function CentroCustoClient({ costCenters, companyId }: Props) {
             Agrupe lançamentos por área ou projeto
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       <div className="mb-4">

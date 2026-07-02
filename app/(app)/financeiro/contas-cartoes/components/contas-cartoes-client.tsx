@@ -97,7 +97,7 @@ export function ContasCartoesClient({ bankAccounts, creditCards, companyId }: Pr
               </span>
             )}
           </div>
-          <Button size="sm" onClick={() => { setEditingConta(null); setContaModalOpen(true) }}>+ Nova conta</Button>
+          <Button size="sm" onClick={() => { setEditingConta(null); setContaModalOpen(true) }}>Adicionar</Button>
         </div>
 
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
@@ -157,7 +157,7 @@ export function ContasCartoesClient({ bankAccounts, creditCards, companyId }: Pr
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>💳 Cartões de Crédito</h2>
-          <Button size="sm" onClick={() => { setEditingCartao(null); setCartaoModalOpen(true) }}>+ Novo cartão</Button>
+          <Button size="sm" onClick={() => { setEditingCartao(null); setCartaoModalOpen(true) }}>Adicionar</Button>
         </div>
 
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>

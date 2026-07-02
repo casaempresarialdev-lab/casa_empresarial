@@ -67,7 +67,7 @@ export function PesquisasClient({ surveys, companyId }: Props) {
             Pesquisas de satisfação e clima organizacional
           </p>
         </div>
-        <Button onClick={openAdd}>+ Nova pesquisa</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-4">

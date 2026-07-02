@@ -68,7 +68,7 @@ export function BeneficiosClient({ companyId, benefits, employees }: Props) {
           </p>
         </div>
         {tab === 'catalogo' && (
-          <Button onClick={() => { setEditing(null); setModalOpen(true) }}>+ Novo benefício</Button>
+          <Button onClick={() => { setEditing(null); setModalOpen(true) }}>Adicionar</Button>
         )}
       </div>
 

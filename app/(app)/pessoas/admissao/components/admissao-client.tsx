@@ -78,7 +78,7 @@ export function AdmissaoClient({ employees, companyId, companyBenefits }: Props)
             Funcionários em processo de admissão ou período de experiência
           </p>
         </div>
-        <Button onClick={() => setModalOpen(true)}>+ Novo funcionário</Button>
+        <Button onClick={() => setModalOpen(true)}>Adicionar</Button>
       </div>
 
       {employees.length === 0 && (

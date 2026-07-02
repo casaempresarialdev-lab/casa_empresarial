@@ -49,7 +49,7 @@ export function SociosClient({ socios, companyId }: Props) {
             Sócios e participações da empresa
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo sócio</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       {deleteError && (

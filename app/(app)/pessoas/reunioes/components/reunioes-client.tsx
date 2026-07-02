@@ -84,7 +84,7 @@ export function ReunioesClient({ meetings, companyId }: Props) {
             Agendamento e atas de reuniões da equipe
           </p>
         </div>
-        <Button onClick={openAdd}>+ Nova reunião</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       {/* Cards de totais */}

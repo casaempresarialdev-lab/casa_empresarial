@@ -79,7 +79,7 @@ export function PrestadoresClient({ providers, companyId }: Props) {
             Profissionais e empresas contratadas
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo prestador</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       <div className="mb-4">

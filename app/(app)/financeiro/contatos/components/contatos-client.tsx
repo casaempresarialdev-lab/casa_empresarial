@@ -67,7 +67,7 @@ export function ContatosClient({ contacts, companyId }: Props) {
             Clientes e fornecedores
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo contato</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       <div className="flex gap-3 mb-4">

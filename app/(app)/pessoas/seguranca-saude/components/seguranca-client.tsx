@@ -86,7 +86,7 @@ export function SegurancaClient({ records, employees, companyId }: Props) {
             ASO, treinamentos, EPIs, incidentes e vacinações
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo registro</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       {/* Alertas */}

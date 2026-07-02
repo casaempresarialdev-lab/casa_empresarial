@@ -102,7 +102,7 @@ export function PedidosCompraClient({ orders, contacts, products, companyId }: P
             Compras e reposição de estoque
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo pedido</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       {/* Cards de status — clicáveis para filtrar */}

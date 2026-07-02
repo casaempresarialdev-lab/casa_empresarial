@@ -189,7 +189,7 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
               {' '}· Outros: <strong style={{ color: '#C0392B' }}>{fmtPct(outrosPct)}</strong>
             </p>
           </div>
-          <Button size="sm" onClick={openAdd}>+ Nova alíquota</Button>
+          <Button size="sm" onClick={openAdd}>Adicionar</Button>
         </div>
 
         {usingFallback ? (

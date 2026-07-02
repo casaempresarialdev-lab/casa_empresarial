@@ -101,7 +101,7 @@ export function PontoClient({ records, employees, companyId, mes, ano }: Props) 
             Controle de entrada e saída dos colaboradores
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo registro</Button>
+        <Button onClick={openAdd}>Adicionar</Button>
       </div>
 
       {/* Navegação de mês */}
