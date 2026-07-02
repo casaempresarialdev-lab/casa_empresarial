@@ -509,9 +509,9 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
           )}
         </div>
 
-        {/* 7 — Acesso ao Portal de Ponto */}
+        {/* 8 — Acesso ao Portal de Ponto */}
         <div>
-          <p style={sec}>7. ACESSO AO PORTAL DE PONTO</p>
+          <p style={sec}>8. ACESSO AO PORTAL DE PONTO</p>
           <div className="space-y-3">
             <Toggle value={pinAtivo} onChange={setPinAtivo} label="Permitir registro de ponto pelo colaborador" />
             {pinAtivo && (
@@ -532,9 +532,9 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
           </div>
         </div>
 
-        {/* 8 — Documentos */}
+        {/* 7 — Documentos */}
         <div>
-          <p style={sec}>8. DOCUMENTOS</p>
+          <p style={sec}>7. DOCUMENTOS</p>
           <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
             Aceita imagens (JPG, PNG) e PDF até 20 MB.
           </p>
