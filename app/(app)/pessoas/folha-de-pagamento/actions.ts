@@ -312,6 +312,65 @@ export async function generatePayrollForMonthAction(companyId: string, mesAno: s
   return { success: true, created: toCreate.length, skipped: existingIds.size }
 }
 
+export async function upsertPayrollVariableAction(
+  companyId: string,
+  employeeId: string,
+  mesAno: string,
+  salarioBase: number,
+  fields: {
+    desconto_faltas: number
+    atestados: number
+    horas_extras: number
+    horas_extras_feriado: number
+    horas_extras_domingo: number
+    bonus: number
+    desconto_vt: number
+    desconto_vr: number
+    observacao: string | null
+  }
+) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+
+  const { data: existing } = await admin
+    .from('payroll_entries')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('employee_id', employeeId)
+    .eq('mes_ano', mesAno)
+    .maybeSingle()
+
+  if (existing) {
+    const { error } = await admin
+      .from('payroll_entries')
+      .update(fields)
+      .eq('id', existing.id)
+    if (error) return { error: error.message }
+  } else {
+    const { error } = await admin.from('payroll_entries').insert({
+      company_id: companyId,
+      employee_id: employeeId,
+      mes_ano: mesAno,
+      salario_base: salarioBase,
+      periculosidade_valor: 0,
+      adicional_noturno: 0,
+      desconto_inss: 0,
+      desconto_irrf: 0,
+      desconto_adiantamento: 0,
+      desconto_outros: 0,
+      salario_liquido: 0,
+      status: 'rascunho',
+      ...fields,
+    })
+    if (error) return { error: error.message }
+  }
+
+  revalidatePath('/pessoas/folha-de-pagamento')
+  return { success: true }
+}
+
 export async function deletePayrollEntryAction(entryId: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }

@@ -31,6 +31,7 @@ export type PayrollPdfRow = {
   vctoFerias: string | null
   concederAte: string | null
   exame: string | null
+  observacao: string | null
 }
 
 export type PayrollPdfTotals = {
@@ -388,7 +389,7 @@ function Page1({ company, rows, totals, mesAnoLabel, geradoEm }: Props) {
 // ── Página 2: Custo Patronal + Agenda RH ────────────────────────────────────
 function Page2({ company, rows, totals, mesAnoLabel, geradoEm }: Props) {
   const WC = { nome: '28%', fgts: '12%', alim: '12%', transp: '12%', custo: '16%', gap: '20%' }
-  const WH = { nome: '22%', contrato: '14%', admissao: '12%', ferias: '12%', conceder: '12%', exame: '12%', gap: '16%' }
+  const WH = { nome: '20%', contrato: '13%', admissao: '11%', ferias: '11%', conceder: '11%', exame: '11%', obs: '23%' }
 
   return (
     <Page size="A4" orientation="landscape" style={s.page}>
@@ -439,7 +440,7 @@ function Page2({ company, rows, totals, mesAnoLabel, geradoEm }: Props) {
           <Text style={[s.tableHeaderCell, { width: WH.ferias }]}>Vcto Férias</Text>
           <Text style={[s.tableHeaderCell, { width: WH.conceder }]}>Conceder Até</Text>
           <Text style={[s.tableHeaderCell, { width: WH.exame }]}>Exame Perió.</Text>
-          <Text style={{ width: WH.gap }} />
+          <Text style={[s.tableHeaderCellLeft, { width: WH.obs }]}>Observação</Text>
         </View>
         {rows.map((r, i) => (
           <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
@@ -451,7 +452,7 @@ function Page2({ company, rows, totals, mesAnoLabel, geradoEm }: Props) {
             <Text style={[s.tableCell, { width: WH.ferias }]}>{fmtDate(r.vctoFerias)}</Text>
             <Text style={[s.tableCell, { width: WH.conceder }]}>{fmtDate(r.concederAte)}</Text>
             <Text style={[s.tableCell, { width: WH.exame }]}>{fmtDate(r.exame)}</Text>
-            <Text style={{ width: WH.gap }} />
+            <Text style={[s.tableCellLeft, { width: WH.obs, color: r.observacao ? C.textSub : C.muted }]}>{r.observacao ?? '—'}</Text>
           </View>
         ))}
       </View>

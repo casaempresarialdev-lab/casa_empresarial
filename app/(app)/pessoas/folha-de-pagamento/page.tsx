@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getActiveEmployeesForPayroll } from './queries'
+import { getActiveEmployeesForPayroll, getPayrollEntriesVariable } from './queries'
 import { getEncargosAliquotas } from '../encargos/queries'
 import { getCompany } from '../../empresa/queries'
 import { FolhaClient } from './components/folha-client'
@@ -27,11 +27,16 @@ export default async function FolhaPagamentoPage({
   const ano = params.ano ?? String(now.getFullYear())
   const mesAno = `${ano}-${mes}`
 
-  const [employees, aliquotas, company] = await Promise.all([
+  const [employees, aliquotas, company, entriesArr] = await Promise.all([
     getActiveEmployeesForPayroll(companyId),
     getEncargosAliquotas(companyId),
     getCompany(companyId),
+    getPayrollEntriesVariable(companyId, mesAno),
   ])
+
+  // Convert to plain object map for serialization across server→client boundary
+  const entries: Record<string, typeof entriesArr[number]> = {}
+  for (const e of entriesArr) entries[e.employee_id] = e
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -40,6 +45,8 @@ export default async function FolhaPagamentoPage({
         aliquotas={aliquotas}
         mesAno={mesAno}
         company={company}
+        companyId={companyId}
+        entries={entries}
       />
     </div>
   )

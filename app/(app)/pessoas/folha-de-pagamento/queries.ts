@@ -1,5 +1,34 @@
 import { createAdminClient } from '@/lib/supabase/server'
 
+export type PayrollEntryVariable = {
+  id: string
+  employee_id: string
+  desconto_faltas: number
+  atestados: number
+  horas_extras: number
+  horas_extras_feriado: number
+  horas_extras_domingo: number
+  bonus: number
+  desconto_vt: number
+  desconto_vr: number
+  observacao: string | null
+}
+
+export async function getPayrollEntriesVariable(
+  companyId: string,
+  mesAno: string,
+): Promise<PayrollEntryVariable[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('payroll_entries')
+    .select('id, employee_id, desconto_faltas, atestados, horas_extras, horas_extras_feriado, horas_extras_domingo, bonus, desconto_vt, desconto_vr, observacao')
+    .eq('company_id', companyId)
+    .eq('mes_ano', mesAno)
+
+  if (error) throw error
+  return (data ?? []) as unknown as PayrollEntryVariable[]
+}
+
 export type PayrollEntry = {
   id: string
   company_id: string
