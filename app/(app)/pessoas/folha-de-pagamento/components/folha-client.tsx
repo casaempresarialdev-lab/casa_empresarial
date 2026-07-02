@@ -272,8 +272,7 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
 
       {/* Aviso de estimativas */}
       <div className="mb-4 p-3 rounded-lg text-xs" style={{ backgroundColor: '#EBF5FB', color: '#2471A3' }}>
-        Valores estimados a partir do cadastro. INSS e IRPF pela tabela progressiva 2024 (IRPF deduz dependentes). Periculosidade = 30% do salário quando configurada. VA/VT vêm dos benefícios vinculados. Use o botão <strong>✏️ Lançar</strong> para registrar dados variáveis do mês (faltas, HE, comissões etc.).
-        {rawAliquotas.length === 0 && ' Encargos usando alíquotas padrão CLT — personalize em Encargos.'}
+        Informações para envio a contabilidade
       </div>
 
       {/* Grid */}
