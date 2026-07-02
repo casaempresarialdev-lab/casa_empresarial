@@ -3,15 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { ModalFuncionario } from '../../funcionarios/components/modal-funcionario'
 import { updateEmployeeStatusAction } from '../actions'
 import type { Employee } from '../../funcionarios/queries'
-import type { CompanyBenefit } from '../../beneficios/queries'
 
 interface Props {
   employees: Employee[]
-  companyId: string
-  companyBenefits: CompanyBenefit[]
 }
 
 const STATUS_CONFIG = {
@@ -37,12 +33,11 @@ function formatDate(d: string | null) {
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
 }
 
-export function AdmissaoClient({ employees, companyId, companyBenefits }: Props) {
+export function AdmissaoClient({ employees }: Props) {
   const router = useRouter()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Record<string, Record<number, boolean>>>({})
   const [updatingId, setUpdatingId] = useState<string | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
 
   function toggleChecked(empId: string, idx: number) {
     setChecked(prev => ({
@@ -78,7 +73,7 @@ export function AdmissaoClient({ employees, companyId, companyBenefits }: Props)
             Funcionários em processo de admissão ou período de experiência
           </p>
         </div>
-        <Button onClick={() => setModalOpen(true)}>Adicionar</Button>
+        <Button onClick={() => router.push('/pessoas/admissao/novo')}>Adicionar</Button>
       </div>
 
       {employees.length === 0 && (
@@ -179,13 +174,6 @@ export function AdmissaoClient({ employees, companyId, companyBenefits }: Props)
         })}
       </div>
 
-      <ModalFuncionario
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        employee={null}
-        companyBenefits={companyBenefits}
-      />
     </>
   )
 }
