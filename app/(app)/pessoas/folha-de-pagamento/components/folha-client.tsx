@@ -89,39 +89,12 @@ function fmtCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function fmtDate(iso: string | null) {
-  if (!iso) return '—'
-  const [y, m, d] = iso.split('-')
-  return `${d}/${m}/${y}`
-}
-
-function fmtCpf(cpf: string | null) {
-  if (!cpf) return '—'
-  const d = cpf.replace(/\D/g, '')
-  if (d.length !== 11) return cpf
-  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
-}
-
 function mesAnoLabel(mesAno: string) {
   const [ano, mes] = mesAno.split('-')
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   return `${meses[parseInt(mes) - 1]} ${ano}`
 }
 
-const REGIME_CFG: Record<string, { label: string; bg: string; color: string }> = {
-  clt:            { label: 'CLT',            bg: '#EBF5FB', color: '#2471A3' },
-  pj:             { label: 'PJ',             bg: '#F4F6F7', color: '#566573' },
-  estagio:        { label: 'Estágio',        bg: '#FEF9E7', color: '#9A7D0A' },
-  menor_aprendiz: { label: 'Menor Apr.',     bg: '#E9F7EF', color: '#1E8449' },
-}
-
-const CONTRATO_CFG: Record<string, { label: string; bg: string; color: string }> = {
-  assinado:     { label: 'assinado',     bg: '#E9F7EF', color: '#1E8449' },
-  nao_tem:      { label: 'não tem',      bg: '#FDEDEC', color: '#C0392B' },
-  nao_assinado: { label: 'não assinado', bg: '#FEF9E7', color: '#9A7D0A' },
-}
-
-// ── CSV Export ───────────────────────────────────────────────────────────────
 type PayrollRow = ReturnType<typeof buildRow>
 
 function buildRow(emp: EmployeeForPayroll, aliquotas: AliquotaRow[]) {
@@ -154,43 +127,6 @@ function buildRow(emp: EmployeeForPayroll, aliquotas: AliquotaRow[]) {
   }
 }
 
-function buildCsv(rows: PayrollRow[], mesAno: string): string {
-  const num = (n: number) => n.toFixed(2).replace('.', ',')
-  const header = [
-    'Mês/Ano', 'Nome', 'CPF', 'Regime', 'Cargo',
-    'Salário Bruto', 'Hora Extra', 'INSS', 'IRPF', '6% Prop. VT', 'Fixo VA',
-    'Salário Líquido', '8% FGTS', 'Alimentação', 'Transporte', 'Custo Total',
-    'Contrato', 'Admissão', 'Vcto Férias', 'Conceder Até', 'Exame Periódico',
-  ].join(';')
-
-  const lines = rows.map(r => [
-    mesAno,
-    r.emp.nome,
-    fmtCpf(r.emp.cpf),
-    REGIME_CFG[r.emp.tipo_contrato ?? '']?.label ?? (r.emp.tipo_contrato ?? ''),
-    r.emp.cargo ?? '',
-    num(r.bruto), num(r.horaExtra), num(r.inss), num(r.irpf), num(r.desc6VT), num(r.fixoVA),
-    num(r.liquido), num(r.fgts), num(r.custoVA), num(r.custoVT), num(r.custoTotal),
-    CONTRATO_CFG[r.emp.status_contrato ?? '']?.label ?? '',
-    fmtDate(r.emp.data_admissao),
-    fmtDate(r.emp.vcto_ferias),
-    fmtDate(r.emp.conceder_ferias_ate),
-    fmtDate(r.emp.exame_periodico),
-  ].join(';'))
-
-  return [header, ...lines].join('\n')
-}
-
-function downloadCsv(content: string, filename: string) {
-  const blob = new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   employees: EmployeeForPayroll[]
@@ -221,10 +157,6 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
     const m = String(d.getMonth() + 1).padStart(2, '0'); const a = String(d.getFullYear())
     setMes(m); setAno(a); navigate(m, a)
   }
-  function handleExportCsv() {
-    downloadCsv(buildCsv(rows, mesAno), `folha-${mesAnoLabel(mesAno).replace(' ', '-')}.csv`)
-  }
-
   async function handleExportPdf() {
     setPdfLoading(true)
     try {
@@ -330,87 +262,45 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
 
       {/* Grid de folha */}
       <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-        <table className="text-sm" style={{ minWidth: 2300, width: '100%' }}>
+        <table className="w-full text-sm">
           <thead>
             <tr>
-              <th style={{ ...TH, textAlign: 'left', minWidth: 180, position: 'sticky', left: 0, zIndex: 2 }}>Nome</th>
-              <th style={{ ...TH, textAlign: 'left', minWidth: 120 }}>CPF/CNPJ</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 80 }}>Regime</th>
-              <th style={{ ...TH, textAlign: 'left', minWidth: 120 }}>Cargo</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 100, borderLeft: '2px solid #E5E7EB' }}>Salário Bruto</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 90 }}>Hora Extra</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 90 }}>INSS</th>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 200 }}>Nome</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 120 }}>Salário Bruto</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Hora Extra</th>
               <th style={{ ...TH, textAlign: 'right', minWidth: 90 }}>IRPF</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 95 }}>6% Prop. VT</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 85 }}>Fixo VA</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 105, borderLeft: '2px solid #E5E7EB' }}>Salário Líquido</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 90, borderLeft: '2px solid #E5E7EB' }}>8% FGTS</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 95 }}>Alimentação</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 95 }}>Transporte</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 105 }}>Custo Total</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 95, borderLeft: '2px solid #E5E7EB' }}>Contrato</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 90 }}>Admissão</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 90 }}>Vcto Férias</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 95 }}>Conceder Até</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 95 }}>Exame Perió.</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 120 }}>Salário Líquido</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 100 }}>8% FGTS</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 105 }}>Alimentação</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 105 }}>Transporte</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={20} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                   Nenhum funcionário ativo com salário cadastrado.
                 </td>
               </tr>
             )}
             {rows.map((r, idx) => {
-              const regimeCfg   = r.emp.tipo_contrato ? REGIME_CFG[r.emp.tipo_contrato] : null
-              const contratoCfg = r.emp.status_contrato ? CONTRATO_CFG[r.emp.status_contrato] : null
               const rowBg = idx % 2 === 0 ? 'white' : '#FAFAFA'
               const muted = 'var(--color-text-muted)'
               return (
                 <tr key={r.emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
-                  <td style={{ ...TD, position: 'sticky', left: 0, backgroundColor: rowBg, zIndex: 1, fontWeight: 500, color: 'var(--color-text-primary)' }}>
+                  <td style={{ ...TD, fontWeight: 500, color: 'var(--color-text-primary)' }}>
                     {r.emp.nome}
                   </td>
-                  <td style={{ ...TD, color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{fmtCpf(r.emp.cpf)}</td>
-                  <td style={{ ...TD, textAlign: 'center' }}>
-                    {regimeCfg ? (
-                      <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.5rem', borderRadius: 999, backgroundColor: regimeCfg.bg, color: regimeCfg.color, fontWeight: 600 }}>
-                        {regimeCfg.label}
-                      </span>
-                    ) : <span style={{ color: muted }}>—</span>}
-                  </td>
-                  <td style={{ ...TD, color: 'var(--color-text-secondary)' }}>{r.emp.cargo ?? '—'}</td>
-
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: 'var(--color-text-primary)', borderLeft: '2px solid #F3F4F6' }}>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: 'var(--color-text-primary)' }}>
                     {fmtCurrency(r.bruto)}
-                    {r.pericul > 0 && <div style={{ fontSize: '0.58rem', color: '#E67E22', fontWeight: 500 }}>+peric. {fmtCurrency(r.pericul)}</div>}
+                    {r.pericul > 0 && <div style={{ fontSize: '0.6rem', color: '#E67E22', fontWeight: 500 }}>+peric. {fmtCurrency(r.pericul)}</div>}
                   </td>
                   <td style={{ ...TD, textAlign: 'right', color: muted }}>{r.horaExtra > 0 ? fmtCurrency(r.horaExtra) : '—'}</td>
-                  <td style={{ ...TD, textAlign: 'right', color: '#C0392B' }}>-{fmtCurrency(r.inss)}</td>
                   <td style={{ ...TD, textAlign: 'right', color: r.irpf > 0 ? '#C0392B' : muted }}>{r.irpf > 0 ? `-${fmtCurrency(r.irpf)}` : '—'}</td>
-                  <td style={{ ...TD, textAlign: 'right', color: r.desc6VT > 0 ? '#C0392B' : muted }}>{r.desc6VT > 0 ? `-${fmtCurrency(r.desc6VT)}` : '—'}</td>
-                  <td style={{ ...TD, textAlign: 'right', color: r.fixoVA > 0 ? '#C0392B' : muted }}>{r.fixoVA > 0 ? `-${fmtCurrency(r.fixoVA)}` : '—'}</td>
-
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#1E8449', borderLeft: '2px solid #F3F4F6' }}>{fmtCurrency(r.liquido)}</td>
-
-                  <td style={{ ...TD, textAlign: 'right', color: '#E67E22', borderLeft: '2px solid #F3F4F6' }}>{fmtCurrency(r.fgts)}</td>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#1E8449' }}>{fmtCurrency(r.liquido)}</td>
+                  <td style={{ ...TD, textAlign: 'right', color: '#E67E22' }}>{fmtCurrency(r.fgts)}</td>
                   <td style={{ ...TD, textAlign: 'right', color: r.custoVA > 0 ? 'var(--color-text-secondary)' : muted }}>{r.custoVA > 0 ? fmtCurrency(r.custoVA) : '—'}</td>
                   <td style={{ ...TD, textAlign: 'right', color: r.custoVT > 0 ? 'var(--color-text-secondary)' : muted }}>{r.custoVT > 0 ? fmtCurrency(r.custoVT) : '—'}</td>
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: 'var(--color-text-primary)' }}>{fmtCurrency(r.custoTotal)}</td>
-
-                  <td style={{ ...TD, textAlign: 'center', borderLeft: '2px solid #F3F4F6' }}>
-                    {contratoCfg ? (
-                      <span style={{ fontSize: '0.58rem', padding: '0.1rem 0.45rem', borderRadius: 999, backgroundColor: contratoCfg.bg, color: contratoCfg.color, fontWeight: 600 }}>
-                        {contratoCfg.label}
-                      </span>
-                    ) : <span style={{ color: muted }}>—</span>}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'center', color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(r.emp.data_admissao)}</td>
-                  <td style={{ ...TD, textAlign: 'center', color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(r.emp.vcto_ferias)}</td>
-                  <td style={{ ...TD, textAlign: 'center', color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(r.emp.conceder_ferias_ate)}</td>
-                  <td style={{ ...TD, textAlign: 'center', color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(r.emp.exame_periodico)}</td>
                 </tr>
               )
             })}
@@ -418,20 +308,14 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
           {rows.length > 0 && (
             <tfoot>
               <tr style={{ backgroundColor: 'var(--color-bg-surface)', borderTop: '2px solid #E5E7EB' }}>
-                <td style={{ ...TD, fontWeight: 700, color: 'var(--color-text-secondary)', position: 'sticky', left: 0, backgroundColor: 'var(--color-bg-surface)', zIndex: 1 }}>
-                  TOTAL — {rows.length}
-                </td>
-                <td colSpan={3} />
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: 'var(--color-text-primary)', borderLeft: '2px solid #E5E7EB' }}>{fmtCurrency(tot.bruto)}</td>
+                <td style={{ ...TD, fontWeight: 700, color: 'var(--color-text-secondary)' }}>TOTAL — {rows.length}</td>
+                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: 'var(--color-text-primary)' }}>{fmtCurrency(tot.bruto)}</td>
                 <td />
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#C0392B' }}>-{fmtCurrency(tot.inss)}</td>
                 <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#C0392B' }}>{tot.irpf > 0 ? `-${fmtCurrency(tot.irpf)}` : '—'}</td>
-                <td colSpan={2} />
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#1E8449', borderLeft: '2px solid #E5E7EB' }}>{fmtCurrency(tot.liquido)}</td>
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#E67E22', borderLeft: '2px solid #E5E7EB' }}>{fmtCurrency(tot.fgts)}</td>
-                <td colSpan={2} />
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: 'var(--color-text-primary)' }}>{fmtCurrency(tot.custo)}</td>
-                <td colSpan={5} style={{ borderLeft: '2px solid #E5E7EB' }} />
+                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#1E8449' }}>{fmtCurrency(tot.liquido)}</td>
+                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#E67E22' }}>{fmtCurrency(tot.fgts)}</td>
+                <td />
+                <td />
               </tr>
             </tfoot>
           )}
