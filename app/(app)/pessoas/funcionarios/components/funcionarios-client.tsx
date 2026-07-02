@@ -190,7 +190,6 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
             Cadastro e acompanhamento da equipe CLT
           </p>
         </div>
-        <Button onClick={openAdd}>+ Novo funcionário</Button>
       </div>
 
       {/* Cards de métricas */}

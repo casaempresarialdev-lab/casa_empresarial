@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getAdmissaoEmployees } from './queries'
+import { getActiveCompanyBenefits } from '../beneficios/queries'
 import { AdmissaoClient } from './components/admissao-client'
 
 export const dynamic = 'force-dynamic'
@@ -15,11 +16,14 @@ export default async function AdmissaoPage() {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const employees = await getAdmissaoEmployees(companyId)
+  const [employees, companyBenefits] = await Promise.all([
+    getAdmissaoEmployees(companyId),
+    getActiveCompanyBenefits(companyId),
+  ])
 
   return (
     <div className="max-w-5xl mx-auto">
-      <AdmissaoClient employees={employees} />
+      <AdmissaoClient employees={employees} companyId={companyId} companyBenefits={companyBenefits} />
     </div>
   )
 }

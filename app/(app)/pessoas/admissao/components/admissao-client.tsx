@@ -3,11 +3,15 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { ModalFuncionario } from '../../funcionarios/components/modal-funcionario'
 import { updateEmployeeStatusAction } from '../actions'
 import type { Employee } from '../../funcionarios/queries'
+import type { CompanyBenefit } from '../../beneficios/queries'
 
 interface Props {
   employees: Employee[]
+  companyId: string
+  companyBenefits: CompanyBenefit[]
 }
 
 const STATUS_CONFIG = {
@@ -33,11 +37,12 @@ function formatDate(d: string | null) {
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
 }
 
-export function AdmissaoClient({ employees }: Props) {
+export function AdmissaoClient({ employees, companyId, companyBenefits }: Props) {
   const router = useRouter()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Record<string, Record<number, boolean>>>({})
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
 
   function toggleChecked(empId: string, idx: number) {
     setChecked(prev => ({
@@ -73,13 +78,7 @@ export function AdmissaoClient({ employees }: Props) {
             Funcionários em processo de admissão ou período de experiência
           </p>
         </div>
-        <a
-          href="/pessoas/funcionarios"
-          className="text-sm px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50"
-          style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
-        >
-          + Novo funcionário
-        </a>
+        <Button onClick={() => setModalOpen(true)}>+ Novo funcionário</Button>
       </div>
 
       {employees.length === 0 && (
@@ -88,7 +87,7 @@ export function AdmissaoClient({ employees }: Props) {
             Nenhum funcionário em admissão ou período de experiência.
           </p>
           <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            Para iniciar uma admissão, cadastre o funcionário em <a href="/pessoas/funcionarios" className="underline">Funcionários</a> com status "Em admissão".
+            Clique em "Novo funcionário" para iniciar uma admissão.
           </p>
         </div>
       )}
@@ -179,6 +178,14 @@ export function AdmissaoClient({ employees }: Props) {
           )
         })}
       </div>
+
+      <ModalFuncionario
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        companyId={companyId}
+        employee={null}
+        companyBenefits={companyBenefits}
+      />
     </>
   )
 }
