@@ -317,35 +317,8 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
             <button onClick={nextMonth} className="text-sm font-bold hover:opacity-70" style={{ color: 'var(--color-text-muted)' }}>›</button>
           </div>
           {rows.length > 0 && (
-            <>
-              <Button variant="ghost" onClick={handleExportCsv}>↓ CSV</Button>
-              <Button variant="ghost" onClick={handleExportPdf} loading={pdfLoading}>↓ PDF</Button>
-            </>
+            <Button variant="ghost" onClick={handleExportPdf} loading={pdfLoading}>↓ PDF</Button>
           )}
-        </div>
-      </div>
-
-      {/* Cards de resumo */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total líquido</p>
-          <p className="text-xl font-bold mt-1" style={{ color: '#1E8449' }}>{fmtCurrency(tot.liquido)}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>o que a equipe recebe</p>
-        </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Salário bruto</p>
-          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(tot.bruto)}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>inclui periculosidade</p>
-        </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>FGTS do mês</p>
-          <p className="text-xl font-bold mt-1" style={{ color: '#E67E22' }}>{fmtCurrency(tot.fgts)}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>depósito mensal</p>
-        </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Custo total empresa</p>
-          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(tot.custo)}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>bruto + encargos + benefícios</p>
         </div>
       </div>
 
@@ -475,10 +448,7 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
               Exporta a folha de {mesAnoLabel(mesAno)} com dados da empresa, resumo executivo e todas as seções.
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={handleExportCsv}>↓ CSV</Button>
-            <Button variant="ghost" onClick={handleExportPdf} loading={pdfLoading}>↓ PDF</Button>
-          </div>
+          <Button variant="ghost" onClick={handleExportPdf} loading={pdfLoading}>↓ PDF</Button>
         </div>
       )}
     </>
