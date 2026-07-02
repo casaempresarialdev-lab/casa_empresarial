@@ -30,7 +30,6 @@ export type PayrollPdfRow = {
   concederAte: string | null
   exame: string | null
   observacao: string | null
-  // campos variáveis mensais
   faltas: number
   atestados: number
   he50: number
@@ -59,17 +58,9 @@ interface Props {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const R = (n: number) =>
-  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-
+const R  = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const V  = (n: number) => n > 0 ? R(n) : '—'
 const VI = (n: number) => n > 0 ? String(n) : '—'
-
-const fmtDate = (iso: string | null) => {
-  if (!iso) return '—'
-  const [y, m, d] = iso.split('-')
-  return `${d}/${m}/${y}`
-}
 
 const fmtCnpj = (cnpj: string | null) => {
   if (!cnpj) return '—'
@@ -78,26 +69,19 @@ const fmtCnpj = (cnpj: string | null) => {
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
 }
 
-const CONTRATO_LABEL: Record<string, string> = {
-  assinado: 'Assinado',
-  nao_tem: 'Sem contrato',
-  nao_assinado: 'Não assinado',
-}
-
 // ── Paleta ───────────────────────────────────────────────────────────────────
 const C = {
-  primary:  '#2C3E50',
-  accent:   '#C19A6B',
-  green:    '#1E8449',
-  orange:   '#E67E22',
-  red:      '#C0392B',
-  blue:     '#2471A3',
-  bg:       '#F8F9FA',
-  bgAlt:    '#FFFFFF',
-  border:   '#E5E7EB',
-  muted:    '#6B7280',
-  text:     '#1F2937',
-  textSub:  '#4B5563',
+  primary: '#2C3E50',
+  accent:  '#C19A6B',
+  green:   '#1E8449',
+  red:     '#C0392B',
+  blue:    '#2471A3',
+  border:  '#E5E7EB',
+  muted:   '#6B7280',
+  text:    '#1F2937',
+  textSub: '#4B5563',
+  bgAlt:   '#FFFFFF',
+  bgRow:   '#F9FAFB',
 }
 
 // ── Estilos ──────────────────────────────────────────────────────────────────
@@ -111,8 +95,6 @@ const s = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 32,
   },
-
-  // Cabeçalho
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -122,15 +104,14 @@ const s = StyleSheet.create({
     paddingBottom: 8,
     marginBottom: 12,
   },
-  headerLeft: { flexDirection: 'column', gap: 2 },
-  headerRight: { alignItems: 'flex-end', gap: 2 },
-  headerLogo: { width: 36, height: 36, marginBottom: 4, borderRadius: 4 },
-  companyName: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.primary },
-  companyDetail: { fontSize: 7, color: C.muted },
-  reportTitle: { fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.primary },
-  reportSub: { fontSize: 8, color: C.muted, marginTop: 2 },
+  headerLeft:   { flexDirection: 'column', gap: 2 },
+  headerRight:  { alignItems: 'flex-end', gap: 2 },
+  headerLogo:   { width: 36, height: 36, marginBottom: 4, borderRadius: 4 },
+  companyName:  { fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.primary },
+  companyDetail:{ fontSize: 7, color: C.muted },
+  reportTitle:  { fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.primary },
+  reportSub:    { fontSize: 8, color: C.muted, marginTop: 2 },
 
-  // Seção
   sectionTitle: {
     fontSize: 8,
     fontFamily: 'Helvetica-Bold',
@@ -144,7 +125,6 @@ const s = StyleSheet.create({
     paddingLeft: 6,
   },
 
-  // Tabela genérica
   table: {
     borderWidth: 1,
     borderColor: C.border,
@@ -158,64 +138,38 @@ const s = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 4,
   },
-  tableHeaderCell: {
-    fontSize: 6,
-    fontFamily: 'Helvetica-Bold',
-    color: '#FFFFFF',
-    textAlign: 'right',
-  },
-  tableHeaderCellLeft: {
-    fontSize: 6,
-    fontFamily: 'Helvetica-Bold',
-    color: '#FFFFFF',
-    textAlign: 'left',
-  },
-  tableRow: {
+  thR: { fontSize: 6, fontFamily: 'Helvetica-Bold', color: '#FFF', textAlign: 'right' },
+  thL: { fontSize: 6, fontFamily: 'Helvetica-Bold', color: '#FFF', textAlign: 'left' },
+
+  // linha principal de dados
+  dataRow: {
     flexDirection: 'row',
     paddingVertical: 4,
     paddingHorizontal: 4,
     borderTopWidth: 1,
     borderTopColor: C.border,
   },
-  tableRowAlt: {
-    backgroundColor: '#F9FAFB',
+  // linha de observação (abaixo da linha de dados)
+  obsRow: {
+    paddingLeft: 10,
+    paddingRight: 4,
+    paddingBottom: 4,
   },
-  tableCell: {
-    fontSize: 6.5,
-    color: C.textSub,
-    textAlign: 'right',
-  },
-  tableCellLeft: {
-    fontSize: 6.5,
-    color: C.text,
-    textAlign: 'left',
-  },
-  tableCellBold: {
-    fontSize: 6.5,
-    fontFamily: 'Helvetica-Bold',
-    color: C.text,
-    textAlign: 'right',
-  },
+  obsText: { fontSize: 5.5, color: C.muted },
+
+  tdR:  { fontSize: 6.5, color: C.textSub, textAlign: 'right' },
+  tdL:  { fontSize: 6.5, color: C.text,    textAlign: 'left' },
+  tdB:  { fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: C.text, textAlign: 'left' },
+
   tableFooter: {
     flexDirection: 'row',
     backgroundColor: C.primary,
     paddingVertical: 5,
     paddingHorizontal: 4,
   },
-  tableFooterCell: {
-    fontSize: 6.5,
-    fontFamily: 'Helvetica-Bold',
-    color: '#FFFFFF',
-    textAlign: 'right',
-  },
-  tableFooterCellLeft: {
-    fontSize: 6.5,
-    fontFamily: 'Helvetica-Bold',
-    color: '#FFFFFF',
-    textAlign: 'left',
-  },
+  tfR: { fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#FFF', textAlign: 'right' },
+  tfL: { fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#FFF', textAlign: 'left' },
 
-  // Rodapé de página
   footer: {
     position: 'absolute',
     bottom: 14,
@@ -228,11 +182,11 @@ const s = StyleSheet.create({
     borderTopColor: C.border,
     paddingTop: 5,
   },
-  footerText: { fontSize: 6, color: C.muted },
+  footerText:       { fontSize: 6,   color: C.muted },
   footerDisclaimer: { fontSize: 5.5, color: C.muted, maxWidth: 360, textAlign: 'center' },
 })
 
-// ── Rodapé de página (render) ────────────────────────────────────────────────
+// ── Rodapé de página ─────────────────────────────────────────────────────────
 function Footer({ geradoEm }: { geradoEm: string }) {
   return (
     <View style={s.footer} fixed>
@@ -247,21 +201,18 @@ function Footer({ geradoEm }: { geradoEm: string }) {
 
 // ── Cabeçalho de página ──────────────────────────────────────────────────────
 function Header({ company, mesAnoLabel, geradoEm }: { company: Company | null; mesAnoLabel: string; geradoEm: string }) {
-  const nome = company?.nome_fantasia ?? company?.razao_social ?? 'Empresa'
-  const cnpj = fmtCnpj(company?.cnpj ?? null)
+  const nome  = company?.nome_fantasia ?? company?.razao_social ?? 'Empresa'
+  const cnpj  = fmtCnpj(company?.cnpj ?? null)
   const local = [company?.cidade, company?.uf].filter(Boolean).join(' / ')
-
   return (
     <View style={s.header} fixed>
       <View style={s.headerLeft}>
-        {company?.logo_url && (
-          <Image src={company.logo_url} style={s.headerLogo} />
-        )}
+        {company?.logo_url && <Image src={company.logo_url} style={s.headerLogo} />}
         <Text style={s.companyName}>{nome}</Text>
         <Text style={s.companyDetail}>CNPJ: {cnpj}</Text>
         {local ? <Text style={s.companyDetail}>{local}</Text> : null}
         {company?.telefone ? <Text style={s.companyDetail}>{company.telefone}</Text> : null}
-        {company?.email ? <Text style={s.companyDetail}>{company.email}</Text> : null}
+        {company?.email    ? <Text style={s.companyDetail}>{company.email}</Text>    : null}
       </View>
       <View style={s.headerRight}>
         <Text style={s.reportTitle}>Folha de Pagamento</Text>
@@ -272,150 +223,115 @@ function Header({ company, mesAnoLabel, geradoEm }: { company: Company | null; m
   )
 }
 
-// ── Página 1: Tabela principal (espelho da tela) ─────────────────────────────
-function Page1({ company, rows, mesAnoLabel, geradoEm }: Props) {
+// ── Documento ────────────────────────────────────────────────────────────────
+export function RelatorioPdf({ company, rows, mesAnoLabel, geradoEm }: Props) {
+  // col widths — somam 100%
   const W = {
-    nome:      '15%',
-    bruto:     '8%',
-    alim:      '7%',
-    transp:    '7%',
+    nome:      '19%',
+    bruto:     '9%',
+    alim:      '8%',
+    transp:    '8%',
     faltas:    '5%',
-    atestados: '5%',
+    atestados: '6%',
     he50:      '7%',
     heFer:     '8%',
     heDom:     '8%',
-    comissao:  '7%',
-    descVT:    '6%',
-    descVR:    '6%',
-    obs:       '11%',
+    comissao:  '8%',
+    descVT:    '7%',
+    descVR:    '7%',
   }
 
   const tot = rows.reduce(
     (t, r) => ({
-      bruto:     t.bruto     + r.bruto,
-      alim:      t.alim      + r.custoVA,
-      transp:    t.transp    + r.custoVT,
-      he50:      t.he50      + r.he50,
-      heFer:     t.heFer     + r.heFeriado,
-      heDom:     t.heDom     + r.heDomingo,
-      comissao:  t.comissao  + r.comissao,
-      descVT:    t.descVT    + r.descVT,
-      descVR:    t.descVR    + r.descVR,
+      bruto:    t.bruto    + r.bruto,
+      alim:     t.alim     + r.custoVA,
+      transp:   t.transp   + r.custoVT,
+      he50:     t.he50     + r.he50,
+      heFer:    t.heFer    + r.heFeriado,
+      heDom:    t.heDom    + r.heDomingo,
+      comissao: t.comissao + r.comissao,
+      descVT:   t.descVT   + r.descVT,
+      descVR:   t.descVR   + r.descVR,
     }),
     { bruto: 0, alim: 0, transp: 0, he50: 0, heFer: 0, heDom: 0, comissao: 0, descVT: 0, descVR: 0 }
   )
 
   return (
-    <Page size="A4" orientation="landscape" style={s.page}>
-      <Header company={company} mesAnoLabel={mesAnoLabel} geradoEm={geradoEm} />
-
-      <Text style={s.sectionTitle}>Folha de Pagamento — {mesAnoLabel}</Text>
-      <View style={s.table}>
-        <View style={s.tableHeader}>
-          <Text style={[s.tableHeaderCellLeft, { width: W.nome }]}>Nome</Text>
-          <Text style={[s.tableHeaderCell, { width: W.bruto }]}>Sal. Bruto</Text>
-          <Text style={[s.tableHeaderCell, { width: W.alim }]}>Alimentação</Text>
-          <Text style={[s.tableHeaderCell, { width: W.transp }]}>Transporte</Text>
-          <Text style={[s.tableHeaderCell, { width: W.faltas }]}>Faltas</Text>
-          <Text style={[s.tableHeaderCell, { width: W.atestados }]}>Atest.</Text>
-          <Text style={[s.tableHeaderCell, { width: W.he50 }]}>HE 50%</Text>
-          <Text style={[s.tableHeaderCell, { width: W.heFer }]}>HE Feriado</Text>
-          <Text style={[s.tableHeaderCell, { width: W.heDom }]}>HE Domingo</Text>
-          <Text style={[s.tableHeaderCell, { width: W.comissao }]}>Comissão</Text>
-          <Text style={[s.tableHeaderCell, { width: W.descVT }]}>Desc.VT</Text>
-          <Text style={[s.tableHeaderCell, { width: W.descVR }]}>Desc.VR</Text>
-          <Text style={[s.tableHeaderCellLeft, { width: W.obs }]}>Observação</Text>
-        </View>
-
-        {rows.map((r, i) => (
-          <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
-            <Text style={[s.tableCellBold, { width: W.nome }]}>{r.nome}</Text>
-            <Text style={[s.tableCell, { width: W.bruto }]}>{R(r.bruto)}</Text>
-            <Text style={[s.tableCell, { width: W.alim, color: r.custoVA > 0 ? C.textSub : C.muted }]}>{V(r.custoVA)}</Text>
-            <Text style={[s.tableCell, { width: W.transp, color: r.custoVT > 0 ? C.textSub : C.muted }]}>{V(r.custoVT)}</Text>
-            <Text style={[s.tableCell, { width: W.faltas, color: r.faltas > 0 ? C.red : C.muted }]}>{VI(r.faltas)}</Text>
-            <Text style={[s.tableCell, { width: W.atestados, color: r.atestados > 0 ? C.blue : C.muted }]}>{VI(r.atestados)}</Text>
-            <Text style={[s.tableCell, { width: W.he50, color: r.he50 > 0 ? C.green : C.muted }]}>{V(r.he50)}</Text>
-            <Text style={[s.tableCell, { width: W.heFer, color: r.heFeriado > 0 ? C.green : C.muted }]}>{V(r.heFeriado)}</Text>
-            <Text style={[s.tableCell, { width: W.heDom, color: r.heDomingo > 0 ? C.green : C.muted }]}>{V(r.heDomingo)}</Text>
-            <Text style={[s.tableCell, { width: W.comissao, color: r.comissao > 0 ? C.textSub : C.muted }]}>{V(r.comissao)}</Text>
-            <Text style={[s.tableCell, { width: W.descVT, color: r.descVT > 0 ? C.red : C.muted }]}>{V(r.descVT)}</Text>
-            <Text style={[s.tableCell, { width: W.descVR, color: r.descVR > 0 ? C.red : C.muted }]}>{V(r.descVR)}</Text>
-            <Text style={[s.tableCellLeft, { width: W.obs, color: r.observacao ? C.textSub : C.muted }]}>{r.observacao ?? '—'}</Text>
-          </View>
-        ))}
-
-        <View style={s.tableFooter}>
-          <Text style={[s.tableFooterCellLeft, { width: W.nome }]}>TOTAL — {rows.length} func.</Text>
-          <Text style={[s.tableFooterCell, { width: W.bruto }]}>{R(tot.bruto)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.alim }]}>{V(tot.alim)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.transp }]}>{V(tot.transp)}</Text>
-          <Text style={{ width: W.faltas }} />
-          <Text style={{ width: W.atestados }} />
-          <Text style={[s.tableFooterCell, { width: W.he50 }]}>{V(tot.he50)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.heFer }]}>{V(tot.heFer)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.heDom }]}>{V(tot.heDom)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.comissao }]}>{V(tot.comissao)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.descVT }]}>{V(tot.descVT)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.descVR }]}>{V(tot.descVR)}</Text>
-          <Text style={{ width: W.obs }} />
-        </View>
-      </View>
-
-      <Footer geradoEm={geradoEm} />
-    </Page>
-  )
-}
-
-// ── Página 2: Agenda RH ──────────────────────────────────────────────────────
-function Page2({ company, rows, mesAnoLabel, geradoEm }: Props) {
-  const WH = { nome: '22%', contrato: '14%', admissao: '12%', ferias: '12%', conceder: '12%', exame: '12%', obs: '16%' }
-
-  return (
-    <Page size="A4" orientation="landscape" style={s.page}>
-      <Header company={company} mesAnoLabel={mesAnoLabel} geradoEm={geradoEm} />
-
-      <Text style={s.sectionTitle}>Agenda RH — Datas e Contratos</Text>
-      <View style={s.table}>
-        <View style={s.tableHeader}>
-          <Text style={[s.tableHeaderCellLeft, { width: WH.nome }]}>Nome</Text>
-          <Text style={[s.tableHeaderCell, { width: WH.contrato }]}>Contrato</Text>
-          <Text style={[s.tableHeaderCell, { width: WH.admissao }]}>Admissão</Text>
-          <Text style={[s.tableHeaderCell, { width: WH.ferias }]}>Vcto Férias</Text>
-          <Text style={[s.tableHeaderCell, { width: WH.conceder }]}>Conceder Até</Text>
-          <Text style={[s.tableHeaderCell, { width: WH.exame }]}>Exame Perió.</Text>
-          <Text style={[s.tableHeaderCellLeft, { width: WH.obs }]}>Observação</Text>
-        </View>
-        {rows.map((r, i) => (
-          <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
-            <Text style={[s.tableCellLeft, { width: WH.nome }]}>{r.nome}</Text>
-            <Text style={[s.tableCell, { width: WH.contrato }]}>
-              {r.statusContrato ? (CONTRATO_LABEL[r.statusContrato] ?? r.statusContrato) : '—'}
-            </Text>
-            <Text style={[s.tableCell, { width: WH.admissao }]}>{fmtDate(r.dataAdmissao)}</Text>
-            <Text style={[s.tableCell, { width: WH.ferias }]}>{fmtDate(r.vctoFerias)}</Text>
-            <Text style={[s.tableCell, { width: WH.conceder }]}>{fmtDate(r.concederAte)}</Text>
-            <Text style={[s.tableCell, { width: WH.exame }]}>{fmtDate(r.exame)}</Text>
-            <Text style={[s.tableCellLeft, { width: WH.obs, color: r.observacao ? C.textSub : C.muted }]}>{r.observacao ?? '—'}</Text>
-          </View>
-        ))}
-      </View>
-
-      <Footer geradoEm={geradoEm} />
-    </Page>
-  )
-}
-
-// ── Documento principal ───────────────────────────────────────────────────────
-export function RelatorioPdf(props: Props) {
-  return (
     <Document
-      title={`Folha de Pagamento — ${props.mesAnoLabel}`}
-      author={props.company?.razao_social ?? 'Casa Empresarial'}
+      title={`Folha de Pagamento — ${mesAnoLabel}`}
+      author={company?.razao_social ?? 'Casa Empresarial'}
       creator="Casa Empresarial"
     >
-      <Page1 {...props} />
-      <Page2 {...props} />
+      <Page size="A4" orientation="landscape" style={s.page}>
+        <Header company={company} mesAnoLabel={mesAnoLabel} geradoEm={geradoEm} />
+
+        <Text style={s.sectionTitle}>Folha de Pagamento — {mesAnoLabel}</Text>
+        <View style={s.table}>
+          {/* Cabeçalho */}
+          <View style={s.tableHeader}>
+            <Text style={[s.thL, { width: W.nome }]}>Nome</Text>
+            <Text style={[s.thR, { width: W.bruto }]}>Sal. Bruto</Text>
+            <Text style={[s.thR, { width: W.alim }]}>Alimentação</Text>
+            <Text style={[s.thR, { width: W.transp }]}>Transporte</Text>
+            <Text style={[s.thR, { width: W.faltas }]}>Faltas</Text>
+            <Text style={[s.thR, { width: W.atestados }]}>Atest.</Text>
+            <Text style={[s.thR, { width: W.he50 }]}>HE 50%</Text>
+            <Text style={[s.thR, { width: W.heFer }]}>HE Feriado</Text>
+            <Text style={[s.thR, { width: W.heDom }]}>HE Domingo</Text>
+            <Text style={[s.thR, { width: W.comissao }]}>Comissão</Text>
+            <Text style={[s.thR, { width: W.descVT }]}>Desc.VT</Text>
+            <Text style={[s.thR, { width: W.descVR }]}>Desc.VR</Text>
+          </View>
+
+          {/* Linhas de dados */}
+          {rows.map((r, i) => {
+            const bg = i % 2 !== 0 ? C.bgRow : C.bgAlt
+            return (
+              <View key={i} style={{ backgroundColor: bg }}>
+                {/* Linha principal */}
+                <View style={s.dataRow}>
+                  <Text style={[s.tdB, { width: W.nome }]}>{r.nome}</Text>
+                  <Text style={[s.tdR, { width: W.bruto }]}>{R(r.bruto)}</Text>
+                  <Text style={[s.tdR, { width: W.alim,   color: r.custoVA   > 0 ? C.textSub : C.muted }]}>{V(r.custoVA)}</Text>
+                  <Text style={[s.tdR, { width: W.transp, color: r.custoVT   > 0 ? C.textSub : C.muted }]}>{V(r.custoVT)}</Text>
+                  <Text style={[s.tdR, { width: W.faltas,    color: r.faltas    > 0 ? C.red   : C.muted }]}>{VI(r.faltas)}</Text>
+                  <Text style={[s.tdR, { width: W.atestados, color: r.atestados > 0 ? C.blue  : C.muted }]}>{VI(r.atestados)}</Text>
+                  <Text style={[s.tdR, { width: W.he50,    color: r.he50      > 0 ? C.green : C.muted }]}>{V(r.he50)}</Text>
+                  <Text style={[s.tdR, { width: W.heFer,   color: r.heFeriado > 0 ? C.green : C.muted }]}>{V(r.heFeriado)}</Text>
+                  <Text style={[s.tdR, { width: W.heDom,   color: r.heDomingo > 0 ? C.green : C.muted }]}>{V(r.heDomingo)}</Text>
+                  <Text style={[s.tdR, { width: W.comissao,color: r.comissao  > 0 ? C.textSub : C.muted }]}>{V(r.comissao)}</Text>
+                  <Text style={[s.tdR, { width: W.descVT,  color: r.descVT    > 0 ? C.red   : C.muted }]}>{V(r.descVT)}</Text>
+                  <Text style={[s.tdR, { width: W.descVR,  color: r.descVR    > 0 ? C.red   : C.muted }]}>{V(r.descVR)}</Text>
+                </View>
+                {/* Linha de observação (apenas se existir) */}
+                {r.observacao ? (
+                  <View style={s.obsRow}>
+                    <Text style={s.obsText}>Obs: {r.observacao}</Text>
+                  </View>
+                ) : null}
+              </View>
+            )
+          })}
+
+          {/* Rodapé com totais */}
+          <View style={s.tableFooter}>
+            <Text style={[s.tfL, { width: W.nome }]}>TOTAL — {rows.length} func.</Text>
+            <Text style={[s.tfR, { width: W.bruto }]}>{R(tot.bruto)}</Text>
+            <Text style={[s.tfR, { width: W.alim }]}>{V(tot.alim)}</Text>
+            <Text style={[s.tfR, { width: W.transp }]}>{V(tot.transp)}</Text>
+            <Text style={{ width: W.faltas }} />
+            <Text style={{ width: W.atestados }} />
+            <Text style={[s.tfR, { width: W.he50 }]}>{V(tot.he50)}</Text>
+            <Text style={[s.tfR, { width: W.heFer }]}>{V(tot.heFer)}</Text>
+            <Text style={[s.tfR, { width: W.heDom }]}>{V(tot.heDom)}</Text>
+            <Text style={[s.tfR, { width: W.comissao }]}>{V(tot.comissao)}</Text>
+            <Text style={[s.tfR, { width: W.descVT }]}>{V(tot.descVT)}</Text>
+            <Text style={[s.tfR, { width: W.descVR }]}>{V(tot.descVR)}</Text>
+          </View>
+        </View>
+
+        <Footer geradoEm={geradoEm} />
+      </Page>
     </Document>
   )
 }
