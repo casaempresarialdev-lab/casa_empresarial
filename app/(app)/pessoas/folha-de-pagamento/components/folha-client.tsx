@@ -268,9 +268,6 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
               <th style={{ ...TH, textAlign: 'left', minWidth: 200 }}>Nome</th>
               <th style={{ ...TH, textAlign: 'right', minWidth: 120 }}>Salário Bruto</th>
               <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Hora Extra</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 90 }}>IRPF</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 120 }}>Salário Líquido</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 100 }}>8% FGTS</th>
               <th style={{ ...TH, textAlign: 'right', minWidth: 105 }}>Alimentação</th>
               <th style={{ ...TH, textAlign: 'right', minWidth: 105 }}>Transporte</th>
             </tr>
@@ -278,7 +275,7 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={5} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                   Nenhum funcionário ativo com salário cadastrado.
                 </td>
               </tr>
@@ -296,9 +293,6 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
                     {r.pericul > 0 && <div style={{ fontSize: '0.6rem', color: '#E67E22', fontWeight: 500 }}>+peric. {fmtCurrency(r.pericul)}</div>}
                   </td>
                   <td style={{ ...TD, textAlign: 'right', color: muted }}>{r.horaExtra > 0 ? fmtCurrency(r.horaExtra) : '—'}</td>
-                  <td style={{ ...TD, textAlign: 'right', color: r.irpf > 0 ? '#C0392B' : muted }}>{r.irpf > 0 ? `-${fmtCurrency(r.irpf)}` : '—'}</td>
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#1E8449' }}>{fmtCurrency(r.liquido)}</td>
-                  <td style={{ ...TD, textAlign: 'right', color: '#E67E22' }}>{fmtCurrency(r.fgts)}</td>
                   <td style={{ ...TD, textAlign: 'right', color: r.custoVA > 0 ? 'var(--color-text-secondary)' : muted }}>{r.custoVA > 0 ? fmtCurrency(r.custoVA) : '—'}</td>
                   <td style={{ ...TD, textAlign: 'right', color: r.custoVT > 0 ? 'var(--color-text-secondary)' : muted }}>{r.custoVT > 0 ? fmtCurrency(r.custoVT) : '—'}</td>
                 </tr>
@@ -311,9 +305,6 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
                 <td style={{ ...TD, fontWeight: 700, color: 'var(--color-text-secondary)' }}>TOTAL — {rows.length}</td>
                 <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: 'var(--color-text-primary)' }}>{fmtCurrency(tot.bruto)}</td>
                 <td />
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#C0392B' }}>{tot.irpf > 0 ? `-${fmtCurrency(tot.irpf)}` : '—'}</td>
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#1E8449' }}>{fmtCurrency(tot.liquido)}</td>
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#E67E22' }}>{fmtCurrency(tot.fgts)}</td>
                 <td />
                 <td />
               </tr>
