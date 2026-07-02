@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { createEmployeeAction } from '../../../funcionarios/actions'
+import { createEmployeeAction, generateOnboardingTokenAction } from '../../../funcionarios/actions'
 import type { CompanyBenefit } from '../../../beneficios/queries'
 
 const DOC_SLOTS = [
@@ -116,6 +116,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const [success, setSuccess] = useState<{ employeeId: string; link: string | null; copied: boolean } | null>(null)
 
   function onAdmissaoChange(val: string) {
     setDataAdmissao(val)
@@ -172,9 +173,89 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
     }
 
     const result = await createEmployeeAction(companyId, fd)
+    if ('error' in result) { setLoading(false); setError(result.error ?? 'Erro ao salvar.'); return }
+
+    // Gera link de auto-cadastro
+    const tokenResult = await generateOnboardingTokenAction(result.employeeId)
     setLoading(false)
-    if ('error' in result) { setError(result.error ?? 'Erro ao salvar.'); return }
-    router.push('/pessoas/admissao')
+    setSuccess({
+      employeeId: result.employeeId,
+      link: tokenResult.url ?? null,
+      copied: false,
+    })
+  }
+
+  async function handleCopyLink() {
+    if (!success?.link) return
+    await navigator.clipboard.writeText(success.link)
+    setSuccess(s => s ? { ...s, copied: true } : s)
+    setTimeout(() => setSuccess(s => s ? { ...s, copied: false } : s), 2000)
+  }
+
+  function handleWhatsAppLink() {
+    if (!success?.link) return
+    const firstName = nome.split(' ')[0]
+    const msg = encodeURIComponent(`Olá ${firstName}! Acesse o link abaixo para preencher seus dados de admissão:\n${success.link}`)
+    const phone = telefone.replace(/\D/g, '')
+    window.open(phone ? `https://wa.me/55${phone}?text=${msg}` : `https://wa.me/?text=${msg}`, '_blank')
+  }
+
+  if (success) {
+    return (
+      <div className="max-w-lg mx-auto pt-16 text-center px-4">
+        <div className="w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-5"
+          style={{ backgroundColor: '#D5F5E3' }}>
+          ✅
+        </div>
+        <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+          Funcionário cadastrado!
+        </h2>
+        <p className="text-sm mb-6" style={{ color: 'var(--color-text-muted)' }}>
+          {nome.split(' ')[0]} foi adicionado ao sistema.
+          {success.link ? ' Envie o link abaixo para que ele preencha seus dados pessoais.' : ''}
+        </p>
+
+        {success.link && (
+          <div className="rounded-xl border p-4 mb-6 text-left" style={{ borderColor: '#AED6F1', backgroundColor: '#EBF5FB' }}>
+            <p className="text-xs font-semibold mb-2" style={{ color: '#2471A3' }}>
+              Link de auto-cadastro — válido por 7 dias
+            </p>
+            <p className="text-xs break-all mb-3" style={{ color: '#1A5276' }}>{success.link}</p>
+            <div className="flex gap-2">
+              <button onClick={handleCopyLink}
+                className="flex-1 text-sm py-2 rounded-lg border font-medium"
+                style={{ borderColor: '#2471A3', color: '#2471A3', backgroundColor: 'white' }}>
+                {success.copied ? '✓ Copiado!' : 'Copiar link'}
+              </button>
+              <button onClick={handleWhatsAppLink}
+                className="flex-1 text-sm py-2 rounded-lg font-medium"
+                style={{ backgroundColor: '#25D366', color: 'white' }}>
+                Enviar por WhatsApp
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <Button onClick={() => router.push('/pessoas/admissao')}>
+            Ir para Admissão
+          </Button>
+          <button onClick={() => {
+            setSuccess(null); setNome(''); setCpf(''); setRg(''); setNascimento(''); setTelefone(''); setEmail('')
+            setCargo(''); setLocalTrabalho(''); setTipoContrato(''); setStatus('admissao')
+            setGrauInstrucao(''); setDepartamento(''); setSalario(''); setPlanoSaude(false)
+            setDataAdmissao(''); setFimExp1(''); setFimExp2(''); setVctoFerias(''); setExame('')
+            setStatusContrato(''); setDataDemissao(''); setPisPasep(''); setMatricula('')
+            setSerieCtps(''); setCertReservista(''); setDependentes('0'); setDadosBancarios('')
+            setSelectedBenefitIds([]); setPin(''); setPinAtivo(false); setDocFiles({})
+          }}
+            className="text-sm py-2 rounded-lg"
+            style={{ color: 'var(--color-text-muted)' }}>
+            Cadastrar outro funcionário
+          </button>
+        </div>
+      </div>
+    )
   }
 
   const lbl: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }

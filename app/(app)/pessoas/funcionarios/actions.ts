@@ -174,7 +174,7 @@ export async function createEmployeeAction(companyId: string, formData: FormData
 
   revalidatePath('/pessoas/funcionarios')
   revalidatePath('/pessoas/beneficios')
-  return { success: true }
+  return { success: true as const, employeeId: data.id }
 }
 
 export async function updateEmployeeAction(employeeId: string, formData: FormData) {
@@ -218,6 +218,28 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
   revalidatePath('/pessoas/beneficios')
   revalidatePath('/pessoas/folha-de-pagamento')
   return { success: true }
+}
+
+export async function generateOnboardingTokenAction(
+  employeeId: string,
+): Promise<{ url?: string; error?: string }> {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+  const { data: emp } = await admin.from('employees').select('company_id').eq('id', employeeId).single()
+  if (!emp) return { error: 'Funcionário não encontrado.' }
+
+  const { data: tokenData, error } = await admin
+    .from('employee_onboarding_tokens')
+    .insert({ employee_id: employeeId, company_id: emp.company_id })
+    .select('token')
+    .single()
+
+  if (error) return { error: error.message }
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  return { url: `${baseUrl}/auto-cadastro/${tokenData.token}` }
 }
 
 export async function getEmployeeDocUrlAction(storagePath: string): Promise<{ url?: string; error?: string }> {

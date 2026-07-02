@@ -4,15 +4,19 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { updateEmployeeStatusAction } from '../actions'
+import { generateOnboardingTokenAction } from '../../funcionarios/actions'
 import type { Employee } from '../../funcionarios/queries'
+import type { OnboardingTokenInfo } from '../queries'
 
 interface Props {
   employees: Employee[]
+  tokens: Record<string, OnboardingTokenInfo>
+  companyId: string
 }
 
 const STATUS_CONFIG = {
-  admissao:   { label: 'Em admissão',   bg: '#FEF9E7', text: '#D4AC0D' },
-  experiencia:{ label: 'Experiência',   bg: '#EBF5FB', text: '#2471A3' },
+  admissao:    { label: 'Em admissão', bg: '#FEF9E7', text: '#D4AC0D' },
+  experiencia: { label: 'Experiência', bg: '#EBF5FB', text: '#2471A3' },
 }
 
 const CHECKLIST = [
@@ -33,22 +37,29 @@ function formatDate(d: string | null) {
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
 }
 
-export function AdmissaoClient({ employees }: Props) {
+function tokenStatus(t: OnboardingTokenInfo | undefined): 'none' | 'pending' | 'done' | 'expired' {
+  if (!t) return 'none'
+  if (t.used_at) return 'done'
+  if (new Date(t.expires_at) < new Date()) return 'expired'
+  return 'pending'
+}
+
+export function AdmissaoClient({ employees, tokens, companyId }: Props) {
   const router = useRouter()
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [checked, setChecked] = useState<Record<string, Record<number, boolean>>>({})
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [expandedId, setExpandedId]   = useState<string | null>(null)
+  const [checked, setChecked]         = useState<Record<string, Record<number, boolean>>>({})
+  const [updatingId, setUpdatingId]   = useState<string | null>(null)
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
+  // linkPanels: employeeId → URL gerado
+  const [linkPanels, setLinkPanels]   = useState<Record<string, string>>({})
+  const [copied, setCopied]           = useState<Record<string, boolean>>({})
 
   function toggleChecked(empId: string, idx: number) {
-    setChecked(prev => ({
-      ...prev,
-      [empId]: { ...prev[empId], [idx]: !prev[empId]?.[idx] },
-    }))
+    setChecked(prev => ({ ...prev, [empId]: { ...prev[empId], [idx]: !prev[empId]?.[idx] } }))
   }
 
   function getCheckCount(empId: string) {
-    const map = checked[empId] ?? {}
-    return Object.values(map).filter(Boolean).length
+    return Object.values(checked[empId] ?? {}).filter(Boolean).length
   }
 
   async function handleAdvance(emp: Employee) {
@@ -60,6 +71,28 @@ export function AdmissaoClient({ employees }: Props) {
     setUpdatingId(null)
     if ('error' in result) alert(result.error)
     else router.refresh()
+  }
+
+  async function handleGenerateLink(emp: Employee) {
+    setGeneratingId(emp.id)
+    const result = await generateOnboardingTokenAction(emp.id)
+    setGeneratingId(null)
+    if ('error' in result || !result.url) { alert(result.error ?? 'Erro ao gerar link.'); return }
+    setLinkPanels(p => ({ ...p, [emp.id]: result.url! }))
+    router.refresh()
+  }
+
+  async function handleCopy(empId: string, url: string) {
+    await navigator.clipboard.writeText(url)
+    setCopied(p => ({ ...p, [empId]: true }))
+    setTimeout(() => setCopied(p => ({ ...p, [empId]: false })), 2000)
+  }
+
+  function handleWhatsApp(emp: Employee, url: string) {
+    const phone = emp.telefone?.replace(/\D/g, '') ?? ''
+    const nome  = emp.nome.split(' ')[0]
+    const msg   = encodeURIComponent(`Olá ${nome}! Acesse o link abaixo para preencher seus dados de admissão:\n${url}`)
+    window.open(`https://wa.me/55${phone}?text=${msg}`, '_blank')
   }
 
   return (
@@ -82,17 +115,20 @@ export function AdmissaoClient({ employees }: Props) {
             Nenhum funcionário em admissão ou período de experiência.
           </p>
           <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            Clique em "Novo funcionário" para iniciar uma admissão.
+            Clique em "Adicionar" para iniciar uma admissão.
           </p>
         </div>
       )}
 
       <div className="space-y-3">
         {employees.map(emp => {
-          const cfg = STATUS_CONFIG[emp.status as keyof typeof STATUS_CONFIG]
+          const cfg       = STATUS_CONFIG[emp.status as keyof typeof STATUS_CONFIG]
           const checkCount = getCheckCount(emp.id)
           const isExpanded = expandedId === emp.id
-          const nextLabel = emp.status === 'admissao' ? 'Iniciar experiência' : 'Efetuar contratação'
+          const nextLabel  = emp.status === 'admissao' ? 'Iniciar experiência' : 'Efetuar contratação'
+          const token      = tokens[emp.id]
+          const status     = tokenStatus(token)
+          const panelUrl   = linkPanels[emp.id]
 
           return (
             <div key={emp.id} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
@@ -106,11 +142,23 @@ export function AdmissaoClient({ employees }: Props) {
                   <div>
                     <div className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</div>
                     <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                      {emp.cargo ?? 'Sem cargo'} {emp.data_admissao ? `· Admitido em ${formatDate(emp.data_admissao)}` : ''}
+                      {emp.cargo ?? 'Sem cargo'}{emp.data_admissao ? ` · Admitido em ${formatDate(emp.data_admissao)}` : ''}
                     </div>
+                    {/* Status do auto-cadastro */}
+                    {status === 'done' && (
+                      <span className="text-xs" style={{ color: '#1E8449' }}>
+                        ✓ Dados preenchidos em {formatDate(token!.used_at!.split('T')[0])}
+                      </span>
+                    )}
+                    {status === 'pending' && !panelUrl && (
+                      <span className="text-xs" style={{ color: '#9A7D0A' }}>⏳ Aguardando preenchimento</span>
+                    )}
+                    {status === 'expired' && (
+                      <span className="text-xs" style={{ color: '#C0392B' }}>Link expirado</span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                     {checkCount}/{CHECKLIST.length} docs
                   </span>
@@ -121,19 +169,58 @@ export function AdmissaoClient({ employees }: Props) {
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : emp.id)}
                     className="text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
-                  >
+                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}>
                     {isExpanded ? 'Recolher' : 'Checklist'}
                   </button>
-                  <Button
-                    size="sm"
-                    loading={updatingId === emp.id}
-                    onClick={() => handleAdvance(emp)}
-                  >
+                  {/* Botão de link de auto-cadastro */}
+                  {status !== 'done' && (
+                    <button
+                      onClick={() => panelUrl
+                        ? setLinkPanels(p => ({ ...p })) // já visível — não faz nada (painel aberto abaixo)
+                        : handleGenerateLink(emp)
+                      }
+                      disabled={generatingId === emp.id || !!panelUrl}
+                      className="text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
+                      style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-primary-darker)', opacity: panelUrl ? 0.5 : 1 }}>
+                      {generatingId === emp.id ? '...' : panelUrl ? 'Link gerado ↓' : status === 'pending' ? 'Gerar novo link' : status === 'expired' ? 'Novo link' : 'Enviar link'}
+                    </button>
+                  )}
+                  <Button size="sm" loading={updatingId === emp.id} onClick={() => handleAdvance(emp)}>
                     {nextLabel}
                   </Button>
                 </div>
               </div>
+
+              {/* Painel do link de auto-cadastro */}
+              {panelUrl && (
+                <div className="border-t px-5 py-3 flex items-center gap-3"
+                  style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: '#EBF5FB' }}>
+                  <span className="text-lg">🔗</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-primary-darker)' }}>
+                      Link de auto-cadastro — válido por 7 dias
+                    </p>
+                    <p className="text-xs truncate" style={{ color: '#2471A3' }}>{panelUrl}</p>
+                  </div>
+                  <button onClick={() => handleCopy(emp.id, panelUrl)}
+                    className="text-xs px-3 py-1.5 rounded-lg border flex-shrink-0"
+                    style={{ borderColor: '#2471A3', color: '#2471A3', backgroundColor: 'white' }}>
+                    {copied[emp.id] ? '✓ Copiado' : 'Copiar'}
+                  </button>
+                  {emp.telefone && (
+                    <button onClick={() => handleWhatsApp(emp, panelUrl)}
+                      className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0"
+                      style={{ backgroundColor: '#25D366', color: 'white' }}>
+                      WhatsApp
+                    </button>
+                  )}
+                  <button onClick={() => setLinkPanels(p => { const n = { ...p }; delete n[emp.id]; return n })}
+                    className="text-xs px-2 py-1.5 rounded-lg flex-shrink-0"
+                    style={{ color: 'var(--color-text-muted)' }}>
+                    ✕
+                  </button>
+                </div>
+              )}
 
               {/* Checklist expandido */}
               {isExpanded && (
@@ -146,12 +233,7 @@ export function AdmissaoClient({ employees }: Props) {
                       const done = checked[emp.id]?.[idx] ?? false
                       return (
                         <label key={idx} className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={done}
-                            onChange={() => toggleChecked(emp.id, idx)}
-                            className="rounded"
-                          />
+                          <input type="checkbox" checked={done} onChange={() => toggleChecked(emp.id, idx)} className="rounded" />
                           <span className="text-xs" style={{
                             color: done ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
                             textDecoration: done ? 'line-through' : 'none',
@@ -173,7 +255,6 @@ export function AdmissaoClient({ employees }: Props) {
           )
         })}
       </div>
-
     </>
   )
 }
