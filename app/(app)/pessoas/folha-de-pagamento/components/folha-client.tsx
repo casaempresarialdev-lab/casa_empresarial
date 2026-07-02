@@ -138,14 +138,11 @@ interface Props {
   entries: Record<string, PayrollEntryVariable>
 }
 
-export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, company, companyId, entries: initialEntries }: Props) {
+export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, company, companyId, entries }: Props) {
   const router = useRouter()
   const [mes, setMes] = useState(mesAno.split('-')[1])
   const [ano, setAno] = useState(mesAno.split('-')[0])
   const [pdfLoading, setPdfLoading] = useState(false)
-
-  // Local copy of entries so grid updates immediately after modal save
-  const [entries, setEntries] = useState<Record<string, PayrollEntryVariable>>(initialEntries)
 
   // Modal state
   const [modalOpen, setModalOpen]       = useState(false)
