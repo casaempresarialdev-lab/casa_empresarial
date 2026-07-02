@@ -33,14 +33,6 @@ function getFeriasAlert(emp: Employee): AlertLevel {
   return null
 }
 
-function getExameAlert(emp: Employee): AlertLevel {
-  const d = parseDate(emp.exame_periodico)
-  if (!d) return null
-  const diff = diffDays(d)
-  if (diff < 0) return 'danger'
-  if (diff <= 30) return 'warning'
-  return null
-}
 
 const TIPO_CFG: Record<string, { label: string; bg: string; color: string }> = {
   clt:            { label: 'CLT',            bg: '#EBF5FB', color: '#2471A3' },
@@ -82,10 +74,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
   const inativos = employees.filter(e => ['inativo', 'demitido'].includes(e.status))
   const rows     = tab === 'ativos' ? ativos : inativos
 
-  const folhaBruta    = ativos.reduce((s, e) => s + (e.salario ?? 0), 0)
-  const comBeneficios = ativos.filter(e => e.employee_benefits.length > 0).length
-  const alertasFerias = ativos.filter(e => getFeriasAlert(e) !== null).length
-  const alertasExame  = ativos.filter(e => getExameAlert(e) !== null).length
+  const emFerias = ativos.filter(e => getFeriasAlert(e) !== null).length
 
   function openView(e: Employee) { setViewing(e); setViewOpen(true) }
   function openEdit(e: Employee) { setEditing(e); setModalOpen(true) }
@@ -141,44 +130,27 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
       </div>
 
       {/* Cards de métricas */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Funcionários ativos</p>
           <p className="text-2xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{ativos.length}</p>
-          {inativos.length > 0 && (
-            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-              + {inativos.length} inativo{inativos.length > 1 ? 's' : ''}
-            </p>
-          )}
-        </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Folha bruta</p>
-          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>
-            {folhaBruta.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Salários dos ativos</p>
-        </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Com benefícios</p>
-          <p className="text-xl font-bold mt-1" style={{ color: '#8E44AD' }}>{comBeneficios}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {ativos.length > 0 ? `de ${ativos.length} funcionários` : 'nenhum ativo'}
+            {ativos.length === 1 ? 'funcionário ativo' : 'funcionários ativos'}
           </p>
         </div>
         <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>Alertas</p>
-          <div className="flex flex-col gap-1">
-            {alertasFerias > 0 ? (
-              <span className="text-sm font-bold" style={{ color: '#C0392B' }}>⚠ {alertasFerias} férias</span>
-            ) : (
-              <span className="text-xs" style={{ color: '#1E8449' }}>✓ Férias ok</span>
-            )}
-            {alertasExame > 0 ? (
-              <span className="text-sm font-bold" style={{ color: '#9A7D0A' }}>△ {alertasExame} exame{alertasExame > 1 ? 's' : ''}</span>
-            ) : (
-              <span className="text-xs" style={{ color: '#1E8449' }}>✓ Exames ok</span>
-            )}
-          </div>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Férias</p>
+          <p className="text-2xl font-bold mt-1" style={{ color: emFerias > 0 ? '#C0392B' : 'var(--color-text-primary)' }}>{emFerias}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {emFerias === 0 ? 'nenhum em férias' : emFerias === 1 ? 'funcionário em férias' : 'funcionários em férias'}
+          </p>
+        </div>
+        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Inativos</p>
+          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{inativos.length}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {inativos.length === 0 ? 'nenhum inativo' : inativos.length === 1 ? 'funcionário inativo' : 'funcionários inativos'}
+          </p>
         </div>
       </div>
 
