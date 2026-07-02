@@ -4,10 +4,8 @@ import {
   Text,
   View,
   StyleSheet,
-  Font,
   Image,
 } from '@react-pdf/renderer'
-import type { EmployeeForPayroll } from '../queries'
 import type { Company } from '../../../empresa/queries'
 
 // ── Tipagem interna ──────────────────────────────────────────────────────────
@@ -32,6 +30,15 @@ export type PayrollPdfRow = {
   concederAte: string | null
   exame: string | null
   observacao: string | null
+  // campos variáveis mensais
+  faltas: number
+  atestados: number
+  he50: number
+  heFeriado: number
+  heDomingo: number
+  comissao: number
+  descVT: number
+  descVR: number
 }
 
 export type PayrollPdfTotals = {
@@ -55,17 +62,13 @@ interface Props {
 const R = (n: number) =>
   n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+const V  = (n: number) => n > 0 ? R(n) : '—'
+const VI = (n: number) => n > 0 ? String(n) : '—'
+
 const fmtDate = (iso: string | null) => {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
-}
-
-const fmtCpf = (cpf: string | null) => {
-  if (!cpf) return '—'
-  const d = cpf.replace(/\D/g, '')
-  if (d.length !== 11) return cpf
-  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
 }
 
 const fmtCnpj = (cnpj: string | null) => {
@@ -73,13 +76,6 @@ const fmtCnpj = (cnpj: string | null) => {
   const d = cnpj.replace(/\D/g, '')
   if (d.length !== 14) return cnpj
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
-}
-
-const REGIME_LABEL: Record<string, string> = {
-  clt: 'CLT',
-  pj: 'PJ',
-  estagio: 'Estágio',
-  menor_aprendiz: 'M. Aprendiz',
 }
 
 const CONTRATO_LABEL: Record<string, string> = {
@@ -108,10 +104,10 @@ const C = {
 const s = StyleSheet.create({
   page: {
     fontFamily: 'Helvetica',
-    fontSize: 7.5,
+    fontSize: 7,
     color: C.text,
     backgroundColor: C.bgAlt,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 32,
   },
@@ -133,23 +129,6 @@ const s = StyleSheet.create({
   companyDetail: { fontSize: 7, color: C.muted },
   reportTitle: { fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.primary },
   reportSub: { fontSize: 8, color: C.muted, marginTop: 2 },
-
-  // Cards de resumo
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  card: {
-    flex: 1,
-    backgroundColor: C.bg,
-    borderRadius: 6,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  cardLabel: { fontSize: 6.5, color: C.muted, marginBottom: 3, textTransform: 'uppercase' },
-  cardValue: { fontSize: 11, fontFamily: 'Helvetica-Bold' },
 
   // Seção
   sectionTitle: {
@@ -180,13 +159,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
   tableHeaderCell: {
-    fontSize: 6.5,
+    fontSize: 6,
     fontFamily: 'Helvetica-Bold',
     color: '#FFFFFF',
     textAlign: 'right',
   },
   tableHeaderCellLeft: {
-    fontSize: 6.5,
+    fontSize: 6,
     fontFamily: 'Helvetica-Bold',
     color: '#FFFFFF',
     textAlign: 'left',
@@ -202,17 +181,17 @@ const s = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   tableCell: {
-    fontSize: 7,
+    fontSize: 6.5,
     color: C.textSub,
     textAlign: 'right',
   },
   tableCellLeft: {
-    fontSize: 7,
+    fontSize: 6.5,
     color: C.text,
     textAlign: 'left',
   },
   tableCellBold: {
-    fontSize: 7,
+    fontSize: 6.5,
     fontFamily: 'Helvetica-Bold',
     color: C.text,
     textAlign: 'right',
@@ -224,13 +203,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
   tableFooterCell: {
-    fontSize: 7,
+    fontSize: 6.5,
     fontFamily: 'Helvetica-Bold',
     color: '#FFFFFF',
     textAlign: 'right',
   },
   tableFooterCellLeft: {
-    fontSize: 7,
+    fontSize: 6.5,
     fontFamily: 'Helvetica-Bold',
     color: '#FFFFFF',
     textAlign: 'left',
@@ -240,8 +219,8 @@ const s = StyleSheet.create({
   footer: {
     position: 'absolute',
     bottom: 14,
-    left: 24,
-    right: 24,
+    left: 20,
+    right: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
@@ -293,91 +272,93 @@ function Header({ company, mesAnoLabel, geradoEm }: { company: Company | null; m
   )
 }
 
-// ── Página 1: Resumo + Proventos/Descontos ───────────────────────────────────
-function Page1({ company, rows, totals, mesAnoLabel, geradoEm }: Props) {
-  // col widths em % (devem somar 100)
-  const W = { nome: '22%', cpf: '10%', regime: '7%', cargo: '10%', bruto: '10%', inss: '8%', irpf: '7%', vt: '7%', va: '7%', liq: '12%' }
+// ── Página 1: Tabela principal (espelho da tela) ─────────────────────────────
+function Page1({ company, rows, mesAnoLabel, geradoEm }: Props) {
+  const W = {
+    nome:      '15%',
+    bruto:     '8%',
+    alim:      '7%',
+    transp:    '7%',
+    faltas:    '5%',
+    atestados: '5%',
+    he50:      '7%',
+    heFer:     '8%',
+    heDom:     '8%',
+    comissao:  '7%',
+    descVT:    '6%',
+    descVR:    '6%',
+    obs:       '11%',
+  }
+
+  const tot = rows.reduce(
+    (t, r) => ({
+      bruto:     t.bruto     + r.bruto,
+      alim:      t.alim      + r.custoVA,
+      transp:    t.transp    + r.custoVT,
+      he50:      t.he50      + r.he50,
+      heFer:     t.heFer     + r.heFeriado,
+      heDom:     t.heDom     + r.heDomingo,
+      comissao:  t.comissao  + r.comissao,
+      descVT:    t.descVT    + r.descVT,
+      descVR:    t.descVR    + r.descVR,
+    }),
+    { bruto: 0, alim: 0, transp: 0, he50: 0, heFer: 0, heDom: 0, comissao: 0, descVT: 0, descVR: 0 }
+  )
 
   return (
     <Page size="A4" orientation="landscape" style={s.page}>
       <Header company={company} mesAnoLabel={mesAnoLabel} geradoEm={geradoEm} />
 
-      {/* Cards de resumo */}
-      <View style={s.summaryRow}>
-        <View style={s.card}>
-          <Text style={s.cardLabel}>Salário Líquido Total</Text>
-          <Text style={[s.cardValue, { color: C.green }]}>{R(totals.liquido)}</Text>
-        </View>
-        <View style={s.card}>
-          <Text style={s.cardLabel}>Salário Bruto Total</Text>
-          <Text style={[s.cardValue, { color: C.primary }]}>{R(totals.bruto)}</Text>
-        </View>
-        <View style={s.card}>
-          <Text style={s.cardLabel}>FGTS do Mês</Text>
-          <Text style={[s.cardValue, { color: C.orange }]}>{R(totals.fgts)}</Text>
-        </View>
-        <View style={s.card}>
-          <Text style={s.cardLabel}>Custo Total Empresa</Text>
-          <Text style={[s.cardValue, { color: C.primary }]}>{R(totals.custo)}</Text>
-        </View>
-        <View style={s.card}>
-          <Text style={s.cardLabel}>Total INSS</Text>
-          <Text style={[s.cardValue, { color: C.red }]}>{R(totals.inss)}</Text>
-        </View>
-        <View style={s.card}>
-          <Text style={s.cardLabel}>Total IRPF</Text>
-          <Text style={[s.cardValue, { color: C.red }]}>{R(totals.irpf)}</Text>
-        </View>
-      </View>
-
-      {/* Tabela proventos e descontos */}
-      <Text style={s.sectionTitle}>Proventos e Descontos</Text>
+      <Text style={s.sectionTitle}>Folha de Pagamento — {mesAnoLabel}</Text>
       <View style={s.table}>
         <View style={s.tableHeader}>
           <Text style={[s.tableHeaderCellLeft, { width: W.nome }]}>Nome</Text>
-          <Text style={[s.tableHeaderCell, { width: W.cpf }]}>CPF</Text>
-          <Text style={[s.tableHeaderCell, { width: W.regime }]}>Regime</Text>
-          <Text style={[s.tableHeaderCellLeft, { width: W.cargo }]}>Cargo</Text>
           <Text style={[s.tableHeaderCell, { width: W.bruto }]}>Sal. Bruto</Text>
-          <Text style={[s.tableHeaderCell, { width: W.inss }]}>INSS</Text>
-          <Text style={[s.tableHeaderCell, { width: W.irpf }]}>IRPF</Text>
-          <Text style={[s.tableHeaderCell, { width: W.vt }]}>6% VT</Text>
-          <Text style={[s.tableHeaderCell, { width: W.va }]}>Fixo VA</Text>
-          <Text style={[s.tableHeaderCell, { width: W.liq }]}>Sal. Líquido</Text>
+          <Text style={[s.tableHeaderCell, { width: W.alim }]}>Alimentação</Text>
+          <Text style={[s.tableHeaderCell, { width: W.transp }]}>Transporte</Text>
+          <Text style={[s.tableHeaderCell, { width: W.faltas }]}>Faltas</Text>
+          <Text style={[s.tableHeaderCell, { width: W.atestados }]}>Atest.</Text>
+          <Text style={[s.tableHeaderCell, { width: W.he50 }]}>HE 50%</Text>
+          <Text style={[s.tableHeaderCell, { width: W.heFer }]}>HE Feriado</Text>
+          <Text style={[s.tableHeaderCell, { width: W.heDom }]}>HE Domingo</Text>
+          <Text style={[s.tableHeaderCell, { width: W.comissao }]}>Comissão</Text>
+          <Text style={[s.tableHeaderCell, { width: W.descVT }]}>Desc.VT</Text>
+          <Text style={[s.tableHeaderCell, { width: W.descVR }]}>Desc.VR</Text>
+          <Text style={[s.tableHeaderCellLeft, { width: W.obs }]}>Observação</Text>
         </View>
 
         {rows.map((r, i) => (
           <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
-            <Text style={[s.tableCellLeft, { width: W.nome }]} >{r.nome}</Text>
-            <Text style={[s.tableCell, { width: W.cpf }]}>{fmtCpf(r.cpf)}</Text>
-            <Text style={[s.tableCell, { width: W.regime }]}>{REGIME_LABEL[r.regime] ?? r.regime ?? '—'}</Text>
-            <Text style={[s.tableCellLeft, { width: W.cargo }]} >{r.cargo ?? '—'}</Text>
+            <Text style={[s.tableCellBold, { width: W.nome }]}>{r.nome}</Text>
             <Text style={[s.tableCell, { width: W.bruto }]}>{R(r.bruto)}</Text>
-            <Text style={[s.tableCell, { width: W.inss, color: C.red }]}>-{R(r.inss)}</Text>
-            <Text style={[s.tableCell, { width: W.irpf, color: r.irpf > 0 ? C.red : C.muted }]}>
-              {r.irpf > 0 ? `-${R(r.irpf)}` : '—'}
-            </Text>
-            <Text style={[s.tableCell, { width: W.vt, color: r.desc6VT > 0 ? C.red : C.muted }]}>
-              {r.desc6VT > 0 ? `-${R(r.desc6VT)}` : '—'}
-            </Text>
-            <Text style={[s.tableCell, { width: W.va, color: r.fixoVA > 0 ? C.red : C.muted }]}>
-              {r.fixoVA > 0 ? `-${R(r.fixoVA)}` : '—'}
-            </Text>
-            <Text style={[s.tableCellBold, { width: W.liq, color: C.green }]}>{R(r.liquido)}</Text>
+            <Text style={[s.tableCell, { width: W.alim, color: r.custoVA > 0 ? C.textSub : C.muted }]}>{V(r.custoVA)}</Text>
+            <Text style={[s.tableCell, { width: W.transp, color: r.custoVT > 0 ? C.textSub : C.muted }]}>{V(r.custoVT)}</Text>
+            <Text style={[s.tableCell, { width: W.faltas, color: r.faltas > 0 ? C.red : C.muted }]}>{VI(r.faltas)}</Text>
+            <Text style={[s.tableCell, { width: W.atestados, color: r.atestados > 0 ? C.blue : C.muted }]}>{VI(r.atestados)}</Text>
+            <Text style={[s.tableCell, { width: W.he50, color: r.he50 > 0 ? C.green : C.muted }]}>{V(r.he50)}</Text>
+            <Text style={[s.tableCell, { width: W.heFer, color: r.heFeriado > 0 ? C.green : C.muted }]}>{V(r.heFeriado)}</Text>
+            <Text style={[s.tableCell, { width: W.heDom, color: r.heDomingo > 0 ? C.green : C.muted }]}>{V(r.heDomingo)}</Text>
+            <Text style={[s.tableCell, { width: W.comissao, color: r.comissao > 0 ? C.textSub : C.muted }]}>{V(r.comissao)}</Text>
+            <Text style={[s.tableCell, { width: W.descVT, color: r.descVT > 0 ? C.red : C.muted }]}>{V(r.descVT)}</Text>
+            <Text style={[s.tableCell, { width: W.descVR, color: r.descVR > 0 ? C.red : C.muted }]}>{V(r.descVR)}</Text>
+            <Text style={[s.tableCellLeft, { width: W.obs, color: r.observacao ? C.textSub : C.muted }]}>{r.observacao ?? '—'}</Text>
           </View>
         ))}
 
         <View style={s.tableFooter}>
           <Text style={[s.tableFooterCellLeft, { width: W.nome }]}>TOTAL — {rows.length} func.</Text>
-          <Text style={{ width: W.cpf }} />
-          <Text style={{ width: W.regime }} />
-          <Text style={{ width: W.cargo }} />
-          <Text style={[s.tableFooterCell, { width: W.bruto }]}>{R(totals.bruto)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.inss }]}>-{R(totals.inss)}</Text>
-          <Text style={[s.tableFooterCell, { width: W.irpf }]}>-{R(totals.irpf)}</Text>
-          <Text style={{ width: W.vt }} />
-          <Text style={{ width: W.va }} />
-          <Text style={[s.tableFooterCell, { width: W.liq }]}>{R(totals.liquido)}</Text>
+          <Text style={[s.tableFooterCell, { width: W.bruto }]}>{R(tot.bruto)}</Text>
+          <Text style={[s.tableFooterCell, { width: W.alim }]}>{V(tot.alim)}</Text>
+          <Text style={[s.tableFooterCell, { width: W.transp }]}>{V(tot.transp)}</Text>
+          <Text style={{ width: W.faltas }} />
+          <Text style={{ width: W.atestados }} />
+          <Text style={[s.tableFooterCell, { width: W.he50 }]}>{V(tot.he50)}</Text>
+          <Text style={[s.tableFooterCell, { width: W.heFer }]}>{V(tot.heFer)}</Text>
+          <Text style={[s.tableFooterCell, { width: W.heDom }]}>{V(tot.heDom)}</Text>
+          <Text style={[s.tableFooterCell, { width: W.comissao }]}>{V(tot.comissao)}</Text>
+          <Text style={[s.tableFooterCell, { width: W.descVT }]}>{V(tot.descVT)}</Text>
+          <Text style={[s.tableFooterCell, { width: W.descVR }]}>{V(tot.descVR)}</Text>
+          <Text style={{ width: W.obs }} />
         </View>
       </View>
 
@@ -386,52 +367,15 @@ function Page1({ company, rows, totals, mesAnoLabel, geradoEm }: Props) {
   )
 }
 
-// ── Página 2: Custo Patronal + Agenda RH ────────────────────────────────────
-function Page2({ company, rows, totals, mesAnoLabel, geradoEm }: Props) {
-  const WC = { nome: '28%', fgts: '12%', alim: '12%', transp: '12%', custo: '16%', gap: '20%' }
-  const WH = { nome: '20%', contrato: '13%', admissao: '11%', ferias: '11%', conceder: '11%', exame: '11%', obs: '23%' }
+// ── Página 2: Agenda RH ──────────────────────────────────────────────────────
+function Page2({ company, rows, mesAnoLabel, geradoEm }: Props) {
+  const WH = { nome: '22%', contrato: '14%', admissao: '12%', ferias: '12%', conceder: '12%', exame: '12%', obs: '16%' }
 
   return (
     <Page size="A4" orientation="landscape" style={s.page}>
       <Header company={company} mesAnoLabel={mesAnoLabel} geradoEm={geradoEm} />
 
-      {/* Custo patronal */}
-      <Text style={s.sectionTitle}>Custo Patronal</Text>
-      <View style={s.table}>
-        <View style={s.tableHeader}>
-          <Text style={[s.tableHeaderCellLeft, { width: WC.nome }]}>Nome</Text>
-          <Text style={[s.tableHeaderCell, { width: WC.fgts }]}>FGTS (8%)</Text>
-          <Text style={[s.tableHeaderCell, { width: WC.alim }]}>Alimentação</Text>
-          <Text style={[s.tableHeaderCell, { width: WC.transp }]}>Transporte</Text>
-          <Text style={[s.tableHeaderCell, { width: WC.custo }]}>Custo Total</Text>
-          <Text style={{ width: WC.gap }} />
-        </View>
-        {rows.map((r, i) => (
-          <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
-            <Text style={[s.tableCellLeft, { width: WC.nome }]} >{r.nome}</Text>
-            <Text style={[s.tableCell, { width: WC.fgts, color: C.orange }]}>{R(r.fgts)}</Text>
-            <Text style={[s.tableCell, { width: WC.alim, color: r.custoVA > 0 ? C.textSub : C.muted }]}>
-              {r.custoVA > 0 ? R(r.custoVA) : '—'}
-            </Text>
-            <Text style={[s.tableCell, { width: WC.transp, color: r.custoVT > 0 ? C.textSub : C.muted }]}>
-              {r.custoVT > 0 ? R(r.custoVT) : '—'}
-            </Text>
-            <Text style={[s.tableCellBold, { width: WC.custo }]}>{R(r.custoTotal)}</Text>
-            <Text style={{ width: WC.gap }} />
-          </View>
-        ))}
-        <View style={s.tableFooter}>
-          <Text style={[s.tableFooterCellLeft, { width: WC.nome }]}>TOTAL</Text>
-          <Text style={[s.tableFooterCell, { width: WC.fgts }]}>{R(totals.fgts)}</Text>
-          <Text style={{ width: WC.alim }} />
-          <Text style={{ width: WC.transp }} />
-          <Text style={[s.tableFooterCell, { width: WC.custo }]}>{R(totals.custo)}</Text>
-          <Text style={{ width: WC.gap }} />
-        </View>
-      </View>
-
-      {/* Agenda RH */}
-      <Text style={[s.sectionTitle, { marginTop: 10 }]}>Agenda RH — Datas e Contratos</Text>
+      <Text style={s.sectionTitle}>Agenda RH — Datas e Contratos</Text>
       <View style={s.table}>
         <View style={s.tableHeader}>
           <Text style={[s.tableHeaderCellLeft, { width: WH.nome }]}>Nome</Text>
@@ -444,7 +388,7 @@ function Page2({ company, rows, totals, mesAnoLabel, geradoEm }: Props) {
         </View>
         {rows.map((r, i) => (
           <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
-            <Text style={[s.tableCellLeft, { width: WH.nome }]} >{r.nome}</Text>
+            <Text style={[s.tableCellLeft, { width: WH.nome }]}>{r.nome}</Text>
             <Text style={[s.tableCell, { width: WH.contrato }]}>
               {r.statusContrato ? (CONTRATO_LABEL[r.statusContrato] ?? r.statusContrato) : '—'}
             </Text>

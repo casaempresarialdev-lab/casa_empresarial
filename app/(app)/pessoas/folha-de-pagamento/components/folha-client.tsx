@@ -206,6 +206,14 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
           concederAte: r.emp.conceder_ferias_ate,
           exame: r.emp.exame_periodico,
           observacao: entry?.observacao ?? null,
+          faltas:    entry?.desconto_faltas       ?? 0,
+          atestados: entry?.atestados             ?? 0,
+          he50:      entry?.horas_extras          ?? 0,
+          heFeriado: entry?.horas_extras_feriado  ?? 0,
+          heDomingo: entry?.horas_extras_domingo  ?? 0,
+          comissao:  entry?.bonus                 ?? 0,
+          descVT:    entry?.desconto_vt           ?? 0,
+          descVR:    entry?.desconto_vr           ?? 0,
         }
       })
       const tot = rows.reduce(
