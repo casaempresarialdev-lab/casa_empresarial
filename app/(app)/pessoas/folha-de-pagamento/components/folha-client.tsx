@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { pdf } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
+import { RelatorioPdf } from './relatorio-folha-pdf'
 import type { EmployeeForPayroll } from '../queries'
 import type { AliquotaRow } from '../../encargos/queries'
+import type { Company } from '../../../empresa/queries'
 
 const DIAS_UTEIS = 22
 
@@ -193,15 +196,17 @@ interface Props {
   employees: EmployeeForPayroll[]
   aliquotas: AliquotaRow[]
   mesAno: string
+  company: Company | null
 }
 
-export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno }: Props) {
+export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, company }: Props) {
   const router = useRouter()
   const [mes, setMes] = useState(mesAno.split('-')[1])
   const [ano, setAno] = useState(mesAno.split('-')[0])
 
   const effectiveAliquotas = rawAliquotas.length > 0 ? rawAliquotas : FALLBACK_ALIQUOTAS
   const rows = employees.map(emp => buildRow(emp, effectiveAliquotas))
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   function navigate(newMes: string, newAno: string) {
     router.push(`/pessoas/folha-de-pagamento?mes=${newMes}&ano=${newAno}`)
@@ -218,6 +223,55 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno }: Prop
   }
   function handleExportCsv() {
     downloadCsv(buildCsv(rows, mesAno), `folha-${mesAnoLabel(mesAno).replace(' ', '-')}.csv`)
+  }
+
+  async function handleExportPdf() {
+    setPdfLoading(true)
+    try {
+      const label = mesAnoLabel(mesAno)
+      const geradoEm = new Date().toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+      const pdfRows = rows.map(r => ({
+        nome: r.emp.nome,
+        cpf: r.emp.cpf,
+        regime: r.emp.tipo_contrato ?? '',
+        cargo: r.emp.cargo,
+        bruto: r.bruto,
+        inss: r.inss,
+        irpf: r.irpf,
+        desc6VT: r.desc6VT,
+        fixoVA: r.fixoVA,
+        liquido: r.liquido,
+        fgts: r.fgts,
+        custoVA: r.custoVA,
+        custoVT: r.custoVT,
+        custoTotal: r.custoTotal,
+        statusContrato: r.emp.status_contrato,
+        dataAdmissao: r.emp.data_admissao,
+        vctoFerias: r.emp.vcto_ferias,
+        concederAte: r.emp.conceder_ferias_ate,
+        exame: r.emp.exame_periodico,
+      }))
+      const blob = await pdf(
+        <RelatorioPdf
+          company={company}
+          rows={pdfRows}
+          totals={tot}
+          mesAnoLabel={label}
+          geradoEm={geradoEm}
+        />
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `folha-${label.replace(' ', '-')}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setPdfLoading(false)
+    }
   }
 
   const tot = rows.reduce(
@@ -263,7 +317,10 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno }: Prop
             <button onClick={nextMonth} className="text-sm font-bold hover:opacity-70" style={{ color: 'var(--color-text-muted)' }}>›</button>
           </div>
           {rows.length > 0 && (
-            <Button variant="ghost" onClick={handleExportCsv}>↓ Exportar CSV</Button>
+            <>
+              <Button variant="ghost" onClick={handleExportCsv}>↓ CSV</Button>
+              <Button variant="ghost" onClick={handleExportPdf} loading={pdfLoading}>↓ PDF</Button>
+            </>
           )}
         </div>
       </div>
@@ -415,10 +472,13 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno }: Prop
           <div>
             <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Enviar para a contabilidade</p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-              Exporta a folha de {mesAnoLabel(mesAno)} em CSV com todos os campos.
+              Exporta a folha de {mesAnoLabel(mesAno)} com dados da empresa, resumo executivo e todas as seções.
             </p>
           </div>
-          <Button variant="ghost" onClick={handleExportCsv}>↓ Exportar CSV</Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={handleExportCsv}>↓ CSV</Button>
+            <Button variant="ghost" onClick={handleExportPdf} loading={pdfLoading}>↓ PDF</Button>
+          </div>
         </div>
       )}
     </>

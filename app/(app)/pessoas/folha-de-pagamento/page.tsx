@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getActiveEmployeesForPayroll } from './queries'
 import { getEncargosAliquotas } from '../encargos/queries'
+import { getCompany } from '../../empresa/queries'
 import { FolhaClient } from './components/folha-client'
 
 export const dynamic = 'force-dynamic'
@@ -26,9 +27,10 @@ export default async function FolhaPagamentoPage({
   const ano = params.ano ?? String(now.getFullYear())
   const mesAno = `${ano}-${mes}`
 
-  const [employees, aliquotas] = await Promise.all([
+  const [employees, aliquotas, company] = await Promise.all([
     getActiveEmployeesForPayroll(companyId),
     getEncargosAliquotas(companyId),
+    getCompany(companyId),
   ])
 
   return (
@@ -37,6 +39,7 @@ export default async function FolhaPagamentoPage({
         employees={employees}
         aliquotas={aliquotas}
         mesAno={mesAno}
+        company={company}
       />
     </div>
   )
