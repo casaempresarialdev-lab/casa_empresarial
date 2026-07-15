@@ -119,30 +119,6 @@ export function Sidebar() {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
           {NAV_ITEMS.map((item) => {
-            if (!item.children) {
-              const active = pathname === item.href
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href!}
-                  onClick={closeMobile}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg mb-1 text-sm transition-colors',
-                    active ? 'font-semibold' : 'hover:bg-gray-50'
-                  )}
-                  style={active
-                    ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
-                    : { color: 'var(--color-text-secondary)' }
-                  }
-                  title={!expanded ? item.label : undefined}
-                >
-                  <span className="text-base shrink-0">{item.icon}</span>
-                  {/* Label: visível no mobile sempre; no desktop só se expandido */}
-                  <span className={cn('truncate', !expanded && 'md:hidden')}>{item.label}</span>
-                </Link>
-              )
-            }
-
             const isGroupActive = item.children.some(c => pathname.startsWith(c.href))
 
             return (
