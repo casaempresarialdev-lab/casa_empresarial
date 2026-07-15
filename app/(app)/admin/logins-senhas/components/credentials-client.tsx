@@ -145,7 +145,7 @@ export function CredentialsClient({ credentials, companyId }: Props) {
         <table className="w-full min-w-[600px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Sistema</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Estabelecimento</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Login</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Senha</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>URL</th>
