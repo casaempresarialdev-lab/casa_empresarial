@@ -50,7 +50,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Pessoas',
     icon: '👥',
     children: [
-      { label: 'Funcionários', href: '/pessoas/funcionarios' },
+      { label: 'Equipe', href: '/pessoas/funcionarios' },
       { label: 'Admissão', href: '/pessoas/admissao' },
       { label: 'Prestadores', href: '/pessoas/prestadores' },
       { label: 'Registro de Ponto', href: '/pessoas/registro-de-ponto' },

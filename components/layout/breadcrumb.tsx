@@ -26,7 +26,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'pedidos-venda': 'Pedidos de Venda',
   'frente-de-caixa': 'Frente de Caixa',
   pessoas: 'Pessoas',
-  funcionarios: 'Funcionários',
+  funcionarios: 'Equipe',
   'registro-de-ponto': 'Registro de Ponto',
   'escala-de-trabalho': 'Escala de Trabalho',
   'folha-de-pagamento': 'Folha de Pagamento',

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalFuncionario } from './modal-funcionario'
@@ -53,6 +53,83 @@ const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> =
   ativo:       { label: 'Ativo',       bg: '#E9F7EF', color: '#1E8449' },
   inativo:     { label: 'Inativo',     bg: '#F4F6F7', color: '#717D7E' },
   demitido:    { label: 'Demitido',    bg: '#FDEDEC', color: '#C0392B' },
+}
+
+function ThreeDotMenu({ onView, onEdit, onDelete, loading }: {
+  onView: () => void
+  onEdit: () => void
+  onDelete: () => void
+  loading: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    setOpen((v) => !v)
+  }
+
+  return (
+    <div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={handleOpen}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        aria-label="Opções"
+      >
+        ···
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onView() }}
+          >
+            Visualizar
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onEdit() }}
+          >
+            Editar
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: 'var(--color-error)' }}
+            onClick={() => { setOpen(false); onDelete() }}
+            disabled={loading}
+          >
+            {loading ? 'Excluindo…' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 interface Props {
@@ -121,7 +198,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Controle de Funcionários
+            Equipe
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
             Cadastro e acompanhamento da equipe CLT
@@ -231,9 +308,13 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
 
                   {/* Ações */}
                   <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-1 justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => openView(emp)}>🔍</Button>
-                      <Button variant="danger" size="sm" loading={deletingId === emp.id} onClick={() => handleDelete(emp)}>✕</Button>
+                    <div className="flex justify-end">
+                      <ThreeDotMenu
+                        onView={() => openView(emp)}
+                        onEdit={() => openEdit(emp)}
+                        onDelete={() => handleDelete(emp)}
+                        loading={deletingId === emp.id}
+                      />
                     </div>
                   </td>
                 </tr>
