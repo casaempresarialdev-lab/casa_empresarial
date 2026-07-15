@@ -36,8 +36,9 @@ function isNearExpiry(vencimento: string | null) {
   return diff > 0 && diff < 30 * 24 * 60 * 60 * 1000
 }
 
-function ThreeDotMenu({ onView, onDelete, loadingView, loadingDelete }: {
+function ThreeDotMenu({ onView, onEdit, onDelete, loadingView, loadingDelete }: {
   onView: () => void
+  onEdit: () => void
   onDelete: () => void
   loadingView: boolean
   loadingDelete: boolean
@@ -93,6 +94,14 @@ function ThreeDotMenu({ onView, onDelete, loadingView, loadingDelete }: {
           </button>
           <button
             type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onEdit() }}
+          >
+            Editar
+          </button>
+          <button
+            type="button"
             className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
             style={{ color: 'var(--color-error)' }}
             onClick={() => { setOpen(false); onDelete() }}
@@ -114,6 +123,7 @@ interface Props {
 export function DocsClient({ documents, companyId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingDoc, setEditingDoc] = useState<Document | null>(null)
   const [search, setSearch] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
@@ -158,7 +168,7 @@ export function DocsClient({ documents, companyId }: Props) {
             Armazene e organize os documentos da empresa
           </p>
         </div>
-        <Button onClick={() => setModalOpen(true)}>Adicionar</Button>
+        <Button onClick={() => { setEditingDoc(null); setModalOpen(true) }}>Adicionar</Button>
       </div>
 
       <div className="mb-4">
@@ -233,6 +243,7 @@ export function DocsClient({ documents, companyId }: Props) {
                   <div className="flex justify-end">
                     <ThreeDotMenu
                       onView={() => handleView(doc)}
+                      onEdit={() => { setEditingDoc(doc); setModalOpen(true) }}
                       onDelete={() => handleDelete(doc)}
                       loadingView={downloadingId === doc.id}
                       loadingDelete={deletingId === doc.id}
@@ -247,8 +258,9 @@ export function DocsClient({ documents, companyId }: Props) {
 
       <ModalDocument
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setEditingDoc(null) }}
         companyId={companyId}
+        document={editingDoc}
       />
     </>
   )

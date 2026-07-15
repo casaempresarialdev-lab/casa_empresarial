@@ -55,6 +55,34 @@ export async function uploadDocumentAction(
   return {}
 }
 
+export async function updateDocumentAction(
+  id: string,
+  companyId: string,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+  const descricao = formData.get('descricao') as string | null
+  const vencimento = formData.get('vencimento') as string | null
+  const observacao = formData.get('observacao') as string | null
+
+  const { error } = await admin
+    .from('documents')
+    .update({
+      descricao: descricao || null,
+      vencimento: vencimento || null,
+      observacao: observacao || null,
+    })
+    .eq('id', id)
+    .eq('company_id', companyId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/admin/documentacao')
+  return {}
+}
+
 export async function deleteDocumentAction(
   id: string,
   companyId: string,
