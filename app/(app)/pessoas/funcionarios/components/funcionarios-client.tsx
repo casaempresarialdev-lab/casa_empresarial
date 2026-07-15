@@ -250,7 +250,9 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
             <tr>
               <th style={{ ...TH, textAlign: 'left', minWidth: 200 }}>Nome</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 130 }}>Telefone</th>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 180 }}>E-mail</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 140 }}>Cargo</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Salário</th>
               <th style={{ ...TH, textAlign: 'center', minWidth: 130 }}>Contrato</th>
               <th style={{ ...TH, minWidth: 70 }} />
             </tr>
@@ -258,7 +260,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={7} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                   {tab === 'ativos' ? 'Nenhum funcionário ativo cadastrado.' : 'Nenhum funcionário inativo.'}
                 </td>
               </tr>
@@ -271,13 +273,9 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
 
               return (
                 <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
-                  {/* Nome + status */}
+                  {/* Nome */}
                   <td className="px-3 py-2.5">
                     <p className="font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</p>
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs mt-0.5"
-                      style={{ backgroundColor: statusCfg.bg, color: statusCfg.color, fontSize: '0.62rem' }}>
-                      {statusCfg.label}
-                    </span>
                   </td>
 
                   {/* Telefone */}
@@ -285,9 +283,21 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
                     {emp.telefone ?? '—'}
                   </td>
 
+                  {/* E-mail */}
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {emp.email ?? '—'}
+                  </td>
+
                   {/* Cargo */}
                   <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                     {emp.cargo ?? '—'}
+                  </td>
+
+                  {/* Salário */}
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)', textAlign: 'right' }}>
+                    {emp.salario != null
+                      ? emp.salario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                      : '—'}
                   </td>
 
                   {/* Tipo + Status Contrato */}
@@ -326,7 +336,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
           {rows.length > 0 && (
             <tfoot>
               <tr style={{ backgroundColor: 'var(--color-bg-surface)', borderTop: '2px solid #E5E7EB' }}>
-                <td className="px-3 py-2 text-xs font-bold" colSpan={5} style={{ color: 'var(--color-text-secondary)' }}>
+                <td className="px-3 py-2 text-xs font-bold" colSpan={7} style={{ color: 'var(--color-text-secondary)' }}>
                   {rows.length} {tab === 'ativos' ? 'funcionário' : 'inativo'}{rows.length !== 1 ? 's' : ''}
                 </td>
               </tr>
