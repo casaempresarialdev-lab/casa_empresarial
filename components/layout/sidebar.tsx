@@ -7,11 +7,6 @@ import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   {
-    label: 'Dashboard',
-    href: '/dashboard',
-    icon: '⊞',
-  },
-  {
     label: 'Administrativo',
     icon: '🏢',
     children: [
