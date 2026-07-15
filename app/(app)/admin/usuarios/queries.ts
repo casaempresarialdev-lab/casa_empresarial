@@ -10,6 +10,13 @@ export type MemberWithProfile = {
     name: string | null
     cpf: string | null
     avatar_url: string | null
+    cep: string | null
+    uf: string | null
+    cidade: string | null
+    logradouro: string | null
+    bairro: string | null
+    numero: string | null
+    complemento: string | null
   } | null
 }
 
@@ -26,7 +33,7 @@ export async function getCompanyMembers(companyId: string): Promise<MemberWithPr
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('company_members')
-    .select('id, role, status, created_at, profile_id, profiles!profile_id(name, cpf, avatar_url)')
+    .select('id, role, status, created_at, profile_id, profiles!profile_id(name, cpf, avatar_url, cep, uf, cidade, logradouro, bairro, numero, complemento)')
     .eq('company_id', companyId)
     .order('created_at', { ascending: true })
 

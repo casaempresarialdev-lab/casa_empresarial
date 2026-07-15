@@ -19,7 +19,6 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Administrativo',
     icon: '🏢',
     children: [
-      { label: 'Usuários', href: '/admin/usuarios' },
       { label: 'Quadro Societário', href: '/admin/quadro-societario' },
       { label: 'Logins e Senhas', href: '/admin/logins-senhas' },
       { label: 'Documentação', href: '/admin/documentacao' },

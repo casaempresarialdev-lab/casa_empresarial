@@ -140,6 +140,75 @@ export async function updateMemberRoleAction(memberId: string, role: string) {
   return { success: true }
 }
 
+export async function updateMemberProfileAction(
+  profileId: string,
+  companyId: string,
+  formData: {
+    name: string
+    avatarFile?: File | null
+    cep?: string
+    uf?: string
+    cidade?: string
+    logradouro?: string
+    bairro?: string
+    numero?: string
+    complemento?: string
+  }
+) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+
+  // Verificar se o usuário atual é owner da empresa
+  const { data: currentMember } = await admin
+    .from('company_members')
+    .select('role')
+    .eq('company_id', companyId)
+    .eq('profile_id', user.id)
+    .eq('status', 'active')
+    .single()
+
+  if (currentMember?.role !== 'owner') {
+    return { error: 'Apenas proprietários podem editar perfis de membros.' }
+  }
+
+  let avatar_url: string | undefined
+
+  if (formData.avatarFile) {
+    const ext = formData.avatarFile.name.split('.').pop() ?? 'jpg'
+    const path = `${profileId}/avatar.${ext}`
+    const arrayBuffer = await formData.avatarFile.arrayBuffer()
+
+    const { error: uploadErr } = await admin.storage
+      .from('avatars')
+      .upload(path, arrayBuffer, { contentType: formData.avatarFile.type, upsert: true })
+
+    if (uploadErr) return { error: `Erro ao fazer upload: ${uploadErr.message}` }
+
+    const { data: urlData } = admin.storage.from('avatars').getPublicUrl(path)
+    avatar_url = `${urlData.publicUrl}?t=${Date.now()}`
+  }
+
+  const updates: Record<string, unknown> = {
+    name: formData.name,
+    cep: formData.cep || null,
+    uf: formData.uf || null,
+    cidade: formData.cidade || null,
+    logradouro: formData.logradouro || null,
+    bairro: formData.bairro || null,
+    numero: formData.numero || null,
+    complemento: formData.complemento || null,
+  }
+  if (avatar_url) updates.avatar_url = avatar_url
+
+  const { error } = await admin.from('profiles').update(updates).eq('id', profileId)
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin/usuarios')
+  return { success: true, avatar_url }
+}
+
 export async function removeMemberAction(memberId: string, companyId: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { RoleBadge, StatusBadge } from '@/components/ui/badge'
@@ -21,6 +21,7 @@ interface Props {
   invitations: Invitation[]
   companyId: string
   currentProfileId: string
+  currentUserRole: string
 }
 
 function cpfMask(cpf: string | null) {
@@ -29,7 +30,58 @@ function cpfMask(cpf: string | null) {
   return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
 }
 
-export function UsuariosClient({ members, invitations, companyId, currentProfileId }: Props) {
+function ThreeDotMenu({ onEdit, onRemove, loading }: { onEdit: () => void; onRemove: () => void; loading: boolean }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        aria-label="Opções"
+      >
+        ···
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 w-36 rounded-xl border shadow-lg py-1 z-20"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)' }}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onEdit() }}
+          >
+            Editar
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: 'var(--color-error)' }}
+            onClick={() => { setOpen(false); onRemove() }}
+            disabled={loading}
+          >
+            {loading ? 'Removendo…' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function UsuariosClient({ members, invitations, companyId, currentProfileId, currentUserRole }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<MemberWithProfile | null>(null)
@@ -111,10 +163,29 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
                 style={{ borderColor: 'var(--color-bg-surface)', opacity: m.status !== 'active' ? 0.5 : 1 }}
               >
                 <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                  {m.profiles?.name ?? '—'}
-                  {m.profile_id === currentProfileId && (
-                    <span className="ml-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>(você)</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {m.profiles?.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={m.profiles.avatar_url}
+                        alt={m.profiles.name ?? ''}
+                        className="w-7 h-7 rounded-full object-cover shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                        style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+                      >
+                        {m.profiles?.name?.charAt(0).toUpperCase() ?? '?'}
+                      </div>
+                    )}
+                    <span>
+                      {m.profiles?.name ?? '—'}
+                      {m.profile_id === currentProfileId && (
+                        <span className="ml-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>(você)</span>
+                      )}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
                   {cpfMask(m.profiles?.cpf ?? null)}
@@ -125,23 +196,28 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
                   {formatDate(m.created_at)}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 justify-end">
-                    {m.status === 'active' && (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>Editar</Button>
-                        {m.profile_id !== currentProfileId && (
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            loading={removingId === m.id}
-                            onClick={() => handleRemove(m)}
-                          >
-                            Remover
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
+                  {m.status === 'active' && m.profile_id !== currentProfileId && (
+                    <div className="flex justify-end">
+                      <ThreeDotMenu
+                        onEdit={() => openEdit(m)}
+                        onRemove={() => handleRemove(m)}
+                        loading={removingId === m.id}
+                      />
+                    </div>
+                  )}
+                  {m.status === 'active' && m.profile_id === currentProfileId && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
+                        style={{ color: 'var(--color-text-muted)' }}
+                        onClick={() => openEdit(m)}
+                        aria-label="Editar perfil"
+                      >
+                        ···
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -204,6 +280,7 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
         onClose={() => setModalOpen(false)}
         companyId={companyId}
         member={editingMember}
+        currentUserRole={currentUserRole}
       />
     </>
   )
