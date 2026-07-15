@@ -53,7 +53,7 @@ export function Breadcrumb() {
     href: '/' + segments.slice(0, i + 1).join('/'),
   }))
 
-  if (crumbs.length === 0) return null
+  if (crumbs.length === 0 || pathname === '/dashboard') return null
 
   return (
     <nav aria-label="Breadcrumb">
