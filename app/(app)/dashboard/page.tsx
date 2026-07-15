@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { formatCurrency } from '@/lib/utils'
-import { MetricCard } from '@/components/modules/dashboard/metric-card'
 import { ModuleSection } from '@/components/modules/dashboard/module-section'
 import { AlertList, type AlertItem } from '@/components/modules/dashboard/alert-list'
 
@@ -159,7 +158,6 @@ export default async function DashboardPage() {
   const comprasAbertas = comprasAbertasCount ?? 0
   const vendasAbertas  = vendasAbertasCount ?? 0
   const totalProdutos  = produtosCount ?? 0
-  const pedidosAbertos = comprasAbertas + vendasAbertas
 
   // Montar alertas ordenados por severidade
   const alerts: AlertItem[] = []
@@ -209,46 +207,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-
-      {/* 4 KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Saldo Total"
-          value={formatCurrency(saldoTotal)}
-          subtitle="Soma das contas bancárias"
-          icon="🏦"
-          href="/financeiro/contas-cartoes"
-          empty={saldoTotal === 0}
-        />
-        <MetricCard
-          title="Receitas do Mês"
-          value={formatCurrency(totalReceitas)}
-          subtitle="Recebimentos confirmados"
-          icon="📈"
-          href="/financeiro/fluxo-de-caixa/recebimentos"
-          accent="green"
-          empty={totalReceitas === 0}
-        />
-        <MetricCard
-          title="Funcionários Ativos"
-          value={String(empAtivos)}
-          subtitle={empAdmissao > 0 ? `+ ${empAdmissao} em admissão/experiência` : 'em dia'}
-          icon="👥"
-          href="/pessoas/funcionarios"
-          empty={empAtivos === 0}
-        />
-        <MetricCard
-          title="Pedidos Abertos"
-          value={String(pedidosAbertos)}
-          subtitle={pedidosAbertos > 0
-            ? `${comprasAbertas} compra · ${vendasAbertas} venda`
-            : 'Nenhum pendente'}
-          icon="📦"
-          href="/operacional/pedidos-compra"
-          accent={pedidosAbertos > 0 ? 'blue' : 'default'}
-          empty={pedidosAbertos === 0}
-        />
-      </div>
 
       {/* 3 seções por módulo */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
