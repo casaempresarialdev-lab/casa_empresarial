@@ -158,7 +158,7 @@ export function DocsClient({ documents, companyId }: Props) {
             Armazene e organize os documentos da empresa
           </p>
         </div>
-        <Button onClick={() => setModalOpen(true)}>+ Novo documento</Button>
+        <Button onClick={() => setModalOpen(true)}>Adicionar</Button>
       </div>
 
       <div className="mb-4">
