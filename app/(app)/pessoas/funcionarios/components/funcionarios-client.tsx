@@ -51,6 +51,8 @@ const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> =
   admissao:    { label: 'Admissão',    bg: '#EBF5FB', color: '#2471A3' },
   experiencia: { label: 'Experiência', bg: '#FEF9E7', color: '#9A7D0A' },
   ativo:       { label: 'Ativo',       bg: '#E9F7EF', color: '#1E8449' },
+  ferias:      { label: 'Férias',      bg: '#EAF4FB', color: '#1A5276' },
+  afastado:    { label: 'Afastado',    bg: '#F5EEF8', color: '#7D3C98' },
   inativo:     { label: 'Inativo',     bg: '#F4F6F7', color: '#717D7E' },
   demitido:    { label: 'Demitido',    bg: '#FDEDEC', color: '#C0392B' },
 }
@@ -147,11 +149,11 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
   const [viewOpen, setViewOpen]   = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const ativos   = employees.filter(e => ['admissao', 'experiencia', 'ativo'].includes(e.status))
+  const ativos   = employees.filter(e => ['admissao', 'experiencia', 'ativo', 'ferias', 'afastado'].includes(e.status))
   const inativos = employees.filter(e => ['inativo', 'demitido'].includes(e.status))
   const rows     = tab === 'ativos' ? ativos : inativos
 
-  const emFerias = ativos.filter(e => getFeriasAlert(e) !== null).length
+  const countByStatus = (s: string) => employees.filter(e => e.status === s).length
 
   function openView(e: Employee) { setViewing(e); setViewOpen(true) }
   function openEdit(e: Employee) { setEditing(e); setModalOpen(true) }
@@ -208,27 +210,27 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
 
       {/* Cards de métricas */}
       <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Funcionários ativos</p>
-          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{ativos.length}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {ativos.length === 1 ? 'funcionário ativo' : 'funcionários ativos'}
-          </p>
-        </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Férias</p>
-          <p className="text-2xl font-bold mt-1" style={{ color: emFerias > 0 ? '#C0392B' : 'var(--color-text-primary)' }}>{emFerias}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {emFerias === 0 ? 'nenhum em férias' : emFerias === 1 ? 'funcionário em férias' : 'funcionários em férias'}
-          </p>
-        </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Inativos</p>
-          <p className="text-2xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{inativos.length}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {inativos.length === 0 ? 'nenhum inativo' : inativos.length === 1 ? 'funcionário inativo' : 'funcionários inativos'}
-          </p>
-        </div>
+        {([
+          { key: 'admissao',    label: 'Em Admissão'  },
+          { key: 'ativo',       label: 'Ativo'         },
+          { key: 'ferias',      label: 'Férias'        },
+          { key: 'experiencia', label: 'Experiência'   },
+          { key: 'afastado',    label: 'Afastado'      },
+          { key: 'inativo',     label: 'Inativo'       },
+        ] as const).map(({ key, label }) => {
+          const cfg   = STATUS_CFG[key]
+          const count = countByStatus(key)
+          return (
+            <div key={key} className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
+              <p className="text-2xl font-bold mt-1" style={{ color: count > 0 ? cfg.color : 'var(--color-text-primary)' }}>{count}</p>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs mt-1"
+                style={{ backgroundColor: cfg.bg, color: cfg.color, fontSize: '0.62rem' }}>
+                {cfg.label}
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       {/* Tabs */}
