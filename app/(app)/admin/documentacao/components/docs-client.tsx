@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useRef, useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { uploadDocumentAction, deleteDocumentAction, getSignedUrlAction } from '../actions'
@@ -27,6 +27,76 @@ function fileIcon(tipo: string | null) {
   if (tipo.startsWith('audio/')) return '🎵'
   if (tipo.includes('zip') || tipo.includes('rar') || tipo.includes('compressed')) return '📦'
   return '📎'
+}
+
+function ThreeDotMenu({ onView, onDelete, loadingView, loadingDelete }: {
+  onView: () => void
+  onDelete: () => void
+  loadingView: boolean
+  loadingDelete: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    setOpen((v) => !v)
+  }
+
+  return (
+    <div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={handleOpen}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        aria-label="Opções"
+      >
+        ···
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onView() }}
+            disabled={loadingView}
+          >
+            {loadingView ? 'Abrindo…' : 'Visualizar'}
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: 'var(--color-error)' }}
+            onClick={() => { setOpen(false); onDelete() }}
+            disabled={loadingDelete}
+          >
+            {loadingDelete ? 'Excluindo…' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 interface Props {
@@ -169,23 +239,13 @@ export function DocsClient({ documents, companyId }: Props) {
                   {formatDate(doc.created_at)}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      loading={downloadingId === doc.id}
-                      onClick={() => handleDownload(doc)}
-                    >
-                      Download
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      loading={deletingId === doc.id}
-                      onClick={() => handleDelete(doc)}
-                    >
-                      Excluir
-                    </Button>
+                  <div className="flex justify-end">
+                    <ThreeDotMenu
+                      onView={() => handleDownload(doc)}
+                      onDelete={() => handleDelete(doc)}
+                      loadingView={downloadingId === doc.id}
+                      loadingDelete={deletingId === doc.id}
+                    />
                   </div>
                 </td>
               </tr>
