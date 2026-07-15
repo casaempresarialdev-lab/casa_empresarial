@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalEscala } from './modal-escala'
 import { ModalEscalaMes } from './modal-escala-mes'
 import { deleteScheduleAction } from '../actions'
 import type { WorkSchedule } from '../queries'
+import { exportListaPDF, exportCalendarioPDF, exportExcel } from '@/lib/export/escala-export'
 
 interface Props {
   schedules: WorkSchedule[]
@@ -46,6 +47,68 @@ function getFirstDayOfWeek(ano: number, mes: number) {
   return new Date(ano, mes - 1, 1).getDay()
 }
 
+function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    setOpen((v) => !v)
+  }
+
+  return (
+    <div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={handleOpen}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
+        style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
+      >
+        Exportar ▾
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="fixed w-40 rounded-xl border shadow-lg py-1 z-50"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onPDF() }}
+          >
+            PDF
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onExcel() }}
+          >
+            Excel
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function EscalaClient({ schedules, employees, companyId, mes, ano }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
@@ -55,6 +118,19 @@ export function EscalaClient({ schedules, employees, companyId, mes, ano }: Prop
   const [filterEmployee, setFilterEmployee] = useState('')
   const [view, setView] = useState<'calendario' | 'lista'>('calendario')
   const [preselectedDate, setPreselectedDate] = useState('')
+  const calendarRef = useRef<HTMLDivElement>(null)
+
+  async function handleExportPDF() {
+    if (view === 'lista') {
+      await exportListaPDF(filtered, mes, ano)
+    } else {
+      if (calendarRef.current) await exportCalendarioPDF(calendarRef.current, mes, ano)
+    }
+  }
+
+  async function handleExportExcel() {
+    await exportExcel(filtered, mes, ano)
+  }
 
   function navMes(delta: number) {
     let m = mes + delta
@@ -133,6 +209,7 @@ export function EscalaClient({ schedules, employees, companyId, mes, ano }: Prop
               </button>
             ))}
           </div>
+          <ExportMenu onPDF={handleExportPDF} onExcel={handleExportExcel} />
           <Button variant="ghost" onClick={() => setModalMesOpen(true)}>Adicionar</Button>
         </div>
       </div>
@@ -167,7 +244,7 @@ export function EscalaClient({ schedules, employees, companyId, mes, ano }: Prop
 
       {/* View: Calendário */}
       {view === 'calendario' && (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div ref={calendarRef} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
           {/* Cabeçalho dias da semana */}
           <div className="grid grid-cols-7 border-b" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
             {DIAS_SEMANA.map(d => (
