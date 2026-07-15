@@ -17,8 +17,6 @@ export default async function EmpresaPage() {
   const company = companyId ? await getCompany(companyId) : null
 
   return (
-    <div className="max-w-2xl">
-      <EmpresaForm company={company} />
-    </div>
+    <EmpresaForm company={company} />
   )
 }

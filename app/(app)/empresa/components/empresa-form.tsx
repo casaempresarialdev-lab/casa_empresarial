@@ -4,7 +4,6 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import Image from 'next/image'
 import { createCompanyAction, updateCompanyAction } from '../actions'
 import { companySchema, type CompanyData } from '@/lib/validations/company'
 import { Input } from '@/components/ui/input'
@@ -37,16 +36,22 @@ function maskCep(value: string) {
   return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function Card({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold uppercase tracking-wider pt-2" style={{ color: 'var(--color-text-muted)' }}>
+    <div className="bg-white rounded-2xl border p-6 flex flex-col gap-4"
+      style={{ borderColor: 'var(--color-bg-surface)' }}>
       {children}
-    </p>
+    </div>
   )
 }
 
-function Divider() {
-  return <hr style={{ borderColor: 'var(--color-bg-surface)' }} />
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-bold uppercase tracking-wider pb-1 border-b"
+      style={{ color: 'var(--color-primary-darker)', borderColor: 'var(--color-bg-surface)', letterSpacing: '0.06em' }}>
+      {children}
+    </p>
+  )
 }
 
 interface Props {
@@ -55,12 +60,12 @@ interface Props {
 
 export function EmpresaForm({ company }: Props) {
   const isEdit = !!company
-
   const router = useRouter()
+
   const [serverError, setServerError] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
-  const [cepLoading, setCepLoading] = useState(false)
-  const [isPending, startTransition] = useTransition()
+  const [successMsg, setSuccessMsg]   = useState<string | null>(null)
+  const [cepLoading, setCepLoading]   = useState(false)
+  const [isPending, startTransition]  = useTransition()
 
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(company?.logo_url ?? null)
@@ -71,40 +76,35 @@ export function EmpresaForm({ company }: Props) {
   )
 
   const cnpjDisplay = company ? formatCNPJ(company.cnpj) : ''
-  const cepDisplay = company?.cep ? maskCep(company.cep) : ''
+  const cepDisplay  = company?.cep ? maskCep(company.cep) : ''
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<CompanyData>({
-    resolver: zodResolver(companySchema),
-    defaultValues: company
-      ? {
-          cnpj: cnpjDisplay,
-          razao_social: company.razao_social,
-          nome_fantasia: company.nome_fantasia ?? '',
-          regime_tributario: (company.regime_tributario as CompanyData['regime_tributario']) ?? undefined,
-          telefone: company.telefone ?? '',
-          email: company.email ?? '',
-          inscricao_estadual: company.inscricao_estadual ?? '',
-          inscricao_municipal: company.inscricao_municipal ?? '',
-          cor_primaria: company.cor_primaria ?? '#C19A6B',
-          cep: cepDisplay,
-          uf: company.uf ?? '',
-          cidade: company.cidade ?? '',
-          logradouro: company.logradouro ?? '',
-          bairro: company.bairro ?? '',
-          numero: company.numero ?? '',
-          complemento: company.complemento ?? '',
-        }
-      : { cor_primaria: '#C19A6B' },
-  })
+  const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } =
+    useForm<CompanyData>({
+      resolver: zodResolver(companySchema),
+      defaultValues: company
+        ? {
+            cnpj:                      cnpjDisplay,
+            razao_social:              company.razao_social,
+            nome_fantasia:             company.nome_fantasia ?? '',
+            regime_tributario:         (company.regime_tributario as CompanyData['regime_tributario']) ?? undefined,
+            telefone:                  company.telefone ?? '',
+            email:                     company.email ?? '',
+            inscricao_estadual:        company.inscricao_estadual ?? '',
+            inscricao_municipal:       company.inscricao_municipal ?? '',
+            cor_primaria:              company.cor_primaria ?? '#C19A6B',
+            cep:                       cepDisplay,
+            uf:                        company.uf ?? '',
+            cidade:                    company.cidade ?? '',
+            logradouro:                company.logradouro ?? '',
+            bairro:                    company.bairro ?? '',
+            numero:                    company.numero ?? '',
+            complemento:               company.complemento ?? '',
+          }
+        : { cor_primaria: '#C19A6B' },
+    })
 
   const corAtual = watch('cor_primaria') ?? '#C19A6B'
-  const loading = isSubmitting || isPending
+  const loading  = isSubmitting || isPending
 
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -121,13 +121,13 @@ export function EmpresaForm({ company }: Props) {
     if (digits.length !== 8) return
     setCepLoading(true)
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      const res  = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
       const json = await res.json()
       if (!json.erro) {
         setValue('logradouro', json.logradouro || '', { shouldValidate: false })
-        setValue('bairro', json.bairro || '', { shouldValidate: false })
-        setValue('cidade', json.localidade || '', { shouldValidate: false })
-        setValue('uf', json.uf || '', { shouldValidate: false })
+        setValue('bairro',     json.bairro     || '', { shouldValidate: false })
+        setValue('cidade',     json.localidade || '', { shouldValidate: false })
+        setValue('uf',         json.uf         || '', { shouldValidate: false })
       }
     } catch { /* usuário preenche manualmente */ }
     finally { setCepLoading(false) }
@@ -162,8 +162,11 @@ export function EmpresaForm({ company }: Props) {
     })
   }
 
+  const selectCls = 'h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]'
+  const selectSty = { borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }
+
   return (
-    <div>
+    <div className="max-w-3xl">
       <div className="mb-6">
         <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
           Minha Empresa
@@ -173,11 +176,11 @@ export function EmpresaForm({ company }: Props) {
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border p-8" style={{ borderColor: 'var(--color-bg-surface)' }}>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
 
-          {/* ── Dados da empresa ── */}
-          <SectionTitle>Dados da empresa</SectionTitle>
+        {/* 1 — Dados da empresa */}
+        <Card>
+          <SectionTitle>Dados da Empresa</SectionTitle>
 
           <div className="flex flex-col gap-1">
             <Input
@@ -197,119 +200,104 @@ export function EmpresaForm({ company }: Props) {
               })}
             />
             {isEdit && (
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>O CNPJ não pode ser alterado após o cadastro.</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                O CNPJ não pode ser alterado após o cadastro.
+              </p>
             )}
           </div>
 
-          <Input label="Razão Social" type="text" placeholder="Nome oficial da empresa" error={errors.razao_social?.message} {...register('razao_social')} />
-          <Input label="Nome Fantasia (opcional)" type="text" placeholder="Como a empresa é conhecida" {...register('nome_fantasia')} />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Razão Social" type="text" placeholder="Nome oficial da empresa"
+              error={errors.razao_social?.message} {...register('razao_social')} />
+            <Input label="Nome Fantasia (opcional)" type="text" placeholder="Como a empresa é conhecida"
+              {...register('nome_fantasia')} />
+          </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Regime Tributário (opcional)</label>
-            <select
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
-              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
-              {...register('regime_tributario')}
-            >
-              <option value="">Selecione...</option>
-              <option value="mei">MEI</option>
-              <option value="simples_nacional">Simples Nacional</option>
-              <option value="lucro_presumido">Lucro Presumido</option>
-              <option value="lucro_real">Lucro Real</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                Regime Tributário (opcional)
+              </label>
+              <select className={selectCls} style={selectSty} {...register('regime_tributario')}>
+                <option value="">Selecione...</option>
+                <option value="mei">MEI</option>
+                <option value="simples_nacional">Simples Nacional</option>
+                <option value="lucro_presumido">Lucro Presumido</option>
+                <option value="lucro_real">Lucro Real</option>
+              </select>
+            </div>
+            <div />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Input label="Telefone (opcional)" type="tel" placeholder="(11) 99999-9999" {...register('telefone')} />
-            <Input label="E-mail da empresa (opcional)" type="email" placeholder="empresa@email.com" error={errors.email?.message} {...register('email')} />
+            <Input label="E-mail da empresa (opcional)" type="email" placeholder="empresa@email.com"
+              error={errors.email?.message} {...register('email')} />
+          </div>
+        </Card>
+
+        {/* 2 — Documentos Fiscais */}
+        <Card>
+          <SectionTitle>Documentos Fiscais</SectionTitle>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="IE — Inscrição Estadual (opcional)" type="text" placeholder="000.000.000.000"
+              {...register('inscricao_estadual')} />
+            <Input label="IM — Inscrição Municipal (opcional)" type="text" placeholder="00000000"
+              {...register('inscricao_municipal')} />
+          </div>
+        </Card>
+
+        {/* 3 — Endereço */}
+        <Card>
+          <SectionTitle>Endereço (opcional)</SectionTitle>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>CEP</label>
+                <a href="https://buscacepinter.correios.com.br/app/endereco/index.php"
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-xs hover:underline" style={{ color: 'var(--color-primary-dark)' }}>
+                  Não sabe?
+                </a>
+              </div>
+              <input
+                type="text" placeholder="00000-000" inputMode="numeric" maxLength={9}
+                className={selectCls} style={selectSty}
+                {...register('cep', {
+                  onChange: (e) => { e.target.value = maskCep(e.target.value); setValue('cep', e.target.value, { shouldValidate: false }) },
+                  onBlur:   (e) => handleCepBlur(e.target.value),
+                })}
+              />
+              {cepLoading && <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Buscando...</p>}
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>UF</label>
+              <select className={selectCls} style={selectSty} {...register('uf')}>
+                <option value="">UF</option>
+                {UF_OPTIONS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+              </select>
+            </div>
+
+            <Input label="Cidade" type="text" placeholder="Cidade" {...register('cidade')} />
           </div>
 
-          <Divider />
-
-          {/* ── Documentos fiscais ── */}
-          <SectionTitle>Documentos Fiscais</SectionTitle>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <Input label="Logradouro" type="text" placeholder="Rua, Avenida, etc." {...register('logradouro')} />
+            </div>
+            <Input label="Número" type="text" placeholder="Número" {...register('numero')} />
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Input label="IE — Inscrição Estadual (opcional)" type="text" placeholder="000.000.000.000" {...register('inscricao_estadual')} />
-            <Input label="IM — Inscrição Municipal (opcional)" type="text" placeholder="00000000" {...register('inscricao_municipal')} />
+            <Input label="Bairro" type="text" placeholder="Bairro" {...register('bairro')} />
+            <Input label="Complemento" type="text" placeholder="Apto, sala..." {...register('complemento')} />
           </div>
+        </Card>
 
-          <Divider />
-
-          {/* ── Identidade Visual ── */}
-          <SectionTitle>Identidade Visual</SectionTitle>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Logo da empresa (opcional)
-            </label>
-            <div className="flex items-center gap-4">
-              {logoPreview ? (
-                <Image src={logoPreview} alt="Preview logo" width={56} height={56} className="w-14 h-14 rounded-lg object-contain border" style={{ borderColor: 'var(--color-bg-surface)' }} />
-              ) : (
-                <div className="w-14 h-14 rounded-lg border flex items-center justify-center text-2xl" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
-                  🏢
-                </div>
-              )}
-              <label
-                className="cursor-pointer text-sm px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50"
-                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
-              >
-                {logoPreview ? 'Trocar imagem' : 'Selecionar imagem'}
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  className="hidden"
-                  onChange={handleLogoChange}
-                />
-              </label>
-              {logoPreview && (
-                <button type="button" className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => { setLogoPreview(null); if (logoInputRef.current) logoInputRef.current.value = '' }}>
-                  Remover
-                </button>
-              )}
-            </div>
-            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>PNG, JPG ou SVG — máx. 5 MB</p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Cor da empresa (opcional)
-            </label>
-            <div className="flex items-center gap-3 flex-wrap">
-              {COR_PRESETS.map((cor) => (
-                <button
-                  key={cor}
-                  type="button"
-                  onClick={() => setValue('cor_primaria', cor)}
-                  className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
-                  style={{
-                    backgroundColor: cor,
-                    borderColor: corAtual === cor ? 'var(--color-text-primary)' : 'transparent',
-                  }}
-                  title={cor}
-                />
-              ))}
-              <label className="relative cursor-pointer" title="Cor personalizada">
-                <div
-                  className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold overflow-hidden"
-                  style={{ backgroundColor: corAtual, borderColor: 'var(--color-bg-surface)' }}
-                >
-                  <input
-                    type="color"
-                    className="absolute opacity-0 w-full h-full cursor-pointer"
-                    {...register('cor_primaria')}
-                  />
-                </div>
-              </label>
-              <span className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{corAtual}</span>
-            </div>
-          </div>
-
-          <Divider />
-
-          {/* ── Certificado Digital ── */}
+        {/* 4 — Certificado Digital */}
+        <Card>
           <SectionTitle>Certificado Digital (opcional)</SectionTitle>
 
           <div className="flex flex-col gap-1">
@@ -322,98 +310,104 @@ export function EmpresaForm({ company }: Props) {
             >
               <span>📎</span>
               <span className="truncate">{certName ?? 'Selecionar arquivo...'}</span>
-              <input
-                ref={certInputRef}
-                type="file"
-                accept=".pfx,.p12,application/x-pkcs12"
-                className="hidden"
-                onChange={handleCertChange}
-              />
+              <input ref={certInputRef} type="file" accept=".pfx,.p12,application/x-pkcs12"
+                className="hidden" onChange={handleCertChange} />
             </label>
           </div>
 
           <PasswordInput
-            label={isEdit && company.certificado_digital_url ? 'Nova senha do certificado (deixe em branco para manter)' : 'Senha do certificado digital (opcional)'}
+            label={isEdit && company.certificado_digital_url
+              ? 'Nova senha do certificado (deixe em branco para manter)'
+              : 'Senha do certificado digital (opcional)'}
             placeholder="••••••••"
             autoComplete="off"
             {...register('certificado_digital_senha')}
           />
+        </Card>
 
-          <Divider />
+        {/* 5 — Identidade Visual */}
+        <Card>
+          <SectionTitle>Identidade Visual</SectionTitle>
 
-          {/* ── Endereço ── */}
-          <SectionTitle>Endereço (opcional)</SectionTitle>
-
+          {/* Logo */}
           <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>CEP</label>
-              <a
-                href="https://buscacepinter.correios.com.br/app/endereco/index.php"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs hover:underline"
-                style={{ color: 'var(--color-primary-dark)' }}
+            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+              Logo da empresa (opcional)
+            </label>
+            <div className="flex items-center gap-4">
+              {logoPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoPreview} alt="Preview logo"
+                  className="w-14 h-14 rounded-lg object-contain border"
+                  style={{ borderColor: 'var(--color-bg-surface)' }} />
+              ) : (
+                <div className="w-14 h-14 rounded-lg border flex items-center justify-center text-2xl"
+                  style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
+                  🏢
+                </div>
+              )}
+              <label
+                className="cursor-pointer text-sm px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
               >
-                Não sabe o CEP?
-              </a>
+                {logoPreview ? 'Trocar imagem' : 'Selecionar imagem'}
+                <input ref={logoInputRef} type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  className="hidden" onChange={handleLogoChange} />
+              </label>
+              {logoPreview && (
+                <button type="button" className="text-xs" style={{ color: 'var(--color-text-muted)' }}
+                  onClick={() => { setLogoPreview(null); if (logoInputRef.current) logoInputRef.current.value = '' }}>
+                  Remover
+                </button>
+              )}
             </div>
-            <input
-              type="text"
-              placeholder="00000-000"
-              inputMode="numeric"
-              maxLength={9}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
-              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
-              {...register('cep', {
-                onChange: (e) => { e.target.value = maskCep(e.target.value); setValue('cep', e.target.value, { shouldValidate: false }) },
-                onBlur: (e) => handleCepBlur(e.target.value),
-              })}
-            />
-            {cepLoading && <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Buscando endereço...</p>}
+            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>PNG, JPG ou SVG — máx. 5 MB</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>UF</label>
-              <select
-                className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
-                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
-                {...register('uf')}
-              >
-                <option value="">UF</option>
-                {UF_OPTIONS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <Input label="Cidade" type="text" placeholder="Cidade" {...register('cidade')} />
+          {/* Cor */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+              Cor da empresa (opcional)
+            </label>
+            <div className="flex items-center gap-3 flex-wrap">
+              {COR_PRESETS.map(cor => (
+                <button key={cor} type="button" onClick={() => setValue('cor_primaria', cor)}
+                  className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
+                  style={{ backgroundColor: cor, borderColor: corAtual === cor ? 'var(--color-text-primary)' : 'transparent' }}
+                  title={cor} />
+              ))}
+              <label className="relative cursor-pointer" title="Cor personalizada">
+                <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center overflow-hidden"
+                  style={{ backgroundColor: corAtual, borderColor: 'var(--color-bg-surface)' }}>
+                  <input type="color" className="absolute opacity-0 w-full h-full cursor-pointer"
+                    {...register('cor_primaria')} />
+                </div>
+              </label>
+              <span className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{corAtual}</span>
             </div>
           </div>
+        </Card>
 
-          <Input label="Logradouro" type="text" placeholder="Rua, Avenida, etc." {...register('logradouro')} />
-          <Input label="Bairro" type="text" placeholder="Bairro" {...register('bairro')} />
+        {successMsg && (
+          <p className="text-sm text-center py-2 px-3 rounded-lg bg-green-50 border border-green-200 text-green-700">
+            {successMsg}
+          </p>
+        )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Número" type="text" placeholder="Número" {...register('numero')} />
-            <Input label="Complemento" type="text" placeholder="Apto, sala..." {...register('complemento')} />
-          </div>
+        {serverError && (
+          <p className="text-sm text-center py-2 px-3 rounded-lg bg-red-50 border border-red-200"
+            style={{ color: 'var(--color-error)' }}>
+            {serverError}
+          </p>
+        )}
 
-          {successMsg && (
-            <p className="text-sm text-center py-2 px-3 rounded-lg bg-green-50 border border-green-200 text-green-700">
-              {successMsg}
-            </p>
-          )}
-
-          {serverError && (
-            <p className="text-sm text-center py-2 px-3 rounded-lg bg-red-50 border border-red-200" style={{ color: 'var(--color-error)' }}>
-              {serverError}
-            </p>
-          )}
-
-          <Button type="submit" loading={loading} size="lg" className="w-full mt-2">
+        <div className="flex justify-end pb-8">
+          <Button type="submit" loading={loading} size="lg">
             {isEdit ? 'Salvar alterações' : 'Cadastrar empresa'}
           </Button>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   )
 }
