@@ -9,21 +9,33 @@ import type { Credential } from '../queries'
 
 function ThreeDotMenu({ onEdit, onDelete, loading }: { onEdit: () => void; onDelete: () => void; loading: boolean }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false)
     }
     if (open) document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    setOpen((v) => !v)
+  }
+
   return (
-    <div className="relative" ref={ref}>
+    <div>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleOpen}
         className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
         style={{ color: 'var(--color-text-muted)' }}
         aria-label="Opções"
@@ -32,8 +44,9 @@ function ThreeDotMenu({ onEdit, onDelete, loading }: { onEdit: () => void; onDel
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full mt-1 w-36 rounded-xl border shadow-lg py-1 z-20"
-          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)' }}
+          ref={menuRef}
+          className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
         >
           <button
             type="button"
