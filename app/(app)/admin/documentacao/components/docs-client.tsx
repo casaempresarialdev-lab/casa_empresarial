@@ -1,21 +1,11 @@
 'use client'
 
-import { useRef, useState, useEffect, useTransition } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { uploadDocumentAction, deleteDocumentAction, getSignedUrlAction } from '../actions'
+import { ModalDocument } from './modal-document'
+import { deleteDocumentAction, getSignedUrlAction } from '../actions'
 import type { Document } from '../queries'
-
-function formatBytes(bytes: number | null) {
-  if (!bytes) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
 
 function fileIcon(tipo: string | null) {
   if (!tipo) return '📎'
@@ -27,6 +17,23 @@ function fileIcon(tipo: string | null) {
   if (tipo.startsWith('audio/')) return '🎵'
   if (tipo.includes('zip') || tipo.includes('rar') || tipo.includes('compressed')) return '📦'
   return '📎'
+}
+
+function formatDate(iso: string | null) {
+  if (!iso) return '—'
+  const [year, month, day] = iso.split('T')[0].split('-')
+  return `${day}/${month}/${year}`
+}
+
+function isExpired(vencimento: string | null) {
+  if (!vencimento) return false
+  return new Date(vencimento) < new Date()
+}
+
+function isNearExpiry(vencimento: string | null) {
+  if (!vencimento) return false
+  const diff = new Date(vencimento).getTime() - Date.now()
+  return diff > 0 && diff < 30 * 24 * 60 * 60 * 1000
 }
 
 function ThreeDotMenu({ onView, onDelete, loadingView, loadingDelete }: {
@@ -106,37 +113,20 @@ interface Props {
 
 export function DocsClient({ documents, companyId }: Props) {
   const router = useRouter()
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [modalOpen, setModalOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [isPending, startTransition] = useTransition()
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
-  const filtered = documents.filter((d) =>
-    d.nome.toLowerCase().includes(search.toLowerCase()),
-  )
-
-  function handleUploadClick() {
-    fileInputRef.current?.click()
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setErrorMsg('')
-    const formData = new FormData()
-    formData.set('file', file)
-    startTransition(async () => {
-      const result = await uploadDocumentAction(companyId, formData)
-      if (result.error) {
-        setErrorMsg(result.error)
-      } else {
-        router.refresh()
-      }
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    })
-  }
+  const filtered = documents.filter((d) => {
+    const q = search.toLowerCase()
+    return (
+      d.nome.toLowerCase().includes(q) ||
+      (d.descricao ?? '').toLowerCase().includes(q) ||
+      (d.observacao ?? '').toLowerCase().includes(q)
+    )
+  })
 
   async function handleDelete(doc: Document) {
     if (!confirm(`Excluir "${doc.nome}"?`)) return
@@ -148,7 +138,7 @@ export function DocsClient({ documents, companyId }: Props) {
     else router.refresh()
   }
 
-  async function handleDownload(doc: Document) {
+  async function handleView(doc: Document) {
     setDownloadingId(doc.id)
     setErrorMsg('')
     const result = await getSignedUrlAction(doc.id, companyId)
@@ -168,29 +158,17 @@ export function DocsClient({ documents, companyId }: Props) {
             Armazene e organize os documentos da empresa
           </p>
         </div>
-        <Button onClick={handleUploadClick} loading={isPending}>
-          Upload
-        </Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          onChange={handleFileChange}
-        />
+        <Button onClick={() => setModalOpen(true)}>+ Novo documento</Button>
       </div>
 
       <div className="mb-4">
         <input
           type="text"
-          placeholder="Pesquisar pelo nome do arquivo..."
+          placeholder="Pesquisar por arquivo, descrição ou observação..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
-          style={{
-            borderColor: 'var(--color-bg-surface)',
-            color: 'var(--color-text-primary)',
-            backgroundColor: '#fff',
-          }}
+          style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
         />
       </div>
 
@@ -205,8 +183,8 @@ export function DocsClient({ documents, companyId }: Props) {
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Arquivo</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Tamanho</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Enviado em</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Descrição</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Vencimento</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -214,7 +192,7 @@ export function DocsClient({ documents, companyId }: Props) {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={4} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  {search ? 'Nenhum arquivo encontrado para essa pesquisa.' : 'Nenhum documento enviado ainda.'}
+                  {search ? 'Nenhum documento encontrado.' : 'Nenhum documento enviado ainda.'}
                 </td>
               </tr>
             )}
@@ -223,25 +201,38 @@ export function DocsClient({ documents, companyId }: Props) {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="text-lg shrink-0">{fileIcon(doc.tipo)}</span>
-                    <span
-                      className="font-medium truncate max-w-xs"
-                      style={{ color: 'var(--color-text-primary)' }}
-                      title={doc.nome}
-                    >
+                    <span className="font-medium truncate max-w-[180px]" style={{ color: 'var(--color-text-primary)' }} title={doc.nome}>
                       {doc.nome}
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
-                  {formatBytes(doc.tamanho)}
+                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
+                  {doc.descricao ? (
+                    <div>
+                      <span>{doc.descricao}</span>
+                      {doc.observacao && (
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{doc.observacao}</p>
+                      )}
+                    </div>
+                  ) : '—'}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
-                  {formatDate(doc.created_at)}
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {doc.vencimento ? (
+                    <span
+                      className="text-xs font-medium px-2 py-0.5 rounded-full"
+                      style={{
+                        backgroundColor: isExpired(doc.vencimento) ? '#FEE2E2' : isNearExpiry(doc.vencimento) ? '#FEF3C7' : 'var(--color-bg-surface)',
+                        color: isExpired(doc.vencimento) ? 'var(--color-error)' : isNearExpiry(doc.vencimento) ? '#92400E' : 'var(--color-text-secondary)',
+                      }}
+                    >
+                      {formatDate(doc.vencimento)}
+                    </span>
+                  ) : '—'}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end">
                     <ThreeDotMenu
-                      onView={() => handleDownload(doc)}
+                      onView={() => handleView(doc)}
                       onDelete={() => handleDelete(doc)}
                       loadingView={downloadingId === doc.id}
                       loadingDelete={deletingId === doc.id}
@@ -253,6 +244,12 @@ export function DocsClient({ documents, companyId }: Props) {
           </tbody>
         </table>
       </div>
+
+      <ModalDocument
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        companyId={companyId}
+      />
     </>
   )
 }

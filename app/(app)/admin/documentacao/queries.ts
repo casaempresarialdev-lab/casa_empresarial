@@ -7,6 +7,9 @@ export type Document = {
   storage_path: string
   tamanho: number | null
   tipo: string | null
+  descricao: string | null
+  vencimento: string | null
+  observacao: string | null
   created_at: string
 }
 

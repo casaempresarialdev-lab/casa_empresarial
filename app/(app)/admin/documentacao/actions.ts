@@ -31,12 +31,19 @@ export async function uploadDocumentAction(
 
   if (uploadErr) return { error: `Erro no upload: ${uploadErr.message}` }
 
+  const descricao = formData.get('descricao') as string | null
+  const vencimento = formData.get('vencimento') as string | null
+  const observacao = formData.get('observacao') as string | null
+
   const { error: dbErr } = await admin.from('documents').insert({
     company_id: companyId,
     nome: file.name,
     storage_path: path,
     tamanho: file.size,
     tipo: file.type || null,
+    descricao: descricao || null,
+    vencimento: vencimento || null,
+    observacao: observacao || null,
   })
 
   if (dbErr) {
