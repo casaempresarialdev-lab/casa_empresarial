@@ -211,20 +211,13 @@ export function DocsClient({ documents, companyId }: Props) {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="text-lg shrink-0">{fileIcon(doc.tipo)}</span>
-                    <span className="font-medium truncate max-w-[180px]" style={{ color: 'var(--color-text-primary)' }} title={doc.nome}>
-                      {doc.nome}
+                    <span className="font-medium truncate max-w-[180px]" style={{ color: 'var(--color-text-primary)' }} title={doc.descricao ?? doc.nome}>
+                      {doc.descricao ?? '—'}
                     </span>
                   </div>
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                  {doc.descricao ? (
-                    <div>
-                      <span>{doc.descricao}</span>
-                      {doc.observacao && (
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{doc.observacao}</p>
-                      )}
-                    </div>
-                  ) : '—'}
+                  {doc.observacao ?? '—'}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {doc.vencimento ? (
