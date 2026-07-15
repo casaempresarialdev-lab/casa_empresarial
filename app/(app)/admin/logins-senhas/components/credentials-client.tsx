@@ -1,11 +1,62 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalCredential } from './modal-credential'
 import { deleteCredentialAction, revealPasswordAction } from '../actions'
 import type { Credential } from '../queries'
+
+function ThreeDotMenu({ onEdit, onDelete, loading }: { onEdit: () => void; onDelete: () => void; loading: boolean }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        aria-label="Opções"
+      >
+        ···
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 w-36 rounded-xl border shadow-lg py-1 z-20"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)' }}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onEdit() }}
+          >
+            Editar
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: 'var(--color-error)' }}
+            onClick={() => { setOpen(false); onDelete() }}
+            disabled={loading}
+          >
+            {loading ? 'Excluindo…' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   credentials: Credential[]
@@ -155,16 +206,12 @@ export function CredentialsClient({ credentials, companyId }: Props) {
                   ) : '—'}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(c)}>Editar</Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
+                  <div className="flex justify-end">
+                    <ThreeDotMenu
+                      onEdit={() => openEdit(c)}
+                      onDelete={() => handleDelete(c)}
                       loading={deletingId === c.id}
-                      onClick={() => handleDelete(c)}
-                    >
-                      Excluir
-                    </Button>
+                    />
                   </div>
                 </td>
               </tr>
