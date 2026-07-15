@@ -164,11 +164,6 @@ export function CredentialsClient({ credentials, companyId }: Props) {
               <tr key={c.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
                 <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
                   {c.sistema}
-                  {c.observacao && (
-                    <p className="text-xs font-normal mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                      {c.observacao}
-                    </p>
-                  )}
                 </td>
                 <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                   {c.login}
@@ -186,16 +181,6 @@ export function CredentialsClient({ credentials, companyId }: Props) {
                     >
                       {revealingId === c.id ? '...' : revealedPasswords[c.id] ? 'Ocultar' : 'Ver'}
                     </button>
-                    {revealedPasswords[c.id] && (
-                      <button
-                        className="text-xs"
-                        style={{ color: 'var(--color-text-muted)' }}
-                        onClick={() => navigator.clipboard.writeText(revealedPasswords[c.id])}
-                        title="Copiar senha"
-                      >
-                        Copiar
-                      </button>
-                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
