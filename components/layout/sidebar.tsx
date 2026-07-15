@@ -77,7 +77,11 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
-export function Sidebar() {
+interface SidebarProps {
+  logoUrl?: string | null
+}
+
+export function Sidebar({ logoUrl }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const mobileSidebarOpen = useAppStore((s) => s.mobileSidebarOpen)
@@ -108,21 +112,42 @@ export function Sidebar() {
         )}
         style={{ borderColor: 'var(--color-bg-surface)' }}
       >
-        {/* Logo */}
+        {/* Logo / nome */}
         <div className="flex items-center h-16 px-4 border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
-          {/* No mobile sempre mostra nome completo; no desktop depende de expanded */}
-          <span
-            className={cn('font-bold text-base', !expanded && 'md:hidden')}
-            style={{ fontFamily: 'Manrope', color: 'var(--color-primary-darker)' }}
-          >
-            Casa Empresarial
-          </span>
-          <span
-            className={cn('font-bold text-lg hidden', !expanded && 'md:block')}
-            style={{ color: 'var(--color-primary-darker)' }}
-          >
-            CE
-          </span>
+          {logoUrl ? (
+            <>
+              {/* Com logo: expandido mostra logo maior, retraído mostra miniatura */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logoUrl}
+                alt="Logo da empresa"
+                className={cn('object-contain', !expanded && 'md:hidden')}
+                style={{ maxHeight: 40, maxWidth: 160 }}
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logoUrl}
+                alt="Logo da empresa"
+                className={cn('object-contain hidden', !expanded && 'md:block')}
+                style={{ maxHeight: 32, maxWidth: 32 }}
+              />
+            </>
+          ) : (
+            <>
+              <span
+                className={cn('font-bold text-base', !expanded && 'md:hidden')}
+                style={{ fontFamily: 'Manrope', color: 'var(--color-primary-darker)' }}
+              >
+                Casa Empresarial
+              </span>
+              <span
+                className={cn('font-bold text-lg hidden', !expanded && 'md:block')}
+                style={{ color: 'var(--color-primary-darker)' }}
+              >
+                CE
+              </span>
+            </>
+          )}
         </div>
 
         {/* Nav */}

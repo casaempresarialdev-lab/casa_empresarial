@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
@@ -18,16 +19,19 @@ export default async function AppLayout({
 
   // Buscar perfil e empresas via admin client (sb_publishable_* não propaga JWT ao PostgREST)
   const admin = createAdminClient()
+  const cookieStore = await cookies()
+  const activeCookieId = cookieStore.get('active_company_id')?.value
+
   const [{ data: profile }, { data: memberships }] = await Promise.all([
     admin.from('profiles').select('name, avatar_url').eq('id', user.id).single(),
     admin
       .from('company_members')
-      .select('company_id, companies(id, razao_social)')
+      .select('company_id, companies(id, razao_social, logo_url)')
       .eq('profile_id', user.id)
       .eq('status', 'active'),
   ])
 
-  type Company = { id: string; razao_social: string }
+  type Company = { id: string; razao_social: string; logo_url?: string | null }
   type MembershipRow = { company_id: string; companies: Company | Company[] | null }
   const companies: Company[] = ((memberships ?? []) as unknown as MembershipRow[])
     .flatMap((m) => {
@@ -37,10 +41,12 @@ export default async function AppLayout({
     })
 
   const firstCompanyId = companies[0]?.id ?? null
+  const activeCompany  = companies.find(c => c.id === activeCookieId) ?? companies[0]
+  const logoUrl        = activeCompany?.logo_url ?? null
 
   return (
     <AppStoreInitializer companies={companies} firstCompanyId={firstCompanyId}>
-      <Sidebar />
+      <Sidebar logoUrl={logoUrl} />
       <AppShell>
         <Header
           companies={companies}
