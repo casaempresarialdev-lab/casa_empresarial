@@ -22,9 +22,11 @@ export type RulePayload = {
   hora_saida: string
   hora_almoco_inicio: string | null
   hora_almoco_fim: string | null
-  tipo_escala: 'semanal' | '12x36'
+  tipo_escala: 'semanal' | 'ciclo'
   dias_folga: number[]
   data_referencia: string | null
+  ciclo_trabalho_dias: number | null
+  ciclo_folga_dias: number | null
   folga_patterns: FolgaPattern[]
 }
 
@@ -36,8 +38,8 @@ export async function createRuleAction(companyId: string, payload: RulePayload) 
   if (!payload.data_inicio)  return { error: 'Data de início é obrigatória.' }
   if (!payload.hora_entrada) return { error: 'Horário de entrada é obrigatório.' }
   if (!payload.hora_saida)   return { error: 'Horário de saída é obrigatório.' }
-  if (payload.tipo_escala === '12x36' && !payload.data_referencia)
-    return { error: 'Informe a data do primeiro dia de trabalho para 12x36.' }
+  if (payload.tipo_escala === 'ciclo' && !payload.data_referencia)
+    return { error: 'Informe a data do primeiro dia de trabalho do ciclo.' }
 
   const admin = createAdminClient()
   const { error } = await admin

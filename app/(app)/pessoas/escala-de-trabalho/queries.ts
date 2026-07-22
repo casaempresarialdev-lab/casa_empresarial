@@ -11,7 +11,7 @@ export async function getScheduleRules(companyId: string): Promise<ScheduleRule[
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employee_schedule_rules')
-    .select('id, employee_id, data_inicio, data_fim, hora_entrada, hora_saida, hora_almoco_inicio, hora_almoco_fim, tipo_escala, dias_folga, data_referencia, folga_patterns')
+    .select('id, employee_id, data_inicio, data_fim, hora_entrada, hora_saida, hora_almoco_inicio, hora_almoco_fim, tipo_escala, dias_folga, data_referencia, ciclo_trabalho_dias, ciclo_folga_dias, folga_patterns')
     .eq('company_id', companyId)
     .order('data_inicio', { ascending: true })
 
@@ -27,7 +27,7 @@ export async function getEmployeeScheduleRules(
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employee_schedule_rules')
-    .select('id, employee_id, data_inicio, data_fim, hora_entrada, hora_saida, hora_almoco_inicio, hora_almoco_fim, tipo_escala, dias_folga, data_referencia, folga_patterns')
+    .select('id, employee_id, data_inicio, data_fim, hora_entrada, hora_saida, hora_almoco_inicio, hora_almoco_fim, tipo_escala, dias_folga, data_referencia, ciclo_trabalho_dias, ciclo_folga_dias, folga_patterns')
     .eq('company_id', companyId)
     .eq('employee_id', employeeId)
     .order('data_inicio', { ascending: true })

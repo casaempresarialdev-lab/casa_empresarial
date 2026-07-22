@@ -45,9 +45,11 @@ export function ModalRegraEscala({ open, onClose, companyId, employees, rule }: 
   const [dataInicio,         setDataInicio]          = useState('')
   const [dataFim,            setDataFim]             = useState('')
   const [semFim,             setSemFim]              = useState(true)
-  const [tipoEscala,         setTipoEscala]          = useState<'semanal' | '12x36'>('semanal')
+  const [tipoEscala,         setTipoEscala]          = useState<'semanal' | 'ciclo'>('semanal')
   const [diasFolga,          setDiasFolga]           = useState<number[]>([0, 6])
   const [dataReferencia,     setDataReferencia]      = useState('')
+  const [cicloTrabalhoDias,  setCicloTrabalhoDias]   = useState(1)
+  const [cicloFolgaDias,     setCicloFolgaDias]      = useState(2)
   const [horaEntrada,        setHoraEntrada]         = useState('08:00')
   const [horaSaida,          setHoraSaida]           = useState('17:00')
   const [temAlmoco,          setTemAlmoco]           = useState(false)
@@ -67,6 +69,8 @@ export function ModalRegraEscala({ open, onClose, companyId, employees, rule }: 
       setTipoEscala(rule.tipo_escala)
       setDiasFolga(rule.dias_folga ?? [])
       setDataReferencia(rule.data_referencia ?? '')
+      setCicloTrabalhoDias(rule.ciclo_trabalho_dias ?? 1)
+      setCicloFolgaDias(rule.ciclo_folga_dias ?? 2)
       setHoraEntrada(rule.hora_entrada)
       setHoraSaida(rule.hora_saida)
       setTemAlmoco(!!(rule.hora_almoco_inicio))
@@ -81,6 +85,8 @@ export function ModalRegraEscala({ open, onClose, companyId, employees, rule }: 
       setTipoEscala('semanal')
       setDiasFolga([0, 6])
       setDataReferencia('')
+      setCicloTrabalhoDias(1)
+      setCicloFolgaDias(2)
       setHoraEntrada('08:00')
       setHoraSaida('17:00')
       setTemAlmoco(false)
@@ -125,7 +131,9 @@ export function ModalRegraEscala({ open, onClose, companyId, employees, rule }: 
       hora_almoco_fim:     temAlmoco ? horaAlmocoFim    : null,
       tipo_escala:         tipoEscala,
       dias_folga:          tipoEscala === 'semanal' ? diasFolga : [],
-      data_referencia:     tipoEscala === '12x36' ? dataReferencia : null,
+      data_referencia:     tipoEscala === 'ciclo' ? dataReferencia : null,
+      ciclo_trabalho_dias: tipoEscala === 'ciclo' ? cicloTrabalhoDias : null,
+      ciclo_folga_dias:    tipoEscala === 'ciclo' ? cicloFolgaDias    : null,
       folga_patterns:      tipoEscala === 'semanal' ? folgaPatterns : [],
     }
 
@@ -211,7 +219,7 @@ export function ModalRegraEscala({ open, onClose, companyId, employees, rule }: 
         <div style={sectionStyle}>
           <p style={sectionTitle}>Tipo de escala</p>
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            {(['semanal', '12x36'] as const).map(t => (
+            {(['semanal', 'ciclo'] as const).map(t => (
               <button
                 key={t}
                 type="button"
@@ -229,7 +237,7 @@ export function ModalRegraEscala({ open, onClose, companyId, employees, rule }: 
                   color: tipoEscala === t ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
                 }}
               >
-                {t === 'semanal' ? 'Semanal' : '12x36'}
+                {t === 'semanal' ? 'Semanal' : 'Ciclo rotativo'}
               </button>
             ))}
           </div>
@@ -265,13 +273,37 @@ export function ModalRegraEscala({ open, onClose, companyId, employees, rule }: 
             </>
           )}
 
-          {tipoEscala === '12x36' && (
-            <div>
-              <label style={labelStyle}>Data do primeiro dia de trabalho *</label>
-              <Input type="date" required value={dataReferencia} onChange={e => setDataReferencia(e.target.value)} />
-              <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
-                O sistema vai calcular automaticamente os dias de trabalho e folga a partir dessa data (12h trabalha, 36h folga).
-              </p>
+          {tipoEscala === 'ciclo' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={labelStyle}>Dias trabalhados seguidos *</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    required
+                    value={cicloTrabalhoDias}
+                    onChange={e => setCicloTrabalhoDias(parseInt(e.target.value) || 1)}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Dias de folga seguidos *</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    required
+                    value={cicloFolgaDias}
+                    onChange={e => setCicloFolgaDias(parseInt(e.target.value) || 1)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Data do primeiro dia de trabalho *</label>
+                <Input type="date" required value={dataReferencia} onChange={e => setDataReferencia(e.target.value)} />
+                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
+                  Ex: 12x36 → 1 dia trabalhado + 2 dias de folga. 5x2 → 5 + 2.
+                </p>
+              </div>
             </div>
           )}
         </div>

@@ -432,8 +432,8 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
               {filteredRules.map((rule, idx) => {
                 const emp = employees.find(e => e.id === rule.employee_id)
                 const DIAS_L = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-                const folgasLabel = rule.tipo_escala === '12x36'
-                  ? `12x36 (ref: ${rule.data_referencia ?? '—'})`
+                const folgasLabel = rule.tipo_escala === 'ciclo'
+                  ? `Ciclo ${rule.ciclo_trabalho_dias ?? '?'}+${rule.ciclo_folga_dias ?? '?'} (ref: ${rule.data_referencia ?? '—'})`
                   : rule.dias_folga.length > 0
                     ? rule.dias_folga.map(d => DIAS_L[d]).join(', ')
                     : 'Sem folga fixa'
@@ -445,9 +445,9 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
                     <td className="px-4 py-2.5 font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>{emp?.nome ?? '—'}</td>
                     <td className="px-4 py-2.5">
                       <span style={{ padding: '0.15rem 0.5rem', borderRadius: 999, fontSize: '0.7rem', fontWeight: 600,
-                        backgroundColor: rule.tipo_escala === '12x36' ? '#F4ECF7' : '#EBF5FB',
-                        color: rule.tipo_escala === '12x36' ? '#8E44AD' : '#2471A3' }}>
-                        {rule.tipo_escala === '12x36' ? '12x36' : 'Semanal'}
+                        backgroundColor: rule.tipo_escala === 'ciclo' ? '#F4ECF7' : '#EBF5FB',
+                        color: rule.tipo_escala === 'ciclo' ? '#8E44AD' : '#2471A3' }}>
+                        {rule.tipo_escala === 'ciclo' ? 'Ciclo' : 'Semanal'}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{fmtDate(rule.data_inicio)}</td>

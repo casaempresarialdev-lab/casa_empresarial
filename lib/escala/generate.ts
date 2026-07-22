@@ -17,9 +17,11 @@ export type ScheduleRule = {
   hora_saida: string            // HH:MM
   hora_almoco_inicio: string | null
   hora_almoco_fim: string | null
-  tipo_escala: 'semanal' | '12x36'
-  dias_folga: number[]          // dias da semana de folga (0=Dom..6=Sáb)
-  data_referencia: string | null // para 12x36
+  tipo_escala: 'semanal' | 'ciclo'
+  dias_folga: number[]          // para semanal: dias da semana de folga (0=Dom..6=Sáb)
+  data_referencia: string | null // para ciclo: primeiro dia de trabalho do ciclo
+  ciclo_trabalho_dias: number | null // para ciclo: quantos dias trabalha consecutivos
+  ciclo_folga_dias: number | null    // para ciclo: quantos dias folga consecutivos
   folga_patterns: FolgaPattern[]
 }
 
@@ -72,14 +74,16 @@ function getActiveRule(rules: ScheduleRule[], dateStr: string): ScheduleRule | n
   return best
 }
 
-// 12x36: trabalha no dia 0 do ciclo (data_referencia), folga nos dias 1 e 2, repete
-function is12x36WorkDay(rule: ScheduleRule, dateStr: string): boolean {
-  if (!rule.data_referencia) return false
-  const ref  = dateFromStr(rule.data_referencia)
-  const date = dateFromStr(dateStr)
-  const diff = diffDays(ref, date)
+// Ciclo rotativo: trabalha ciclo_trabalho_dias consecutivos, folga ciclo_folga_dias, repete
+function isCicloWorkDay(rule: ScheduleRule, dateStr: string): boolean {
+  if (!rule.data_referencia || !rule.ciclo_trabalho_dias || !rule.ciclo_folga_dias) return false
+  const ref        = dateFromStr(rule.data_referencia)
+  const date       = dateFromStr(dateStr)
+  const diff       = diffDays(ref, date)
   if (diff < 0) return false
-  return diff % 3 === 0
+  const totalCiclo = rule.ciclo_trabalho_dias + rule.ciclo_folga_dias
+  const posNoCiclo = diff % totalCiclo
+  return posNoCiclo < rule.ciclo_trabalho_dias
 }
 
 // Verifica se o dia cai em algum folga_pattern
@@ -118,8 +122,8 @@ function matchesFolgaPattern(pattern: FolgaPattern, dateStr: string): boolean {
 
 // Calcula o tipo do dia a partir da regra (sem considerar exceções)
 function calcTipo(rule: ScheduleRule, dateStr: string): DayTipo {
-  if (rule.tipo_escala === '12x36') {
-    return is12x36WorkDay(rule, dateStr) ? 'trabalho' : 'folga'
+  if (rule.tipo_escala === 'ciclo') {
+    return isCicloWorkDay(rule, dateStr) ? 'trabalho' : 'folga'
   }
 
   // Semanal: é folga se o dia da semana está em dias_folga
