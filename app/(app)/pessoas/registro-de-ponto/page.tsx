@@ -1,7 +1,8 @@
-﻿import { cookies } from 'next/headers'
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTimeRecords, getActiveEmployees } from './queries'
+import { getScheduleRules, getScheduleExceptions } from '../escala-de-trabalho/queries'
 import { PontoClient } from './components/ponto-client'
 
 export const dynamic = 'force-dynamic'
@@ -24,9 +25,11 @@ export default async function RegistroDePontoPage({
   const mes = parseInt(params.mes ?? String(now.getMonth() + 1))
   const ano = parseInt(params.ano ?? String(now.getFullYear()))
 
-  const [records, employees] = await Promise.all([
+  const [records, employees, rules, exceptions] = await Promise.all([
     getTimeRecords(companyId, ano, mes),
     getActiveEmployees(companyId),
+    getScheduleRules(companyId),
+    getScheduleExceptions(companyId, mes, ano),
   ])
 
   return (
@@ -34,6 +37,8 @@ export default async function RegistroDePontoPage({
       <PontoClient
         records={records}
         employees={employees}
+        rules={rules}
+        exceptions={exceptions}
         companyId={companyId}
         mes={mes}
         ano={ano}
