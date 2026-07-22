@@ -4,20 +4,42 @@ import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { registrarPontoAction, sairPontoAction } from '../actions'
-import type { PontoSession } from '../actions'
+import type { PontoSession, TipoBatida } from '../actions'
 
 const MapaPonto = dynamic(
   () => import('./mapa-ponto').then(m => m.MapaPonto),
-  { ssr: false, loading: () => (
-    <div className="rounded-xl flex items-center justify-center" style={{ height: 160, backgroundColor: 'var(--color-bg-surface)' }}>
-      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Carregando mapa...</p>
-    </div>
-  )}
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-xl flex items-center justify-center" style={{ height: 160, backgroundColor: 'var(--color-bg-surface)' }}>
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Carregando mapa...</p>
+      </div>
+    ),
+  }
 )
+
+type RegistroHoje = {
+  id: string
+  entrada: string | null
+  saida_almoco: string | null
+  retorno_almoco: string | null
+  saida: string | null
+  data: string
+} | null
 
 interface Props {
   session: PontoSession
-  registroHoje: { id: string; entrada: string | null; saida: string | null; data: string } | null
+  registroHoje: RegistroHoje
+}
+
+type Estado = 'sem_registro' | 'primeiro_turno' | 'almoco' | 'segundo_turno' | 'completo'
+
+function getEstado(r: RegistroHoje): Estado {
+  if (!r || !r.entrada)    return 'sem_registro'
+  if (!r.saida_almoco)     return 'primeiro_turno'
+  if (!r.retorno_almoco)   return 'almoco'
+  if (!r.saida)            return 'segundo_turno'
+  return 'completo'
 }
 
 function formatTime(ts: string | null) {
@@ -29,41 +51,52 @@ function formatDate(d: Date) {
   return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+const BATIDA_CONFIG: Record<TipoBatida, { emoji: string; label: string; cor: string }> = {
+  entrada:        { emoji: '▶',  label: 'REGISTRAR ENTRADA',    cor: 'var(--color-primary-darker)' },
+  saida_almoco:   { emoji: '⏸', label: 'SAÍDA P/ ALMOÇO',      cor: '#D35400' },
+  retorno_almoco: { emoji: '▶',  label: 'RETORNO DO ALMOÇO',    cor: '#2471A3' },
+  saida:          { emoji: '⏹', label: 'REGISTRAR SAÍDA',       cor: '#1E8449' },
+}
+
+const FEEDBACK_MSG: Record<TipoBatida, string> = {
+  entrada:        'Entrada registrada!',
+  saida_almoco:   'Bom almoço!',
+  retorno_almoco: 'Bem-vindo de volta!',
+  saida:          'Saída registrada!',
+}
+
 export function PortalPonto({ session, registroHoje }: Props) {
-  const router    = useRouter()
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const [now, setNow]                   = useState(new Date())
-  const [lat, setLat]                   = useState<number | null>(null)
-  const [lng, setLng]                   = useState<number | null>(null)
-  const [endereco, setEndereco]         = useState<string | null>(null)
-  const [geoStatus, setGeoStatus]       = useState<'loading' | 'ok' | 'denied' | 'idle'>('idle')
-  const [registro, setRegistro]         = useState(registroHoje)
-  const [feedback, setFeedback]         = useState<{ tipo: 'entrada' | 'saida'; hora: string } | null>(null)
-  const [error, setError]               = useState('')
-  const [loading, setLoading]           = useState(false)
+  const [now,       setNow]      = useState(new Date())
+  const [lat,       setLat]      = useState<number | null>(null)
+  const [lng,       setLng]      = useState<number | null>(null)
+  const [endereco,  setEndereco] = useState<string | null>(null)
+  const [geoStatus, setGeoStatus] = useState<'loading' | 'ok' | 'denied' | 'idle'>('idle')
+  const [registro,  setRegistro] = useState(registroHoje)
+  const [feedback,  setFeedback] = useState<{ tipo: TipoBatida; hora: string } | null>(null)
+  const [error,     setError]    = useState('')
+  const [loading,   setLoading]  = useState<TipoBatida | null>(null)
 
-  // Relógio em tempo real
+  const estado = getEstado(registro)
+
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
-  // Geolocalização ao montar
   useEffect(() => {
     if (!navigator.geolocation) { setGeoStatus('denied'); return }
     setGeoStatus('loading')
     navigator.geolocation.getCurrentPosition(
       async pos => {
         const { latitude, longitude } = pos.coords
-        setLat(latitude)
-        setLng(longitude)
-        setGeoStatus('ok')
-        // Geocoding reverso via Nominatim (OpenStreetMap — gratuito, sem API key)
+        setLat(latitude); setLng(longitude); setGeoStatus('ok')
         try {
-          const res = await fetch(
+          const res  = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-            { headers: { 'Accept-Language': 'pt-BR' } }
+            { headers: { 'Accept-Language': 'pt-BR' } },
           )
           const json = await res.json()
           const addr = json?.address
@@ -77,39 +110,23 @@ export function PortalPonto({ session, registroHoje }: Props) {
             setEndereco(partes.join(', '))
           }
         } catch {
-          // sem endereço — mostra coordenadas
           setEndereco(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`)
         }
       },
       () => setGeoStatus('denied'),
-      { timeout: 10000 }
+      { timeout: 10000 },
     )
   }, [])
 
-  // Status: aberto = tem entrada mas não saída
-  const temEntradaAberta  = !!registro?.entrada && !registro?.saida
-  const temRegistroFechado = !!registro?.entrada && !!registro?.saida
-
-  async function handleRegistrar() {
-    setLoading(true)
-    setError('')
-
+  async function handleBatida(tipoBatida: TipoBatida) {
+    setLoading(tipoBatida); setError('')
     const result = await registrarPontoAction(
-      session.employeeId,
-      session.companyId,
-      lat,
-      lng,
-      endereco,
+      session.employeeId, session.companyId, lat, lng, endereco, tipoBatida,
     )
-
-    setLoading(false)
-
+    setLoading(null)
     if ('error' in result) { setError(result.error); return }
-
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     setFeedback({ tipo: result.tipo, hora })
-
-    // Recarrega dados do servidor após 2s
     setTimeout(() => {
       setFeedback(null)
       startTransition(() => router.refresh())
@@ -121,24 +138,21 @@ export function PortalPonto({ session, registroHoje }: Props) {
     router.push('/registrar-ponto')
   }
 
-  const horaDisplay = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const dataDisplay = formatDate(now)
-
-  const gmapsUrl = lat && lng
-    ? `https://www.google.com/maps?q=${lat},${lng}`
-    : null
+  const gmapsUrl = lat && lng ? `https://www.google.com/maps?q=${lat},${lng}` : null
 
   return (
     <div className="w-full max-w-sm space-y-4">
 
-      {/* Feedback de sucesso */}
+      {/* Feedback overlay */}
       {feedback && (
         <div className="fixed inset-0 flex items-center justify-center z-50"
           style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-2xl p-8 text-center shadow-2xl max-w-xs mx-4">
-            <div className="text-5xl mb-4">{feedback.tipo === 'entrada' ? '✅' : '👋'}</div>
+            <div className="text-5xl mb-4">
+              {feedback.tipo === 'entrada' ? '✅' : feedback.tipo === 'saida_almoco' ? '🍽️' : feedback.tipo === 'retorno_almoco' ? '💪' : '👋'}
+            </div>
             <p className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-              {feedback.tipo === 'entrada' ? 'Entrada registrada!' : 'Saída registrada!'}
+              {FEEDBACK_MSG[feedback.tipo]}
             </p>
             <p className="text-3xl font-mono font-bold mt-2" style={{ color: 'var(--color-primary-darker)' }}>
               {feedback.hora}
@@ -158,6 +172,7 @@ export function PortalPonto({ session, registroHoje }: Props) {
         </div>
 
         <div className="px-5 py-5 space-y-4">
+
           {/* Colaborador */}
           <div className="text-center">
             <div className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-2"
@@ -170,34 +185,31 @@ export function PortalPonto({ session, registroHoje }: Props) {
           {/* Relógio */}
           <div className="text-center">
             <p className="text-4xl font-mono font-bold tabular-nums" style={{ color: 'var(--color-text-primary)' }}>
-              {horaDisplay}
+              {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </p>
             <p className="text-xs mt-1 capitalize" style={{ color: 'var(--color-text-muted)' }}>
-              {dataDisplay}
+              {formatDate(now)}
             </p>
           </div>
 
           {/* Status do ponto hoje */}
-          <div className="rounded-xl p-3 text-sm" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+          <div className="rounded-xl p-3 space-y-1.5" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             {!registro && (
-              <p className="text-center" style={{ color: 'var(--color-text-muted)' }}>Sem registro hoje</p>
+              <p className="text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>Sem registro hoje</p>
             )}
-            {temEntradaAberta && (
-              <div className="flex justify-between">
-                <span style={{ color: 'var(--color-text-secondary)' }}>Entrada</span>
-                <span className="font-semibold" style={{ color: '#1E8449' }}>{formatTime(registro!.entrada)}</span>
-              </div>
-            )}
-            {temRegistroFechado && (
+            {registro && (
               <>
-                <div className="flex justify-between">
-                  <span style={{ color: 'var(--color-text-secondary)' }}>Entrada</span>
-                  <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{formatTime(registro!.entrada)}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span style={{ color: 'var(--color-text-secondary)' }}>Saída</span>
-                  <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{formatTime(registro!.saida)}</span>
-                </div>
+                {[
+                  { label: 'Entrada',          value: registro.entrada,        cor: '#1E8449' },
+                  { label: 'Saída p/ almoço',  value: registro.saida_almoco,   cor: '#D35400' },
+                  { label: 'Retorno almoço',   value: registro.retorno_almoco, cor: '#2471A3' },
+                  { label: 'Saída',            value: registro.saida,          cor: '#566573' },
+                ].map(item => item.value && (
+                  <div key={item.label} className="flex justify-between items-center">
+                    <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{item.label}</span>
+                    <span className="text-xs font-semibold" style={{ color: item.cor }}>{formatTime(item.value)}</span>
+                  </div>
+                ))}
               </>
             )}
           </div>
@@ -205,9 +217,7 @@ export function PortalPonto({ session, registroHoje }: Props) {
           {/* Localização */}
           <div>
             {geoStatus === 'loading' && (
-              <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-                📍 Obtendo localização...
-              </p>
+              <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>📍 Obtendo localização...</p>
             )}
             {geoStatus === 'denied' && (
               <p className="text-xs text-center" style={{ color: '#D4AC0D' }}>
@@ -235,32 +245,39 @@ export function PortalPonto({ session, registroHoje }: Props) {
             )}
           </div>
 
-          {/* Botão de registro */}
           {error && (
             <p className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: '#FDEDEC', color: '#C0392B' }}>{error}</p>
           )}
 
-          {!temRegistroFechado && (
-            <button
-              onClick={handleRegistrar}
-              disabled={loading || isPending || !!feedback}
-              className="w-full py-4 rounded-xl font-bold text-base transition-all"
-              style={{
-                backgroundColor: temEntradaAberta ? '#1E8449' : 'var(--color-primary-darker)',
-                color: 'white',
-                opacity: loading || isPending ? 0.7 : 1,
-                letterSpacing: '0.02em',
-              }}
-            >
-              {loading ? 'Registrando...' : temEntradaAberta ? '⏹ REGISTRAR SAÍDA' : '▶ REGISTRAR ENTRADA'}
-            </button>
+          {/* Botões de batida */}
+          {estado === 'sem_registro' && (
+            <BotaoBatida tipo="entrada" loading={loading} onBatida={handleBatida} isPending={isPending} feedback={feedback} />
           )}
 
-          {temRegistroFechado && (
+          {estado === 'primeiro_turno' && (
+            <div className="space-y-2">
+              <BotaoBatida tipo="saida_almoco" loading={loading} onBatida={handleBatida} isPending={isPending} feedback={feedback} />
+              <button
+                onClick={() => handleBatida('saida')}
+                disabled={!!loading || isPending || !!feedback}
+                className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+                style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)', opacity: loading || isPending ? 0.7 : 1 }}>
+                ⏹ Encerrar sem almoço
+              </button>
+            </div>
+          )}
+
+          {estado === 'almoco' && (
+            <BotaoBatida tipo="retorno_almoco" loading={loading} onBatida={handleBatida} isPending={isPending} feedback={feedback} />
+          )}
+
+          {estado === 'segundo_turno' && (
+            <BotaoBatida tipo="saida" loading={loading} onBatida={handleBatida} isPending={isPending} feedback={feedback} />
+          )}
+
+          {estado === 'completo' && (
             <div className="text-center py-2">
-              <p className="text-sm font-medium" style={{ color: '#1E8449' }}>
-                ✓ Jornada completa registrada
-              </p>
+              <p className="text-sm font-medium" style={{ color: '#1E8449' }}>✓ Jornada completa registrada</p>
             </div>
           )}
         </div>
@@ -270,10 +287,31 @@ export function PortalPonto({ session, registroHoje }: Props) {
       <button
         onClick={handleSair}
         className="w-full py-2.5 rounded-xl text-sm transition-colors"
-        style={{ color: 'var(--color-text-muted)', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}
-      >
+        style={{ color: 'var(--color-text-muted)', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
         Sair
       </button>
     </div>
+  )
+}
+
+function BotaoBatida({
+  tipo, loading, onBatida, isPending, feedback,
+}: {
+  tipo: TipoBatida
+  loading: TipoBatida | null
+  onBatida: (t: TipoBatida) => void
+  isPending: boolean
+  feedback: unknown
+}) {
+  const cfg = BATIDA_CONFIG[tipo]
+  const isLoading = loading === tipo
+  return (
+    <button
+      onClick={() => onBatida(tipo)}
+      disabled={!!loading || isPending || !!feedback}
+      className="w-full py-4 rounded-xl font-bold text-base transition-all"
+      style={{ backgroundColor: cfg.cor, color: 'white', opacity: loading || isPending ? 0.7 : 1, letterSpacing: '0.02em' }}>
+      {isLoading ? 'Registrando...' : `${cfg.emoji} ${cfg.label}`}
+    </button>
   )
 }

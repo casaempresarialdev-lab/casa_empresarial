@@ -6,6 +6,8 @@ export type TimeRecord = {
   employee_id: string
   data: string
   entrada: string | null
+  saida_almoco: string | null
+  retorno_almoco: string | null
   saida: string | null
   horas_trabalhadas: string | null
   horas_extras: string | null
@@ -30,7 +32,7 @@ export async function getTimeRecords(
 
   const { data, error } = await admin
     .from('time_records')
-    .select('*, employee:employees(nome, cargo)')
+    .select('id, company_id, employee_id, data, entrada, saida_almoco, retorno_almoco, saida, horas_trabalhadas, horas_extras, tipo, observacao, created_at, employee:employees(nome, cargo)')
     .eq('company_id', companyId)
     .gte('data', dataInicio)
     .lte('data', dataFim)
@@ -38,7 +40,7 @@ export async function getTimeRecords(
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return (data ?? []) as TimeRecord[]
+  return (data ?? []) as unknown as TimeRecord[]
 }
 
 export async function getActiveEmployees(companyId: string) {

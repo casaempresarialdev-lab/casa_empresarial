@@ -399,7 +399,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
           <table className="w-full min-w-[860px] text-sm">
             <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
               <tr>
-                {['Funcionário','Data','Entrada','Saída','Horas','Tipo','Situação',''].map((h, i) => (
+                {['Funcionário','Data','Entrada','Almoço','Saída','Horas','Tipo','Situação',''].map((h, i) => (
                   <th key={i} className={`${i < 7 ? 'text-left' : ''} px-4 py-3 font-medium`}
                     style={{ color: 'var(--color-text-secondary)' }}>{h}</th>
                 ))}
@@ -407,7 +407,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
             </thead>
             <tbody>
               {filteredRecords.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
+                <tr><td colSpan={9} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
                   Nenhum registro para {MESES[mes - 1]} {ano}.
                 </td></tr>
               )}
@@ -424,6 +424,11 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(r.data)}</td>
                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatTime(r.entrada)}</td>
+                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                      {r.saida_almoco
+                        ? `${formatTime(r.saida_almoco)}–${formatTime(r.retorno_almoco)}`
+                        : '—'}
+                    </td>
                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatTime(r.saida)}</td>
                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatInterval(r.horas_trabalhadas)}</td>
                     <td className="px-4 py-3">

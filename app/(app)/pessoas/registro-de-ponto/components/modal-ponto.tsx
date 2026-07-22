@@ -43,17 +43,19 @@ export function ModalPonto({
   defaultMes, defaultAno,
   defaultEmployeeId, defaultDate, defaultEntrada, defaultSaida, defaultTipo,
 }: Props) {
-  const router  = useRouter()
-  const isEdit  = !!record
+  const router = useRouter()
+  const isEdit = !!record
 
-  const [employeeId, setEmployeeId] = useState('')
-  const [data,       setData]       = useState('')
-  const [entrada,    setEntrada]    = useState('')
-  const [saida,      setSaida]      = useState('')
-  const [tipo,       setTipo]       = useState('normal')
-  const [observacao, setObservacao] = useState('')
-  const [loading,    setLoading]    = useState(false)
-  const [error,      setError]      = useState('')
+  const [employeeId,     setEmployeeId]     = useState('')
+  const [data,           setData]           = useState('')
+  const [entrada,        setEntrada]        = useState('')
+  const [saidaAlmoco,    setSaidaAlmoco]    = useState('')
+  const [retornoAlmoco,  setRetornoAlmoco]  = useState('')
+  const [saida,          setSaida]          = useState('')
+  const [tipo,           setTipo]           = useState('normal')
+  const [observacao,     setObservacao]     = useState('')
+  const [loading,        setLoading]        = useState(false)
+  const [error,          setError]          = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -62,6 +64,8 @@ export function ModalPonto({
       setEmployeeId(record.employee_id)
       setData(record.data)
       setEntrada(extractTime(record.entrada))
+      setSaidaAlmoco(extractTime(record.saida_almoco))
+      setRetornoAlmoco(extractTime(record.retorno_almoco))
       setSaida(extractTime(record.saida))
       setTipo(record.tipo)
       setObservacao(record.observacao ?? '')
@@ -69,13 +73,15 @@ export function ModalPonto({
       setEmployeeId(defaultEmployeeId ?? '')
       setData(defaultDate ?? todayStr(defaultMes, defaultAno))
       setEntrada(defaultEntrada ?? '')
+      setSaidaAlmoco('')
+      setRetornoAlmoco('')
       setSaida(defaultSaida ?? '')
       setTipo(defaultTipo ?? 'normal')
       setObservacao('')
     }
   }, [open, record, defaultMes, defaultAno, defaultEmployeeId, defaultDate, defaultEntrada, defaultSaida, defaultTipo])
 
-  // Escala prevista para a data/funcionário selecionados (apenas para exibição)
+  // Escala prevista — apenas para exibição
   const scheduleDay = useMemo(() => {
     if (!employeeId || !data || !rules.length) return null
     const [y, m] = data.split('-').map(Number)
@@ -92,10 +98,14 @@ export function ModalPonto({
     const fd = new FormData()
     fd.set('employee_id', employeeId)
     fd.set('data', data)
-    fd.set('entrada',    semHorario ? '' : entrada)
-    fd.set('saida',      semHorario ? '' : saida)
     fd.set('tipo', tipo)
     fd.set('observacao', observacao)
+    if (!semHorario) {
+      fd.set('entrada',        entrada)
+      fd.set('saida_almoco',   saidaAlmoco)
+      fd.set('retorno_almoco', retornoAlmoco)
+      fd.set('saida',          saida)
+    }
 
     const result = isEdit
       ? await updateTimeRecordAction(record!.id, fd)
@@ -118,7 +128,13 @@ export function ModalPonto({
   const scheduleLabel = scheduleDay && scheduleDay.tipo !== 'sem_regra'
     ? scheduleDay.tipo === 'folga'
       ? 'Escala: dia de folga'
-      : `Escala: ${scheduleDay.hora_entrada?.slice(0, 5) ?? '?'} – ${scheduleDay.hora_saida?.slice(0, 5) ?? '?'}${scheduleDay.feriado ? ` · ${scheduleDay.feriado_nome}` : ''}`
+      : [
+          `Escala: ${scheduleDay.hora_entrada?.slice(0, 5) ?? '?'} – ${scheduleDay.hora_saida?.slice(0, 5) ?? '?'}`,
+          scheduleDay.hora_almoco_inicio
+            ? `· Almoço ${scheduleDay.hora_almoco_inicio.slice(0, 5)}–${scheduleDay.hora_almoco_fim?.slice(0, 5) ?? '?'}`
+            : null,
+          scheduleDay.feriado ? `· ${scheduleDay.feriado_nome}` : null,
+        ].filter(Boolean).join(' ')
     : null
 
   return (
@@ -183,16 +199,45 @@ export function ModalPonto({
         )}
 
         {!semHorario && (
-          <div className="grid grid-cols-2 gap-3">
+          <>
+            {/* 1º Turno */}
             <div>
-              <label style={labelStyle}>Entrada</label>
-              <Input type="time" value={entrada} onChange={e => setEntrada(e.target.value)} />
+              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
+                1º Turno
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={labelStyle}>Entrada</label>
+                  <Input type="time" value={entrada} onChange={e => setEntrada(e.target.value)} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Saída p/ almoço</label>
+                  <Input type="time" value={saidaAlmoco} onChange={e => setSaidaAlmoco(e.target.value)} />
+                </div>
+              </div>
             </div>
+
+            {/* Almoço / 2º Turno */}
             <div>
-              <label style={labelStyle}>Saída</label>
-              <Input type="time" value={saida} onChange={e => setSaida(e.target.value)} />
+              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
+                2º Turno
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={labelStyle}>Retorno do almoço</label>
+                  <Input type="time" value={retornoAlmoco} onChange={e => setRetornoAlmoco(e.target.value)} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Saída final</label>
+                  <Input type="time" value={saida} onChange={e => setSaida(e.target.value)} />
+                </div>
+              </div>
             </div>
-          </div>
+
+            <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '-0.25rem' }}>
+              Sem almoço? Deixe os campos de almoço em branco — as horas são calculadas de Entrada até Saída final.
+            </p>
+          </>
         )}
 
         <div>

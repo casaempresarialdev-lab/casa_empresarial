@@ -10,21 +10,23 @@ async function getAuthUser() {
 }
 
 function parsePontoFields(formData: FormData) {
-  const entrada = (formData.get('entrada') as string) || null
-  const saida = (formData.get('saida') as string) || null
-  const data = formData.get('data') as string
+  const data           = formData.get('data') as string
+  const entrada        = (formData.get('entrada')        as string) || null
+  const saida_almoco   = (formData.get('saida_almoco')   as string) || null
+  const retorno_almoco = (formData.get('retorno_almoco') as string) || null
+  const saida          = (formData.get('saida')          as string) || null
 
-  // Combina data + hora para montar timestamptz
-  const entradaTs = entrada ? `${data}T${entrada}:00` : null
-  const saidaTs = saida ? `${data}T${saida}:00` : null
+  const ts = (h: string | null) => h ? `${data}T${h}:00` : null
 
   return {
-    employee_id: formData.get('employee_id') as string,
+    employee_id:    formData.get('employee_id') as string,
     data,
-    entrada: entradaTs,
-    saida: saidaTs,
-    tipo: (formData.get('tipo') as string) || 'normal',
-    observacao: (formData.get('observacao') as string) || null,
+    entrada:        ts(entrada),
+    saida_almoco:   ts(saida_almoco),
+    retorno_almoco: ts(retorno_almoco),
+    saida:          ts(saida),
+    tipo:           (formData.get('tipo') as string) || 'normal',
+    observacao:     (formData.get('observacao') as string) || null,
   }
 }
 

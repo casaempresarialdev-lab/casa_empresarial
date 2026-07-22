@@ -25,7 +25,7 @@ export default async function PontoPage() {
   // Registro de hoje (se houver)
   const { data: registroHoje } = await admin
     .from('time_records')
-    .select('id, entrada, saida, data')
+    .select('id, entrada, saida_almoco, retorno_almoco, saida, data')
     .eq('company_id', session.companyId)
     .eq('employee_id', session.employeeId)
     .eq('data', hoje)
