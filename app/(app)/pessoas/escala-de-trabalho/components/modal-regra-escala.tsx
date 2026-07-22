@@ -237,7 +237,7 @@ export function ModalRegraEscala({ open, onClose, companyId, employees, rule }: 
                   color: tipoEscala === t ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
                 }}
               >
-                {t === 'semanal' ? 'Semanal' : 'Ciclo rotativo'}
+                {t === 'semanal' ? 'Normal' : 'Personalizado'}
               </button>
             ))}
           </div>

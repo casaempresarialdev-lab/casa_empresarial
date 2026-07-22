@@ -233,7 +233,7 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
                   backgroundColor: view === v ? 'var(--color-primary)' : 'white',
                   color: view === v ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
                 }}>
-                {v === 'calendario' ? '📅 Calendário' : v === 'lista' ? '☰ Lista' : '⚙ Regras'}
+                {v === 'calendario' ? '📅 Calendário' : v === 'lista' ? '☰ Lista' : '⚙ Escalas'}
               </button>
             ))}
           </div>
