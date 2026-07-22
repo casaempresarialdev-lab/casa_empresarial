@@ -598,18 +598,16 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
                     </td>
 
                     <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1.5 justify-end">
-                        <Button variant="ghost" size="sm" onClick={() => openFromList(entry)}>
-                          {record ? 'Editar' : 'Registrar'}
-                        </Button>
-                        {record && (
+                      {record && (
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(record)}>Editar</Button>
                           <Button variant="danger" size="sm"
                             loading={deletingId === record.id}
                             onClick={() => handleDelete(entry)}>
                             Excluir
                           </Button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )
