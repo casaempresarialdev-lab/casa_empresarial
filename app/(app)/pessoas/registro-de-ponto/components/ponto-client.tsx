@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalPonto } from './modal-ponto'
@@ -22,67 +22,98 @@ interface Props {
 const MESES       = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const DIAS_SEMANA = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 
-const TIPO_LABELS: Record<string, string> = {
-  normal: 'Normal', extra: 'Extra', folga: 'Folga', ferias: 'Férias', falta: 'Falta',
-}
-const TIPO_COLORS: Record<string, { bg: string; text: string }> = {
-  normal:  { bg: '#EAF4F4', text: '#17A589' },
-  extra:   { bg: '#EBF5FB', text: '#2471A3' },
-  folga:   { bg: '#F4ECF7', text: '#8E44AD' },
-  ferias:  { bg: '#E9F7EF', text: '#1E8449' },
-  falta:   { bg: '#FDEDEC', text: '#C0392B' },
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Status =
+  | 'ok'
+  | 'atraso'
+  | 'saida_antecipada'
+  | 'incompleto'
+  | 'em_andamento'
+  | 'aguardando'
+  | 'ausente'
+  | 'folga'
+  | 'folga_extra'
+  | 'ferias'
+  | 'falta'
+  | 'previsto'
+  | 'sem_escala'
+
+type SituacaoInfo = { label: string; color: string; bg: string; status: Status }
+
+type DayEntry = {
+  empId: string
+  empNome: string
+  empCargo: string | null
+  date: string
+  dayResult: DayResult | null
+  record: TimeRecord | null
+  sit: SituacaoInfo
+  isToday: boolean
+  isFuture: boolean
 }
 
-type SituacaoInfo = {
-  label: string
-  color: string
-  bg: string
-  isLate: boolean
-  isEarlyOut: boolean
-  isAbsent: boolean
-}
+// ─── Status ───────────────────────────────────────────────────────────────────
 
-function getSituacao(record: TimeRecord | null, dayResult: DayResult | null, toleranciaMin: number): SituacaoInfo {
-  if (record?.tipo === 'ferias') return { label: 'Férias',  color: '#1E8449', bg: '#E9F7EF', isLate: false, isEarlyOut: false, isAbsent: false }
-  if (record?.tipo === 'falta')  return { label: 'Falta',   color: '#C0392B', bg: '#FDEDEC', isLate: false, isEarlyOut: false, isAbsent: true  }
+function getSituacao(
+  record: TimeRecord | null,
+  dayResult: DayResult | null,
+  toleranciaMin: number,
+  isToday: boolean,
+  isFuture: boolean,
+): SituacaoInfo {
+  if (record?.tipo === 'ferias') return { label: 'Férias',  color: '#1E8449', bg: '#E9F7EF', status: 'ferias' }
+  if (record?.tipo === 'falta')  return { label: 'Falta',   color: '#C0392B', bg: '#FDEDEC', status: 'falta'  }
 
   const noSchedule = !dayResult || dayResult.tipo === 'sem_regra'
-  if (noSchedule) return { label: 'Sem escala', color: '#95A5A6', bg: '#F8F9FA', isLate: false, isEarlyOut: false, isAbsent: false }
-
-  if (dayResult!.tipo === 'folga') {
-    if (!record || record.tipo === 'folga') return { label: 'Folga', color: '#7F8C8D', bg: '#F2F3F4', isLate: false, isEarlyOut: false, isAbsent: false }
-    return { label: 'Extra na folga', color: '#2471A3', bg: '#EBF5FB', isLate: false, isEarlyOut: false, isAbsent: false }
+  if (noSchedule) {
+    if (!record) return { label: 'Sem escala', color: '#BDC3C7', bg: '#F8F9FA', status: 'sem_escala' }
+    return { label: 'Normal', color: '#17A589', bg: '#EAF4F4', status: 'ok' }
   }
 
-  // Dia esperado de trabalho
-  if (!record) return { label: 'Ausente', color: '#C0392B', bg: '#FDEDEC', isLate: false, isEarlyOut: false, isAbsent: true }
-  if (record.tipo === 'folga') return { label: 'Folga não prevista', color: '#8E44AD', bg: '#F4ECF7', isLate: false, isEarlyOut: false, isAbsent: false }
+  if (dayResult.tipo === 'folga') {
+    if (!record || record.tipo === 'folga')
+      return { label: 'Folga', color: '#7F8C8D', bg: '#F2F3F4', status: 'folga' }
+    return { label: 'Extra na folga', color: '#2471A3', bg: '#EBF5FB', status: 'folga_extra' }
+  }
 
-  let isLate = false
-  let lateMin = 0
-  let isEarlyOut = false
+  // Dia de trabalho
+  if (!record || !record.entrada) {
+    if (isFuture) return { label: 'Previsto',   color: '#2471A3', bg: '#EBF5FB', status: 'previsto'   }
+    if (isToday)  return { label: 'Aguardando', color: '#7F8C8D', bg: '#F2F3F4', status: 'aguardando' }
+    return { label: 'Ausente', color: '#C0392B', bg: '#FDEDEC', status: 'ausente' }
+  }
 
-  if (record.entrada && dayResult!.hora_entrada) {
-    const [eh, em] = dayResult!.hora_entrada.split(':').map(Number)
-    const expectedMin = eh * 60 + em
+  // Tem entrada mas não tem saída
+  if (!record.saida) {
+    if (isToday) return { label: 'Em andamento', color: '#D35400', bg: '#FDEBD0', status: 'em_andamento' }
+    return { label: 'Sem saída', color: '#E67E22', bg: '#FDEBD0', status: 'incompleto' }
+  }
+
+  if (record.tipo === 'folga') return { label: 'Folga não prevista', color: '#8E44AD', bg: '#F4ECF7', status: 'folga_extra' }
+
+  // Registro completo — verificar pontualidade
+  let isLate = false, lateMin = 0, isEarlyOut = false
+
+  if (record.entrada && dayResult.hora_entrada) {
+    const [eh, em] = dayResult.hora_entrada.split(':').map(Number)
     const actual = new Date(record.entrada)
-    const actualMin = actual.getHours() * 60 + actual.getMinutes()
-    lateMin = actualMin - expectedMin
+    lateMin = actual.getHours() * 60 + actual.getMinutes() - (eh * 60 + em)
     if (lateMin > toleranciaMin) isLate = true
   }
 
-  if (record.saida && dayResult!.hora_saida) {
-    const [sh, sm] = dayResult!.hora_saida.split(':').map(Number)
+  if (record.saida && dayResult.hora_saida) {
+    const [sh, sm] = dayResult.hora_saida.split(':').map(Number)
     const actual = new Date(record.saida)
-    const actualMin = actual.getHours() * 60 + actual.getMinutes()
-    if (actualMin < sh * 60 + sm) isEarlyOut = true
+    if (actual.getHours() * 60 + actual.getMinutes() < sh * 60 + sm) isEarlyOut = true
   }
 
-  if (isLate)    return { label: `Atraso ${lateMin}min`, color: '#D35400', bg: '#FDEBD0', isLate: true,  isEarlyOut, isAbsent: false }
-  if (isEarlyOut) return { label: 'Saída antecipada',    color: '#D35400', bg: '#FDEBD0', isLate: false, isEarlyOut: true,  isAbsent: false }
-
-  return { label: 'No prazo', color: '#17A589', bg: '#EAF4F4', isLate: false, isEarlyOut: false, isAbsent: false }
+  if (isLate)     return { label: `Atraso ${lateMin}min`, color: '#D35400', bg: '#FDEBD0', status: 'atraso'           }
+  if (isEarlyOut) return { label: 'Saída antecipada',     color: '#D35400', bg: '#FDEBD0', status: 'saida_antecipada' }
+  return { label: 'No prazo', color: '#17A589', bg: '#EAF4F4', status: 'ok' }
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatTime(ts: string | null) {
   if (!ts) return '—'
@@ -90,71 +121,146 @@ function formatTime(ts: string | null) {
 }
 
 function formatDate(dateStr: string) {
-  const [y, m, d] = dateStr.split('-')
-  return `${d}/${m}/${y}`
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`
+}
+
+function formatWeekday(dateStr: string) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'short' })
 }
 
 function formatInterval(interval: string | null) {
   if (!interval) return '—'
   const match = interval.match(/(\d+):(\d+)/)
   if (!match) return interval
-  return `${match[1]}h ${match[2]}min`
+  const h = match[1], min = match[2]
+  return min !== '00' ? `${h}h ${min}min` : `${h}h`
 }
 
 function getDaysInMonth(ano: number, mes: number) { return new Date(ano, mes, 0).getDate() }
 function getFirstDayOfWeek(ano: number, mes: number) { return new Date(ano, mes - 1, 1).getDay() }
 
+function getPrevistoLabel(dayResult: DayResult | null): string {
+  if (!dayResult || dayResult.tipo === 'sem_regra') return '—'
+  if (dayResult.tipo === 'folga') return 'Folga'
+  const h = dayResult.hora_entrada?.slice(0, 5) ?? '?'
+  const s = dayResult.hora_saida?.slice(0, 5) ?? '?'
+  return `${h}–${s}`
+}
+
+function getChipLabel(
+  sit: SituacaoInfo,
+  record: TimeRecord | null,
+  dayResult: DayResult | null,
+  isSingleEmp: boolean,
+  empNome: string,
+): string {
+  if (!isSingleEmp) return empNome.split(' ')[0]
+  switch (sit.status) {
+    case 'previsto':
+    case 'aguardando':
+      return dayResult?.hora_entrada && dayResult?.hora_saida
+        ? `${dayResult.hora_entrada.slice(0,5)}–${dayResult.hora_saida.slice(0,5)}`
+        : sit.label
+    case 'em_andamento':
+    case 'incompleto':
+      return record?.entrada ? `${formatTime(record.entrada)} →` : sit.label
+    case 'ok':
+    case 'atraso':
+    case 'saida_antecipada':
+      return `${formatTime(record?.entrada ?? null)}–${formatTime(record?.saida ?? null)}`
+    default:
+      return sit.label
+  }
+}
+
+const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'aguardando'])
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function PontoClient({ records, employees, rules, exceptions, companyId, mes, ano }: Props) {
   const router = useRouter()
 
-  const [view,           setView]         = useState<'lista' | 'calendario'>('lista')
-  const [tolerancia,     setTolerancia]   = useState(10)
-  const [filterEmployee, setFilter]       = useState('')
-  const [modalOpen,      setModalOpen]    = useState(false)
+  const [view,           setView]          = useState<'lista' | 'calendario'>('lista')
+  const [tolerancia,     setTolerancia]    = useState(10)
+  const [filterEmployee, setFilter]        = useState('')
+  const [modalOpen,      setModalOpen]     = useState(false)
   const [editingRecord,  setEditingRecord] = useState<TimeRecord | null>(null)
-  const [modalEmpId,     setModalEmpId]   = useState<string | null>(null)
-  const [modalDate,      setModalDate]    = useState<string | null>(null)
-  const [modalEntrada,   setModalEntrada] = useState<string | null>(null)
-  const [modalSaida,     setModalSaida]   = useState<string | null>(null)
-  const [modalTipo,      setModalTipo]    = useState<string>('normal')
-  const [deletingId,     setDeletingId]   = useState<string | null>(null)
-  const [deleteError,    setDeleteError]  = useState('')
+  const [modalEmpId,     setModalEmpId]    = useState<string | null>(null)
+  const [modalDate,      setModalDate]     = useState<string | null>(null)
+  const [modalEntrada,   setModalEntrada]  = useState<string | null>(null)
+  const [modalSaida,     setModalSaida]    = useState<string | null>(null)
+  const [modalTipo,      setModalTipo]     = useState<string>('normal')
+  const [deletingId,     setDeletingId]    = useState<string | null>(null)
+  const [deleteError,    setDeleteError]   = useState('')
 
-  const filteredEmps = filterEmployee ? employees.filter(e => e.id === filterEmployee) : employees
+  const today = new Date().toISOString().slice(0, 10)
 
-  // Mapas de consulta rápida
-  const scheduleMap = new Map<string, DayResult>()
-  for (const emp of employees) {
-    const days = generateMonth(rules, exceptions, mes, ano, emp.id)
-    for (const d of days) scheduleMap.set(`${emp.id}|${d.date}`, d)
-  }
+  const scheduleMap = useMemo(() => {
+    const map = new Map<string, DayResult>()
+    for (const emp of employees) {
+      const days = generateMonth(rules, exceptions, mes, ano, emp.id)
+      for (const d of days) map.set(`${emp.id}|${d.date}`, d)
+    }
+    return map
+  }, [employees, rules, exceptions, mes, ano])
 
-  const recordsMap = new Map<string, TimeRecord>()
-  for (const r of records) recordsMap.set(`${r.employee_id}|${r.data}`, r)
+  const recordsMap = useMemo(() => {
+    const map = new Map<string, TimeRecord>()
+    for (const r of records) map.set(`${r.employee_id}|${r.data}`, r)
+    return map
+  }, [records])
 
-  // Métricas de conformidade
-  const totalDias = getDaysInMonth(ano, mes)
-  let expectedDays = 0, presentDays = 0, absentDays = 0, lateDays = 0, earlyOutDays = 0
+  // DayEntry[]: orientado à escala (não aos registros)
+  const dayEntries = useMemo(() => {
+    const totalDias = getDaysInMonth(ano, mes)
+    const emps = filterEmployee ? employees.filter(e => e.id === filterEmployee) : employees
+    const entries: DayEntry[] = []
 
-  for (const emp of filteredEmps) {
-    for (let d = 1; d <= totalDias; d++) {
-      const dateStr  = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      const dayResult = scheduleMap.get(`${emp.id}|${dateStr}`) ?? null
-      if (dayResult?.tipo !== 'trabalho') continue
-      expectedDays++
-      const record = recordsMap.get(`${emp.id}|${dateStr}`) ?? null
-      const sit = getSituacao(record, dayResult, tolerancia)
-      if (sit.isAbsent)   absentDays++
-      else {
-        presentDays++
-        if (sit.isLate)     lateDays++
-        if (sit.isEarlyOut) earlyOutDays++
+    for (const emp of emps) {
+      for (let d = 1; d <= totalDias; d++) {
+        const dateStr   = `${ano}-${String(mes).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+        const isToday   = dateStr === today
+        const isFuture  = dateStr > today
+        const dayResult = scheduleMap.get(`${emp.id}|${dateStr}`) ?? null
+        const record    = recordsMap.get(`${emp.id}|${dateStr}`) ?? null
+        const hasSchedule = dayResult && dayResult.tipo !== 'sem_regra'
+
+        if (filterEmployee) {
+          // Com filtro: todos os dias com escala ou registro
+          if (!hasSchedule && !record) continue
+        } else {
+          // Sem filtro: só passado+hoje, só dias de trabalho esperados ou com registro
+          if (isFuture) continue
+          if (!hasSchedule && !record) continue
+          if (dayResult?.tipo === 'folga' && !record) continue
+        }
+
+        const sit = getSituacao(record, dayResult, tolerancia, isToday, isFuture)
+        entries.push({ empId: emp.id, empNome: emp.nome, empCargo: emp.cargo, date: dateStr, dayResult, record, sit, isToday, isFuture })
       }
     }
-  }
-  const presencaRate = expectedDays > 0 ? Math.round(presentDays / expectedDays * 100) : 100
 
-  // Navegação de mês
+    entries.sort((a, b) => b.date.localeCompare(a.date) || a.empNome.localeCompare(b.empNome))
+    return entries
+  }, [employees, scheduleMap, recordsMap, mes, ano, filterEmployee, tolerancia, today])
+
+  // Métricas: só dias passados/hoje com escala de trabalho
+  const metrics = useMemo(() => {
+    let expected = 0, present = 0, absent = 0, late = 0
+    for (const e of dayEntries) {
+      if (e.isFuture) continue
+      if (SKIP_METRICS.has(e.sit.status)) continue
+      expected++
+      if (e.sit.status === 'ausente' || e.sit.status === 'falta') { absent++; continue }
+      present++
+      if (e.sit.status === 'atraso') late++
+    }
+    const rate = expected > 0 ? Math.round(present / expected * 100) : 100
+    return { expected, present, absent, late, rate }
+  }, [dayEntries])
+
   function navMes(delta: number) {
     let m = mes + delta, a = ano
     if (m < 1)  { m = 12; a-- }
@@ -176,7 +282,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
   }
 
   function openFromCalendar(dateStr: string, empId: string) {
-    const existing = recordsMap.get(`${empId}|${dateStr}`) ?? null
+    const existing  = recordsMap.get(`${empId}|${dateStr}`) ?? null
     const dayResult = scheduleMap.get(`${empId}|${dateStr}`) ?? null
     if (existing) {
       setEditingRecord(existing)
@@ -192,24 +298,29 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     setModalOpen(true)
   }
 
-  async function handleDelete(r: TimeRecord) {
+  function openFromList(entry: DayEntry) {
+    if (entry.record) openEdit(entry.record)
+    else openFromCalendar(entry.date, entry.empId)
+  }
+
+  async function handleDelete(entry: DayEntry) {
+    if (!entry.record) return
     if (!confirm('Excluir este registro de ponto?')) return
-    setDeletingId(r.id); setDeleteError('')
-    const result = await deleteTimeRecordAction(r.id)
+    setDeletingId(entry.record.id); setDeleteError('')
+    const result = await deleteTimeRecordAction(entry.record.id)
     setDeletingId(null)
     if ('error' in result) setDeleteError(result.error ?? 'Erro ao excluir.')
     else router.refresh()
   }
 
-  // Grade do calendário
-  const firstDay = getFirstDayOfWeek(ano, mes)
+  const isSingleEmp = !!filterEmployee
+  const firstDay    = getFirstDayOfWeek(ano, mes)
+  const totalDias   = getDaysInMonth(ano, mes)
   const cells: (number | null)[] = [
     ...Array(firstDay).fill(null),
     ...Array.from({ length: totalDias }, (_, i) => i + 1),
   ]
   while (cells.length % 7 !== 0) cells.push(null)
-
-  const filteredRecords = filterEmployee ? records.filter(r => r.employee_id === filterEmployee) : records
 
   return (
     <>
@@ -237,13 +348,11 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
             ))}
           </div>
 
-          {/* Tolerância */}
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)', backgroundColor: 'white' }}>
             <span>Tolerância:</span>
             <input
-              type="number" min="0" max="60"
-              value={tolerancia}
+              type="number" min="0" max="60" value={tolerancia}
               onChange={e => setTolerancia(parseInt(e.target.value) || 0)}
               className="w-10 text-center border-0 outline-none text-xs font-semibold bg-transparent"
               style={{ color: 'var(--color-text-primary)' }}
@@ -270,14 +379,14 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
       {/* Métricas */}
       <div className="grid grid-cols-5 gap-3 mb-4">
         {[
-          { label: 'Dias esperados', value: String(expectedDays),    color: 'var(--color-primary-darker)' },
-          { label: 'Presentes',      value: String(presentDays),     color: '#1E8449' },
-          { label: 'Ausências',      value: String(absentDays),      color: '#C0392B' },
-          { label: 'Atrasos',        value: String(lateDays),        color: '#D35400' },
+          { label: 'Dias esperados', value: String(metrics.expected), color: 'var(--color-primary-darker)' },
+          { label: 'Presentes',      value: String(metrics.present),  color: '#1E8449' },
+          { label: 'Ausências',      value: String(metrics.absent),   color: '#C0392B' },
+          { label: 'Atrasos',        value: String(metrics.late),     color: '#D35400' },
           {
             label: '% Presença',
-            value: `${presencaRate}%`,
-            color: presencaRate >= 90 ? '#1E8449' : presencaRate >= 75 ? '#D35400' : '#C0392B',
+            value: `${metrics.rate}%`,
+            color: metrics.rate >= 90 ? '#1E8449' : metrics.rate >= 75 ? '#D35400' : '#C0392B',
           },
         ].map(m => (
           <div key={m.label} className="p-3 rounded-xl border text-center"
@@ -314,17 +423,18 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
 
           <div className="grid grid-cols-7">
             {cells.map((day, idx) => {
-              const dateStr = day
-                ? `${ano}-${String(mes).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                : ''
-              const isToday    = dateStr === new Date().toISOString().slice(0, 10)
-              const refDay     = filteredEmps[0] ? scheduleMap.get(`${filteredEmps[0].id}|${dateStr}`) : null
-              const isFeriado  = refDay?.feriado ?? false
-              const isDomingo  = refDay?.domingo ?? false
+              const dateStr  = day ? `${ano}-${String(mes).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''
+              const isToday  = dateStr === today
+              const isFuture = dateStr > today
+              const refEmpId = filterEmployee || employees[0]?.id || ''
+              const refDay   = refEmpId && dateStr ? scheduleMap.get(`${refEmpId}|${dateStr}`) : null
+              const isFeriado = refDay?.feriado ?? false
+              const isDomingo = refDay?.domingo ?? false
 
               let cellBg = day ? 'white' : '#FAFAFA'
               if (day && isDomingo) cellBg = '#F5F5F5'
               if (day && isFeriado) cellBg = '#EBF5FB'
+              if (day && isToday)   cellBg = '#FEFCE8'
 
               return (
                 <div key={idx} className="min-h-[90px] border-r border-b p-1"
@@ -347,21 +457,23 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
                         )}
                       </div>
 
-                      {filteredEmps.map(emp => {
+                      {(isSingleEmp ? employees.filter(e => e.id === filterEmployee) : employees).map(emp => {
                         const dayResult = scheduleMap.get(`${emp.id}|${dateStr}`) ?? null
                         const record    = recordsMap.get(`${emp.id}|${dateStr}`) ?? null
-                        if (!dayResult && !record) return null
-                        if (dayResult?.tipo === 'sem_regra' && !record) return null
-                        const sit = getSituacao(record, dayResult, tolerancia)
-                        const label = filterEmployee
-                          ? (record ? `${formatTime(record.entrada)}–${formatTime(record.saida)}` : sit.label)
-                          : emp.nome.split(' ')[0]
+                        const hasSchedule = dayResult && dayResult.tipo !== 'sem_regra'
+
+                        if (!hasSchedule && !record) return null
+                        if (!isSingleEmp && dayResult?.tipo === 'folga' && !record) return null
+
+                        const sit   = getSituacao(record, dayResult, tolerancia, isToday, isFuture)
+                        const label = getChipLabel(sit, record, dayResult, isSingleEmp, emp.nome)
+
                         return (
                           <button key={emp.id}
                             onClick={() => openFromCalendar(dateStr, emp.id)}
                             className="w-full text-left mb-0.5 px-1.5 py-0.5 rounded text-xs truncate"
                             style={{ backgroundColor: sit.bg, color: sit.color }}
-                            title={`${emp.nome} — ${sit.label}${record ? ` (${formatTime(record.entrada)}–${formatTime(record.saida)})` : ''}`}>
+                            title={`${emp.nome} — ${sit.label}${record ? ` · ${formatTime(record.entrada)}–${formatTime(record.saida)}` : ''}`}>
                             {label}
                           </button>
                         )
@@ -374,15 +486,16 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
           </div>
 
           {/* Legenda */}
-          <div className="flex flex-wrap items-center gap-4 px-4 py-2 border-t text-xs"
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 border-t text-xs"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
             {[
-              { bg: '#EAF4F4', label: 'No prazo'                   },
-              { bg: '#FDEBD0', label: 'Atraso / Saída antecipada'  },
-              { bg: '#FDEDEC', label: 'Ausente / Falta'            },
-              { bg: '#F4ECF7', label: 'Folga não prevista'         },
-              { bg: '#F2F3F4', label: 'Folga'                      },
-              { bg: '#EBF5FB', label: 'Feriado'                    },
+              { bg: '#EAF4F4', label: 'No prazo'           },
+              { bg: '#EBF5FB', label: 'Previsto / Extra'   },
+              { bg: '#FDEBD0', label: 'Atraso / Em andamento' },
+              { bg: '#FDEDEC', label: 'Ausente'             },
+              { bg: '#F2F3F4', label: 'Folga / Aguardando' },
+              { bg: '#F4ECF7', label: 'Folga não prevista' },
+              { bg: '#E9F7EF', label: 'Férias'             },
             ].map(l => (
               <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: l.bg, border: '1px solid #ddd', display: 'inline-block' }} />
@@ -399,54 +512,103 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
           <table className="w-full min-w-[860px] text-sm">
             <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
               <tr>
-                {['Funcionário','Data','Entrada','Almoço','Saída','Horas','Tipo','Situação',''].map((h, i) => (
-                  <th key={i} className={`${i < 7 ? 'text-left' : ''} px-4 py-3 font-medium`}
-                    style={{ color: 'var(--color-text-secondary)' }}>{h}</th>
-                ))}
+                {!filterEmployee && (
+                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
+                )}
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Data</th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Previsto</th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Entrada</th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Almoço</th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Saída</th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Horas</th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Situação</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
-              {filteredRecords.length === 0 && (
-                <tr><td colSpan={9} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  Nenhum registro para {MESES[mes - 1]} {ano}.
-                </td></tr>
+              {dayEntries.length === 0 && (
+                <tr>
+                  <td colSpan={isSingleEmp ? 8 : 9} className="text-center py-10"
+                    style={{ color: 'var(--color-text-muted)' }}>
+                    Nenhum dado para {MESES[mes - 1]} {ano}.
+                  </td>
+                </tr>
               )}
-              {filteredRecords.map((r, idx) => {
-                const dayResult = scheduleMap.get(`${r.employee_id}|${r.data}`) ?? null
-                const sit = getSituacao(r, dayResult, tolerancia)
-                const colors = TIPO_COLORS[r.tipo] ?? TIPO_COLORS.normal
+
+              {dayEntries.map((entry, idx) => {
+                const { record, dayResult, sit, isToday, isFuture } = entry
+                const previsto  = getPrevistoLabel(dayResult)
+                const isAbsent  = sit.status === 'ausente' || sit.status === 'falta'
+                const rowBg = isToday
+                  ? '#FEFCE8'
+                  : isFuture
+                  ? '#FAFBFF'
+                  : idx % 2 === 0 ? 'white' : '#FAFAFA'
+
+                const entradaColor = sit.status === 'atraso' ? '#D35400' : 'var(--color-text-primary)'
+                const saidaColor   = sit.status === 'saida_antecipada' ? '#D35400' : 'var(--color-text-primary)'
+
                 return (
-                  <tr key={r.id} className="border-t"
-                    style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: idx % 2 === 0 ? 'white' : '#FAFAFA' }}>
-                    <td className="px-4 py-3 font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>
-                      <div>{r.employee.nome}</div>
-                      {r.employee.cargo && <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{r.employee.cargo}</div>}
+                  <tr key={`${entry.empId}|${entry.date}`} className="border-t"
+                    style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
+
+                    {!filterEmployee && (
+                      <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                        <div className="font-medium">{entry.empNome}</div>
+                        {entry.empCargo && (
+                          <div style={{ color: 'var(--color-text-muted)' }}>{entry.empCargo}</div>
+                        )}
+                      </td>
+                    )}
+
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                      <div className="font-medium">{formatDate(entry.date)}</div>
+                      <div className="capitalize" style={{ color: 'var(--color-text-muted)' }}>{formatWeekday(entry.date)}</div>
                     </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(r.data)}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatTime(r.entrada)}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                      {r.saida_almoco
-                        ? `${formatTime(r.saida_almoco)}–${formatTime(r.retorno_almoco)}`
+
+                    <td className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                      {previsto}
+                    </td>
+
+                    <td className="px-4 py-2.5 text-xs font-semibold"
+                      style={{ color: isAbsent ? '#C0392B' : entradaColor }}>
+                      {record?.entrada ? formatTime(record.entrada) : (isAbsent ? 'Ausente' : '—')}
+                    </td>
+
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                      {record?.saida_almoco
+                        ? `${formatTime(record.saida_almoco)}–${formatTime(record.retorno_almoco)}`
                         : '—'}
                     </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatTime(r.saida)}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatInterval(r.horas_trabalhadas)}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: colors.bg, color: colors.text }}>
-                        {TIPO_LABELS[r.tipo] ?? r.tipo}
-                      </span>
+
+                    <td className="px-4 py-2.5 text-xs font-semibold"
+                      style={{ color: isAbsent ? '#C0392B' : saidaColor }}>
+                      {record?.saida ? formatTime(record.saida) : '—'}
                     </td>
-                    <td className="px-4 py-3">
+
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                      {formatInterval(record?.horas_trabalhadas ?? null)}
+                    </td>
+
+                    <td className="px-4 py-2.5">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
                         style={{ backgroundColor: sit.bg, color: sit.color }}>
                         {sit.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 justify-end">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>Editar</Button>
-                        <Button variant="danger" size="sm" loading={deletingId === r.id} onClick={() => handleDelete(r)}>Excluir</Button>
+
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => openFromList(entry)}>
+                          {record ? 'Editar' : 'Registrar'}
+                        </Button>
+                        {record && (
+                          <Button variant="danger" size="sm"
+                            loading={deletingId === record.id}
+                            onClick={() => handleDelete(entry)}>
+                            Excluir
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
