@@ -1,7 +1,7 @@
-﻿import { cookies } from 'next/headers'
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getWorkSchedules, getActiveEmployees } from './queries'
+import { getScheduleRules, getScheduleExceptions, getActiveEmployees } from './queries'
 import { EscalaClient } from './components/escala-client'
 
 export const dynamic = 'force-dynamic'
@@ -24,15 +24,17 @@ export default async function EscalaDeTrabalhoPage({
   const mes = parseInt(params.mes ?? String(now.getMonth() + 1))
   const ano = parseInt(params.ano ?? String(now.getFullYear()))
 
-  const [schedules, employees] = await Promise.all([
-    getWorkSchedules(companyId, ano, mes),
+  const [rules, exceptions, employees] = await Promise.all([
+    getScheduleRules(companyId),
+    getScheduleExceptions(companyId, mes, ano),
     getActiveEmployees(companyId),
   ])
 
   return (
     <div className="max-w-6xl mx-auto">
       <EscalaClient
-        schedules={schedules}
+        rules={rules}
+        exceptions={exceptions}
         employees={employees}
         companyId={companyId}
         mes={mes}
