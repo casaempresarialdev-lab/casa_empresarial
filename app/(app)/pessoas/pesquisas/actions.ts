@@ -71,3 +71,18 @@ export async function deleteSurveyAction(surveyId: string) {
   revalidatePath('/pessoas/pesquisas')
   return { success: true }
 }
+
+export async function toggleSurveyStatusAction(
+  surveyId: string,
+  status: 'rascunho' | 'ativo' | 'encerrado'
+) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+  const { error } = await admin.from('surveys').update({ status }).eq('id', surveyId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/pessoas/pesquisas')
+  return { success: true }
+}

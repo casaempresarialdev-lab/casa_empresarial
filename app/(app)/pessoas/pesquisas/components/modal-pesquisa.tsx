@@ -169,15 +169,16 @@ export function ModalPesquisa({ open, onClose, companyId, survey }: Props) {
                       className="w-full px-3 py-1.5 rounded-lg border text-xs"
                       style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
                     >
+                      <option value="escolha">Escolha única (A / B / C / D)</option>
+                      <option value="multipla">Múltipla escolha</option>
                       <option value="escala">Escala (1 a 5)</option>
                       <option value="texto">Resposta aberta</option>
-                      <option value="multipla">Múltipla escolha</option>
                     </select>
-                    {p.tipo === 'multipla' && (
+                    {(p.tipo === 'multipla' || p.tipo === 'escolha') && (
                       <Input
                         value={(p.opcoes ?? []).join(', ')}
                         onChange={e => updatePergunta(idx, 'opcoes', e.target.value.split(',').map(o => o.trim()))}
-                        placeholder="Opções separadas por vírgula"
+                        placeholder="Opções separadas por vírgula (máx. 4)"
                       />
                     )}
                   </div>
