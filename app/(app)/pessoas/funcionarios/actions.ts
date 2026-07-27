@@ -127,6 +127,9 @@ function parseEmployeeFields(formData: FormData) {
     grau_instrucao: (formData.get('grau_instrucao') as string) || null,
     pin: (formData.get('pin') as string) || null,
     pin_ativo: formData.get('pin_ativo') === 'true',
+    cnpj: (formData.get('cnpj') as string)?.replace(/\D/g, '') || null,
+    servico: (formData.get('servico') as string) || null,
+    valor_servico: dec(formData, 'valor_servico'),
   }
 }
 

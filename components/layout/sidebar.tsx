@@ -52,7 +52,6 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { label: 'Equipe', href: '/pessoas/funcionarios' },
       { label: 'Admissão', href: '/pessoas/admissao' },
-      { label: 'Prestadores', href: '/pessoas/prestadores' },
       { label: 'Registro de Ponto', href: '/pessoas/registro-de-ponto' },
       { label: 'Escala de Trabalho', href: '/pessoas/escala-de-trabalho' },
       { label: 'Folha de Pagamento', href: '/pessoas/folha-de-pagamento' },

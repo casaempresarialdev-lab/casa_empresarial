@@ -39,7 +39,17 @@ const TIPO_CFG: Record<string, { label: string; bg: string; color: string }> = {
   pj:             { label: 'PJ',             bg: '#F4F6F7', color: '#566573' },
   estagio:        { label: 'Estágio',        bg: '#FEF9E7', color: '#9A7D0A' },
   menor_aprendiz: { label: 'Menor Aprendiz', bg: '#E9F7EF', color: '#1E8449' },
+  autonomo:       { label: 'Autônomo',       bg: '#F5EEF8', color: '#7D3C98' },
 }
+
+const TIPO_FILTER_OPTIONS = [
+  { value: 'todos',          label: 'Todos' },
+  { value: 'clt',            label: 'CLT' },
+  { value: 'estagio',        label: 'Estágio' },
+  { value: 'menor_aprendiz', label: 'Menor Aprendiz' },
+  { value: 'pj',             label: 'PJ' },
+  { value: 'autonomo',       label: 'Autônomo' },
+]
 
 const CONTRATO_CFG: Record<string, { label: string; bg: string; color: string }> = {
   assinado:     { label: 'assinado',     bg: '#E9F7EF', color: '#1E8449' },
@@ -148,16 +158,18 @@ interface Props {
 
 export function FuncionariosClient({ employees, companyId, companyBenefits }: Props) {
   const router = useRouter()
-  const [tab, setTab]             = useState<'ativos' | 'inativos'>('ativos')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editing, setEditing]     = useState<Employee | null>(null)
-  const [viewing, setViewing]     = useState<Employee | null>(null)
-  const [viewOpen, setViewOpen]   = useState(false)
+  const [tab, setTab]               = useState<'ativos' | 'inativos'>('ativos')
+  const [tipoFiltro, setTipoFiltro] = useState<string>('todos')
+  const [modalOpen, setModalOpen]   = useState(false)
+  const [editing, setEditing]       = useState<Employee | null>(null)
+  const [viewing, setViewing]       = useState<Employee | null>(null)
+  const [viewOpen, setViewOpen]     = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const ativos   = employees.filter(e => ['admissao', 'experiencia', 'ativo', 'ferias', 'afastado'].includes(e.status))
   const inativos = employees.filter(e => ['inativo', 'demitido'].includes(e.status))
-  const rows     = tab === 'ativos' ? ativos : inativos
+  const byTab    = tab === 'ativos' ? ativos : inativos
+  const rows     = tipoFiltro === 'todos' ? byTab : byTab.filter(e => e.tipo_contrato === tipoFiltro)
 
   const countByStatus = (s: string) => employees.filter(e => e.status === s).length
 
@@ -209,9 +221,10 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
             Equipe
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            Cadastro e acompanhamento da equipe CLT
+            Colaboradores, prestadores e autônomos da empresa
           </p>
         </div>
+        <Button onClick={() => { setEditing(null); setModalOpen(true) }}>+ Adicionar</Button>
       </div>
 
       {/* Cards de métricas */}
@@ -239,6 +252,28 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
         })}
       </div>
 
+      {/* Filtro por contrato */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {TIPO_FILTER_OPTIONS.map(opt => {
+          const active = tipoFiltro === opt.value
+          const cfg = opt.value !== 'todos' ? TIPO_CFG[opt.value] : null
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setTipoFiltro(opt.value)}
+              className="px-3 py-1 rounded-full text-xs font-medium transition-colors border"
+              style={active
+                ? { backgroundColor: cfg?.bg ?? 'var(--color-primary)', color: cfg?.color ?? 'var(--color-primary-darker)', borderColor: cfg?.color ?? 'var(--color-primary-darker)' }
+                : { backgroundColor: 'white', color: 'var(--color-text-muted)', borderColor: 'var(--color-bg-surface)' }
+              }
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* Tabs */}
       <div className="flex border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
         <button style={TAB_BTN(tab === 'ativos')} onClick={() => setTab('ativos')}>
@@ -258,7 +293,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
               <th style={{ ...TH, textAlign: 'left', minWidth: 130 }}>Telefone</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 180 }}>E-mail</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 140 }}>Cargo</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Salário</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Valor</th>
               <th style={{ ...TH, textAlign: 'center', minWidth: 130 }}>Contrato</th>
               <th style={{ ...TH, minWidth: 70 }} />
             </tr>
@@ -299,10 +334,10 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
                     {emp.cargo ?? '—'}
                   </td>
 
-                  {/* Salário */}
+                  {/* Valor (salário CLT ou valor_servico PJ/Autônomo) */}
                   <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-                    {emp.salario != null
-                      ? emp.salario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                    {(emp.salario ?? emp.valor_servico) != null
+                      ? (emp.salario ?? emp.valor_servico)!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                       : '—'}
                   </td>
 

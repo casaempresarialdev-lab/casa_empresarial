@@ -30,6 +30,15 @@ function formatCpf(value: string) {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
 }
 
+function formatCnpj(value: string) {
+  const d = value.replace(/\D/g, '').slice(0, 14)
+  if (d.length <= 2) return d
+  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`
+  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
+}
+
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr)
   d.setDate(d.getDate() + days)
@@ -90,6 +99,11 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
   const [status, setStatus]             = useState('admissao')
   const [grauInstrucao, setGrauInstrucao] = useState('')
   const [departamento, setDepartamento] = useState('')
+
+  // PJ / Autônomo
+  const [cnpj, setCnpj]               = useState('')
+  const [servico, setServico]         = useState('')
+  const [valorServico, setValorServico] = useState('')
 
   // 3 — Remuneração
   const [salario, setSalario]       = useState('')
@@ -154,6 +168,9 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
       setStatus(employee.status)
       setGrauInstrucao(employee.grau_instrucao ?? '')
       setDepartamento(employee.departamento ?? '')
+      setCnpj(employee.cnpj ? formatCnpj(employee.cnpj) : '')
+      setServico(employee.servico ?? '')
+      setValorServico(employee.valor_servico !== null ? String(employee.valor_servico) : '')
       setSalario(employee.salario !== null ? String(employee.salario) : '')
       setPlanoSaude(employee.plano_saude)
       setDataAdmissao(employee.data_admissao ?? '')
@@ -176,6 +193,7 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
       setNome(''); setCpf(''); setRg(''); setNascimento(''); setTelefone(''); setEmail('')
       setCargo(''); setLocalTrabalho(''); setTipoContrato(''); setStatus('admissao')
       setGrauInstrucao(''); setDepartamento('')
+      setCnpj(''); setServico(''); setValorServico('')
       setSalario(''); setPlanoSaude(false)
       setDataAdmissao(''); setFimExp1(''); setFimExp2(''); setVctoFerias(''); setExame('')
       setStatusContrato(''); setDataDemissao('')
@@ -224,6 +242,9 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
     fd.set('pin', pin)
     fd.set('pin_ativo', String(pinAtivo))
     fd.set('benefit_ids', JSON.stringify(selectedBenefitIds))
+    fd.set('cnpj', cnpj)
+    fd.set('servico', servico)
+    fd.set('valor_servico', valorServico)
     for (const slot of DOC_SLOTS) {
       const file = docFiles[slot.key]
       if (file) fd.set(`doc_${slot.key}`, file)
@@ -255,9 +276,36 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
     (() => { const d = new Date(vctoFerias); d.setDate(d.getDate() + 330); return d.toISOString().split('T')[0] })()
   ) : null
 
+  const isPJ = tipoContrato === 'pj'
+  const isAutonomo = tipoContrato === 'autonomo'
+  const isCLT = tipoContrato === 'clt'
+  const isEstagio = tipoContrato === 'estagio'
+  const isAprendiz = tipoContrato === 'menor_aprendiz'
+  const isPJOrAutonomo = isPJ || isAutonomo
+  const isCLTOrEstagio = isCLT || isEstagio || isAprendiz
+
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Editar Funcionário' : 'Novo Funcionário'}>
       <form onSubmit={handleSubmit} className="space-y-5">
+
+        {/* 0 — Forma de Contratação (sempre primeiro) */}
+        <div>
+          <p style={sec}>FORMA DE CONTRATAÇÃO</p>
+          <select
+            value={tipoContrato}
+            onChange={e => setTipoContrato(e.target.value)}
+            required
+            className="w-full px-3 py-2 rounded-lg border text-sm"
+            style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+          >
+            <option value="">Selecionar...</option>
+            <option value="clt">CLT</option>
+            <option value="estagio">Estágio</option>
+            <option value="menor_aprendiz">Menor Aprendiz</option>
+            <option value="pj">PJ (Pessoa Jurídica)</option>
+            <option value="autonomo">Autônomo</option>
+          </select>
+        </div>
 
         {/* 1 — Identificação */}
         <div>
@@ -294,50 +342,38 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
           </div>
         </div>
 
-        {/* 2 — Dados Profissionais */}
-        <div>
-          <p style={sec}>2. DADOS PROFISSIONAIS</p>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={lbl}>Cargo</label>
-                <Input value={cargo} onChange={e => setCargo(e.target.value)} placeholder="Ex: Recepcionista" />
+        {/* 2 — Dados Profissionais (CLT / Estágio / Menor Aprendiz) */}
+        {!isPJOrAutonomo && (
+          <div>
+            <p style={sec}>2. DADOS PROFISSIONAIS</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={lbl}>Cargo</label>
+                  <Input value={cargo} onChange={e => setCargo(e.target.value)} placeholder="Ex: Recepcionista" />
+                </div>
+                <div>
+                  <label style={lbl}>Local de Trabalho</label>
+                  <Input value={localTrabalho} onChange={e => setLocalTrabalho(e.target.value)} placeholder="Ex: Canal ABM" />
+                </div>
               </div>
-              <div>
-                <label style={lbl}>Local de Trabalho</label>
-                <Input value={localTrabalho} onChange={e => setLocalTrabalho(e.target.value)} placeholder="Ex: Canal ABM" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={lbl}>Tipo de Contrato</label>
-                <select value={tipoContrato} onChange={e => setTipoContrato(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
-                  <option value="">Selecionar...</option>
-                  <option value="clt">CLT</option>
-                  <option value="pj">PJ</option>
-                  <option value="estagio">Estágio</option>
-                  <option value="menor_aprendiz">Menor Aprendiz</option>
-                </select>
-              </div>
-              <div>
-                <label style={lbl}>Status</label>
-                <select value={status} onChange={e => setStatus(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
-                  <option value="admissao">Admissão</option>
-                  <option value="experiencia">Experiência</option>
-                  <option value="ativo">Ativo</option>
-                  <option value="inativo">Inativo</option>
-                  <option value="demitido">Demitido</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={lbl}>Departamento</label>
-                <Input value={departamento} onChange={e => setDepartamento(e.target.value)} placeholder="Ex: Operacional" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={lbl}>Status</label>
+                  <select value={status} onChange={e => setStatus(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border text-sm"
+                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                    <option value="admissao">Admissão</option>
+                    <option value="experiencia">Experiência</option>
+                    <option value="ativo">Ativo</option>
+                    <option value="inativo">Inativo</option>
+                    <option value="demitido">Demitido</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={lbl}>Departamento</label>
+                  <Input value={departamento} onChange={e => setDepartamento(e.target.value)} placeholder="Ex: Operacional" />
+                </div>
               </div>
               <div>
                 <label style={lbl}>Grau de Instrução</label>
@@ -350,26 +386,67 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* 3 — Remuneração */}
-        <div>
-          <p style={sec}>3. REMUNERAÇÃO</p>
-          <div className="grid grid-cols-2 gap-3 items-end">
-            <div>
-              <label style={lbl}>Salário Bruto (R$)</label>
-              <Input value={salario} onChange={e => setSalario(e.target.value)} placeholder="0,00" inputMode="decimal" />
-            </div>
-            <div className="pb-1">
-              <Toggle value={planoSaude} onChange={setPlanoSaude} label="Plano de saúde" />
+        {/* 2 — Dados do Contrato (PJ / Autônomo) */}
+        {isPJOrAutonomo && (
+          <div>
+            <p style={sec}>2. DADOS DO CONTRATO</p>
+            <div className="space-y-3">
+              {isPJ && (
+                <div>
+                  <label style={lbl}>CNPJ</label>
+                  <Input value={cnpj} onChange={e => setCnpj(formatCnpj(e.target.value))} placeholder="00.000.000/0001-00" />
+                </div>
+              )}
+              <div>
+                <label style={lbl}>Serviço prestado</label>
+                <Input value={servico} onChange={e => setServico(e.target.value)} placeholder="Ex: Consultoria de TI, Limpeza, etc." />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={lbl}>Valor do contrato (R$)</label>
+                  <Input value={valorServico} onChange={e => setValorServico(e.target.value)} placeholder="0,00" inputMode="decimal" />
+                </div>
+                <div>
+                  <label style={lbl}>Data de início</label>
+                  <Input type="date" value={dataAdmissao} onChange={e => setDataAdmissao(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Status</label>
+                <select value={status} onChange={e => setStatus(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                </select>
+              </div>
             </div>
           </div>
-          <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            Vale-alimentação e vale-transporte são configurados em Benefícios e vinculados no item 6.
-          </p>
-        </div>
+        )}
 
-        {/* 4 — Datas Trabalhistas */}
+        {/* 3 — Remuneração (CLT / Estágio / Menor Aprendiz) */}
+        {!isPJOrAutonomo && (
+          <div>
+            <p style={sec}>3. REMUNERAÇÃO</p>
+            <div className="grid grid-cols-2 gap-3 items-end">
+              <div>
+                <label style={lbl}>Salário Bruto (R$)</label>
+                <Input value={salario} onChange={e => setSalario(e.target.value)} placeholder="0,00" inputMode="decimal" />
+              </div>
+              <div className="pb-1">
+                <Toggle value={planoSaude} onChange={setPlanoSaude} label="Plano de saúde" />
+              </div>
+            </div>
+            <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
+              Vale-alimentação e vale-transporte são configurados em Benefícios e vinculados no item 6.
+            </p>
+          </div>
+        )}
+
+        {/* 4 — Datas Trabalhistas (CLT / Estágio) */}
+        {!isPJOrAutonomo && (
         <div>
           <p style={sec}>4. DATAS TRABALHISTAS</p>
           <div className="space-y-3">
@@ -428,8 +505,10 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
             )}
           </div>
         </div>
+        )}
 
-        {/* 5 — Documentos e Dados Bancários */}
+        {/* 5 — Documentos e Dados Bancários (CLT / Estágio) */}
+        {!isPJOrAutonomo && (
         <div>
           <p style={sec}>5. DOCUMENTOS E DADOS BANCÁRIOS</p>
           <div className="space-y-3">
@@ -476,8 +555,10 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
             </div>
           </div>
         </div>
+        )}
 
-        {/* 6 — Benefícios do catálogo */}
+        {/* 6 — Benefícios do catálogo (CLT / Estágio) */}
+        {!isPJOrAutonomo && (
         <div>
           <p style={sec}>6. BENEFÍCIOS</p>
           {companyBenefits.length === 0 ? (
@@ -508,8 +589,10 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
             </div>
           )}
         </div>
+        )}
 
-        {/* 8 — Acesso ao Portal de Ponto */}
+        {/* 8 — Acesso ao Portal de Ponto (CLT / Estágio) */}
+        {isCLTOrEstagio && (
         <div>
           <p style={sec}>8. ACESSO AO PORTAL DE PONTO</p>
           <div className="space-y-3">
@@ -531,6 +614,7 @@ export function ModalFuncionario({ open, onClose, companyId, employee, companyBe
             )}
           </div>
         </div>
+        )}
 
         {/* 7 — Documentos */}
         <div>

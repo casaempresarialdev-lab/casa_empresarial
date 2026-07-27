@@ -24,7 +24,10 @@ export type Employee = {
   conceder_ferias_ate: string | null
   exame_periodico: string | null
   status_contrato: 'assinado' | 'nao_tem' | 'nao_assinado' | null
-  tipo_contrato: 'clt' | 'pj' | 'estagio' | 'menor_aprendiz' | null
+  tipo_contrato: 'clt' | 'pj' | 'estagio' | 'menor_aprendiz' | 'autonomo' | null
+  cnpj: string | null
+  servico: string | null
+  valor_servico: number | null
   pis_pasep: string | null
   matricula: string | null
   serie_ctps: string | null
