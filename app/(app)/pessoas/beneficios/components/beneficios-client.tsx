@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useRef, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalBeneficio } from './modal-beneficio'
@@ -15,6 +15,80 @@ interface Props {
 
 function fmtCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function ThreeDotMenu({ onEdit, onDelete, loading }: {
+  onEdit: () => void
+  onDelete: () => void
+  loading: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) {
+      const openUp = rect.bottom + 92 > window.innerHeight - 8
+      setPos(openUp
+        ? { top: rect.top - 88, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+      )
+    }
+    setOpen((v) => !v)
+  }
+
+  return (
+    <div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={handleOpen}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        aria-label="Opções"
+      >
+        ···
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onEdit() }}
+          >
+            Editar
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: 'var(--color-error)' }}
+            onClick={() => { setOpen(false); onDelete() }}
+            disabled={loading}
+          >
+            {loading ? 'Excluindo…' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 const TAB_STYLE = (active: boolean) => ({
@@ -102,7 +176,7 @@ export function BeneficiosClient({ companyId, benefits, employees }: Props) {
                     <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Cálculo</th>
                     <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Desconta salário</th>
                     <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-                    <th className="px-4 py-3" />
+                    <th className="px-4 py-3 w-10" />
                   </tr>
                 </thead>
                 <tbody>
@@ -131,10 +205,13 @@ export function BeneficiosClient({ companyId, benefits, employees }: Props) {
                           {b.ativo ? 'Ativo' : 'Inativo'}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 justify-end">
-                          <Button variant="ghost" size="sm" onClick={() => { setEditing(b); setModalOpen(true) }}>Editar</Button>
-                          <Button variant="danger" size="sm" loading={deletingId === b.id} onClick={() => handleDelete(b)}>Excluir</Button>
+                      <td className="px-3 py-2.5">
+                        <div className="flex justify-end">
+                          <ThreeDotMenu
+                            onEdit={() => { setEditing(b); setModalOpen(true) }}
+                            onDelete={() => handleDelete(b)}
+                            loading={deletingId === b.id}
+                          />
                         </div>
                       </td>
                     </tr>
