@@ -1,15 +1,18 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalLancamento } from './modal-lancamento'
+import { GridDetalhado } from './grid-detalhado'
 import { markAsPaidAction, markAsPendingAction, deleteTransactionAction } from '../actions'
 import type { TransactionRow } from '../queries'
 import type { Category } from '../../categorias/queries'
 import type { Contact } from '../../contatos/queries'
 import type { BankAccount, CreditCard } from '../../contas-cartoes/queries'
 import type { CostCenter } from '../../centro-de-custo/queries'
+
+type ViewMode = 'detalhado' | 'resumo'
 
 function formatCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -212,11 +215,23 @@ export function FluxoClient({ transactions, companyId, mes, ano, categories, con
   const router = useRouter()
   const [, startTransition] = useTransition()
 
+  const [view, setView] = useState<ViewMode>('detalhado')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<TransactionRow | null>(null)
   const [defaultTipo, setDefaultTipo] = useState<'recebimento' | 'pagamento'>('recebimento')
   const [actionId, setActionId] = useState<string | null>(null)
   const [deleteDialog, setDeleteDialog] = useState<{ tx: TransactionRow } | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('fluxo_view') as ViewMode | null
+    if (stored === 'resumo' || stored === 'detalhado') setView(stored)
+  }, [])
+
+  function toggleView() {
+    const next: ViewMode = view === 'detalhado' ? 'resumo' : 'detalhado'
+    setView(next)
+    localStorage.setItem('fluxo_view', next)
+  }
 
   const recebimentos = transactions.filter(t => t.tipo === 'recebimento')
   const pagamentos = transactions.filter(t => t.tipo === 'pagamento')
@@ -280,27 +295,68 @@ export function FluxoClient({ transactions, companyId, mes, ano, categories, con
   return (
     <>
       {/* Header com navegação de mês */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+        {/* Título + navegação de mês */}
+        <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
             Fluxo de Caixa
           </h1>
+          <div className="flex items-center gap-1">
+            <button onClick={() => navigate(-1)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm"
+              style={{ color: 'var(--color-text-secondary)' }}>
+              ◀
+            </button>
+            <span className="text-sm font-semibold px-2 min-w-[120px] text-center"
+              style={{ color: 'var(--color-text-primary)' }}>
+              {MESES[mes - 1]} {ano}
+            </span>
+            <button onClick={() => navigate(1)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm"
+              style={{ color: 'var(--color-text-secondary)' }}>
+              ▶
+            </button>
+          </div>
         </div>
+
+        {/* Ações do lado direito */}
         <div className="flex items-center gap-2">
-          <button onClick={() => navigate(-1)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-sm"
-            style={{ color: 'var(--color-text-secondary)' }}>
-            ◀
-          </button>
-          <span className="text-sm font-semibold px-2 min-w-[130px] text-center"
-            style={{ color: 'var(--color-text-primary)' }}>
-            {MESES[mes - 1]} {ano}
-          </span>
-          <button onClick={() => navigate(1)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-sm"
-            style={{ color: 'var(--color-text-secondary)' }}>
-            ▶
-          </button>
+          {/* Botões de adicionar — aparecem no header apenas no modo detalhado */}
+          {view === 'detalhado' && (
+            <>
+              <Button size="sm" variant="primary" onClick={() => openAdd('recebimento')}>
+                + Recebimento
+              </Button>
+              <Button size="sm" variant="danger" onClick={() => openAdd('pagamento')}>
+                + Pagamento
+              </Button>
+            </>
+          )}
+
+          {/* Toggle de visualização */}
+          <div className="flex items-center rounded-lg border overflow-hidden text-xs font-medium"
+            style={{ borderColor: 'var(--color-bg-surface)' }}>
+            <button
+              onClick={() => { if (view !== 'detalhado') toggleView() }}
+              className="px-3 py-1.5 transition-colors"
+              style={{
+                backgroundColor: view === 'detalhado' ? 'var(--color-primary-darker, #A67B5B)' : 'white',
+                color: view === 'detalhado' ? 'white' : 'var(--color-text-secondary)',
+              }}
+            >
+              Detalhado
+            </button>
+            <button
+              onClick={() => { if (view !== 'resumo') toggleView() }}
+              className="px-3 py-1.5 transition-colors"
+              style={{
+                backgroundColor: view === 'resumo' ? 'var(--color-primary-darker, #A67B5B)' : 'white',
+                color: view === 'resumo' ? 'white' : 'var(--color-text-secondary)',
+              }}
+            >
+              Resumo
+            </button>
+          </div>
         </div>
       </div>
 
@@ -318,11 +374,21 @@ export function FluxoClient({ transactions, companyId, mes, ano, categories, con
         ))}
       </div>
 
-      {/* Seções */}
-      <div className="flex flex-col gap-6 overflow-x-auto">
-        <Section tipo="recebimento" transactions={recebimentos} onAdd={openAdd} onEdit={openEdit} onDelete={handleDelete} onTogglePaid={handleTogglePaid} actionId={actionId} />
-        <Section tipo="pagamento" transactions={pagamentos} onAdd={openAdd} onEdit={openEdit} onDelete={handleDelete} onTogglePaid={handleTogglePaid} actionId={actionId} />
-      </div>
+      {/* Conteúdo principal */}
+      {view === 'detalhado' ? (
+        <GridDetalhado
+          transactions={transactions}
+          onEdit={openEdit}
+          onDelete={handleDelete}
+          onTogglePaid={handleTogglePaid}
+          actionId={actionId}
+        />
+      ) : (
+        <div className="flex flex-col gap-6 overflow-x-auto">
+          <Section tipo="recebimento" transactions={recebimentos} onAdd={openAdd} onEdit={openEdit} onDelete={handleDelete} onTogglePaid={handleTogglePaid} actionId={actionId} />
+          <Section tipo="pagamento" transactions={pagamentos} onAdd={openAdd} onEdit={openEdit} onDelete={handleDelete} onTogglePaid={handleTogglePaid} actionId={actionId} />
+        </div>
+      )}
 
       <ModalLancamento
         open={modalOpen}
