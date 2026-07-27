@@ -224,7 +224,6 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
             Colaboradores, prestadores e autônomos da empresa
           </p>
         </div>
-        <Button onClick={() => { setEditing(null); setModalOpen(true) }}>+ Adicionar</Button>
       </div>
 
       {/* Cards de métricas */}
