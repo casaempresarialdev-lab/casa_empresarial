@@ -54,6 +54,15 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
+function SubTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-wider mt-1"
+      style={{ color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
+      {children}
+    </p>
+  )
+}
+
 interface Props {
   company: Company | null
 }
@@ -89,6 +98,7 @@ export function EmpresaForm({ company }: Props) {
             regime_tributario:         (company.regime_tributario as CompanyData['regime_tributario']) ?? undefined,
             telefone:                  company.telefone ?? '',
             email:                     company.email ?? '',
+            ie_situacao:               (company.ie_situacao as CompanyData['ie_situacao']) ?? undefined,
             inscricao_estadual:        company.inscricao_estadual ?? '',
             inscricao_municipal:       company.inscricao_municipal ?? '',
             cor_primaria:              company.cor_primaria ?? '#C19A6B',
@@ -166,7 +176,7 @@ export function EmpresaForm({ company }: Props) {
   const selectSty = { borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
           Minha Empresa
@@ -178,10 +188,19 @@ export function EmpresaForm({ company }: Props) {
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
 
-        {/* 1 — Dados da empresa */}
+        {/* 1 — Dados da empresa + Endereço */}
         <Card>
           <SectionTitle>Dados da Empresa</SectionTitle>
 
+          {/* Razão Social primeiro */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Razão Social" type="text" placeholder="Nome oficial da empresa"
+              error={errors.razao_social?.message} {...register('razao_social')} />
+            <Input label="Nome Fantasia (opcional)" type="text" placeholder="Como a empresa é conhecida"
+              {...register('nome_fantasia')} />
+          </div>
+
+          {/* CNPJ */}
           <div className="flex flex-col gap-1">
             <Input
               label="CNPJ"
@@ -207,49 +226,13 @@ export function EmpresaForm({ company }: Props) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Razão Social" type="text" placeholder="Nome oficial da empresa"
-              error={errors.razao_social?.message} {...register('razao_social')} />
-            <Input label="Nome Fantasia (opcional)" type="text" placeholder="Como a empresa é conhecida"
-              {...register('nome_fantasia')} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                Regime Tributário (opcional)
-              </label>
-              <select className={selectCls} style={selectSty} {...register('regime_tributario')}>
-                <option value="">Selecione...</option>
-                <option value="mei">MEI</option>
-                <option value="simples_nacional">Simples Nacional</option>
-                <option value="lucro_presumido">Lucro Presumido</option>
-                <option value="lucro_real">Lucro Real</option>
-              </select>
-            </div>
-            <div />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <Input label="Telefone (opcional)" type="tel" placeholder="(11) 99999-9999" {...register('telefone')} />
             <Input label="E-mail da empresa (opcional)" type="email" placeholder="empresa@email.com"
               error={errors.email?.message} {...register('email')} />
           </div>
-        </Card>
 
-        {/* 2 — Documentos Fiscais */}
-        <Card>
-          <SectionTitle>Documentos Fiscais</SectionTitle>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="IE — Inscrição Estadual (opcional)" type="text" placeholder="000.000.000.000"
-              {...register('inscricao_estadual')} />
-            <Input label="IM — Inscrição Municipal (opcional)" type="text" placeholder="00000000"
-              {...register('inscricao_municipal')} />
-          </div>
-        </Card>
-
-        {/* 3 — Endereço */}
-        <Card>
-          <SectionTitle>Endereço (opcional)</SectionTitle>
+          {/* Endereço — dentro do mesmo card */}
+          <SubTitle>Endereço</SubTitle>
 
           <div className="grid grid-cols-3 gap-3">
             <div className="flex flex-col gap-1">
@@ -292,13 +275,59 @@ export function EmpresaForm({ company }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <Input label="Bairro" type="text" placeholder="Bairro" {...register('bairro')} />
-            <Input label="Complemento" type="text" placeholder="Apto, sala..." {...register('complemento')} />
+            <Input label="Complemento (opcional)" type="text" placeholder="Apto, sala..." {...register('complemento')} />
           </div>
         </Card>
 
-        {/* 4 — Certificado Digital */}
+        {/* 2 — Dados Fiscais */}
         <Card>
-          <SectionTitle>Certificado Digital (opcional)</SectionTitle>
+          <SectionTitle>Dados Fiscais</SectionTitle>
+
+          {/* Regime Tributário */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                Regime Tributário (opcional)
+              </label>
+              <select className={selectCls} style={selectSty} {...register('regime_tributario')}>
+                <option value="">Selecione...</option>
+                <option value="mei">MEI</option>
+                <option value="simples_nacional">Simples Nacional</option>
+                <option value="lucro_presumido">Lucro Presumido</option>
+                <option value="lucro_real">Lucro Real</option>
+              </select>
+            </div>
+            <div />
+          </div>
+
+          {/* IE */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                IE — Situação
+              </label>
+              <select className={selectCls} style={selectSty} {...register('ie_situacao')}>
+                <option value="">Selecione...</option>
+                <option value="isento">Isento</option>
+                <option value="nao_contribuinte">Não contribuinte do ICMS</option>
+                <option value="contribuinte">Contribuinte do ICMS</option>
+              </select>
+            </div>
+            <Input label="IE — Número" type="text" placeholder="000.000.000.000"
+              {...register('inscricao_estadual')} />
+          </div>
+
+          {/* IM */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="IM — Inscrição Municipal (opcional)" type="text" placeholder="00000000"
+              {...register('inscricao_municipal')} />
+            <div />
+          </div>
+        </Card>
+
+        {/* 3 — Certificado Digital */}
+        <Card>
+          <SectionTitle>Certificado Digital</SectionTitle>
 
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
@@ -318,18 +347,17 @@ export function EmpresaForm({ company }: Props) {
           <PasswordInput
             label={isEdit && company.certificado_digital_url
               ? 'Nova senha do certificado (deixe em branco para manter)'
-              : 'Senha do certificado digital (opcional)'}
+              : 'Senha do certificado digital'}
             placeholder="••••••••"
             autoComplete="off"
             {...register('certificado_digital_senha')}
           />
         </Card>
 
-        {/* 5 — Identidade Visual */}
+        {/* 4 — Identidade Visual */}
         <Card>
           <SectionTitle>Identidade Visual</SectionTitle>
 
-          {/* Logo */}
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
               Logo da empresa (opcional)
@@ -365,7 +393,6 @@ export function EmpresaForm({ company }: Props) {
             <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>PNG, JPG ou SVG — máx. 5 MB</p>
           </div>
 
-          {/* Cor */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
               Cor da empresa (opcional)

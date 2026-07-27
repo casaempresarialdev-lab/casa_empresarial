@@ -8,6 +8,7 @@ export type Company = {
   regime_tributario: string | null
   telefone: string | null
   email: string | null
+  ie_situacao: string | null
   inscricao_estadual: string | null
   inscricao_municipal: string | null
   cor_primaria: string | null
@@ -28,7 +29,7 @@ export async function getCompany(companyId: string): Promise<Company | null> {
     .from('companies')
     .select(
       'id, cnpj, razao_social, nome_fantasia, regime_tributario, telefone, email, ' +
-      'inscricao_estadual, inscricao_municipal, cor_primaria, logo_url, certificado_digital_url, ' +
+      'ie_situacao, inscricao_estadual, inscricao_municipal, cor_primaria, logo_url, certificado_digital_url, ' +
       'cep, uf, cidade, logradouro, bairro, numero, complemento',
     )
     .eq('id', companyId)
