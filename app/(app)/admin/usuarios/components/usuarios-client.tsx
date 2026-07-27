@@ -32,7 +32,7 @@ function cpfMask(cpf: string | null) {
   return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
 }
 
-function ThreeDotMenu({ onEdit, onRemove, loading }: { onEdit: () => void; onRemove: () => void; loading: boolean }) {
+function ThreeDotMenu({ onEdit, onRemove, loading, hideEdit }: { onEdit: () => void; onRemove: () => void; loading: boolean; hideEdit?: boolean }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, right: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
@@ -79,14 +79,16 @@ function ThreeDotMenu({ onEdit, onRemove, loading }: { onEdit: () => void; onRem
           className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
           style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
         >
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
-            onClick={() => { setOpen(false); onEdit() }}
-          >
-            Editar
-          </button>
+          {!hideEdit && (
+            <button
+              type="button"
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: 'var(--color-text-secondary)' }}
+              onClick={() => { setOpen(false); onEdit() }}
+            >
+              Editar
+            </button>
+          )}
           <button
             type="button"
             className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
@@ -155,7 +157,7 @@ function ThreeDotMenuSelf({ onView, onEdit }: { onView: () => void; onEdit: () =
             style={{ color: 'var(--color-text-secondary)' }}
             onClick={() => { setOpen(false); onView() }}
           >
-            Visualizar painel
+            Visualizar
           </button>
           <button
             type="button"
@@ -344,14 +346,12 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end">
-                        <Button
-                          variant="danger"
-                          size="sm"
+                        <ThreeDotMenu
+                          onEdit={() => {}}
+                          onRemove={() => handleCancelInvite(inv)}
                           loading={cancellingId === inv.id}
-                          onClick={() => handleCancelInvite(inv)}
-                        >
-                          Cancelar
-                        </Button>
+                          hideEdit
+                        />
                       </div>
                     </td>
                   </tr>
