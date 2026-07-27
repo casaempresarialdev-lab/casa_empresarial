@@ -21,12 +21,14 @@ export function ModalDocument({ open, onClose, companyId, document }: Props) {
   const isEditing = !!document
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [descricao, setDescricao] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (open) {
       setSelectedFile(null)
+      setDescricao(document?.descricao ?? '')
       setError('')
     }
   }, [open, document])
@@ -38,7 +40,12 @@ export function ModalDocument({ open, onClose, companyId, document }: Props) {
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setSelectedFile(e.target.files?.[0] ?? null)
+    const file = e.target.files?.[0] ?? null
+    setSelectedFile(file)
+    if (file && !descricao) {
+      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '')
+      setDescricao(nameWithoutExt)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -103,7 +110,8 @@ export function ModalDocument({ open, onClose, companyId, document }: Props) {
           label="Descrição *"
           name="descricao"
           placeholder="Ex: Contrato Social, Alvará de Funcionamento"
-          defaultValue={document?.descricao ?? ''}
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
           required
         />
 
