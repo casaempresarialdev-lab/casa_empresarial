@@ -26,7 +26,13 @@ function ThreeDotMenu({ onEdit, onDelete, loading }: { onEdit: () => void; onDel
 
   function handleOpen() {
     const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    if (rect) {
+      const openUp = rect.bottom + 130 > window.innerHeight - 8
+      setPos(openUp
+        ? { top: rect.top - 134, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+      )
+    }
     setOpen((v) => !v)
   }
 
