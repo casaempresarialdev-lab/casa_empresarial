@@ -96,6 +96,7 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
   const [editingAliquota, setEditingAliquota] = useState<AliquotaRow | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
+  const [showAliquotas, setShowAliquotas] = useState(aliquotas.length === 0)
 
   const usingFallback = aliquotas.length === 0
   const effectiveAliquotas = usingFallback ? FALLBACK_ALIQUOTAS : aliquotas
@@ -177,104 +178,141 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
       </div>
 
       {/* Gerenciamento de Alíquotas */}
-      <div className="p-4 rounded-xl border mb-4" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
-              ALÍQUOTAS DE ENCARGOS
+      <div className="rounded-xl border mb-4" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        {/* Cabeçalho clicável */}
+        <button
+          type="button"
+          onClick={() => setShowAliquotas(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors rounded-xl"
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <p className="text-sm font-semibold shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+              ALÍQUOTAS
             </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-              Total ativo: <strong style={{ color: '#C0392B' }}>{fmtPct(totalPct)}</strong> sobre o salário
-              {' '}· FGTS: <strong style={{ color: '#E67E22' }}>{fmtPct(fgtsPct)}</strong>
-              {' '}· Outros: <strong style={{ color: '#C0392B' }}>{fmtPct(outrosPct)}</strong>
-            </p>
-          </div>
-          <Button size="sm" onClick={openAdd}>Adicionar</Button>
-        </div>
-
-        {usingFallback ? (
-          <div
-            className="p-3 rounded-lg flex items-start justify-between gap-4"
-            style={{ backgroundColor: '#FEF9E7', borderLeft: '3px solid #F4D03F' }}
-          >
-            <div>
-              <p className="text-xs font-semibold" style={{ color: '#9A7D0A' }}>
-                Usando alíquotas padrão CLT
-              </p>
-              <p className="text-xs mt-0.5" style={{ color: '#B7950B' }}>
-                Os cálculos usam referências CLT. Clique em "Inicializar" para salvar e personalizar as alíquotas desta empresa.
-              </p>
-            </div>
-            <Button size="sm" variant="ghost" loading={seeding} onClick={handleSeed}>
-              Inicializar padrões
-            </Button>
-          </div>
-        ) : (
-          <div className="rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-bg-surface)' }}>
-            <table className="w-full text-sm">
-              <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                <tr>
-                  <th className="text-left px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-                  <th className="text-left px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Nome / Descrição</th>
-                  <th className="text-right px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Percentual</th>
-                  <th className="px-3 py-2 w-24" />
-                </tr>
-              </thead>
-              <tbody>
-                {aliquotas.map(a => (
-                  <tr key={a.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                    <td className="px-3 py-2">
-                      <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{
-                          backgroundColor: a.ativo ? '#E9F7EF' : '#F4F6F7',
-                          color: a.ativo ? '#1E8449' : '#717D7E',
-                        }}
-                      >
-                        {a.ativo ? 'Ativa' : 'Inativa'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2" style={{ color: a.ativo ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-                      {a.nome}
-                      {a.nome.toUpperCase().includes('FGTS') && (
-                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#FEF3E7', color: '#E67E22' }}>
-                          depósito mensal
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold"
-                      style={{ color: a.ativo ? (a.nome.toUpperCase().includes('FGTS') ? '#E67E22' : '#C0392B') : 'var(--color-text-muted)' }}>
-                      {fmtPct(a.percentual)}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1 justify-end">
-                        <button
-                          onClick={() => openEdit(a)}
-                          className="text-xs px-2 py-1 rounded hover:bg-gray-100 transition-colors"
-                          style={{ color: 'var(--color-text-muted)' }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => handleDelete(a)}
-                          disabled={deletingId === a.id}
-                          className="text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                          style={{ color: '#C0392B' }}
-                        >
-                          {deletingId === a.id ? '...' : 'Excluir'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+            {!showAliquotas && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {effectiveAliquotas.filter(a => a.ativo).map(a => (
+                  <span
+                    key={a.id || a.nome}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                    style={{
+                      backgroundColor: a.nome.toUpperCase().includes('FGTS') ? '#FEF3E7' : '#F4F6F7',
+                      color: a.nome.toUpperCase().includes('FGTS') ? '#E67E22' : 'var(--color-text-secondary)',
+                    }}
+                  >
+                    {a.nome}
+                    <strong>{fmtPct(a.percentual)}</strong>
+                  </span>
                 ))}
-              </tbody>
-            </table>
+                <span className="text-xs font-semibold ml-1" style={{ color: '#C0392B' }}>
+                  = {fmtPct(totalPct)} total
+                </span>
+              </div>
+            )}
+            {showAliquotas && (
+              <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                Total ativo: <strong style={{ color: '#C0392B' }}>{fmtPct(totalPct)}</strong>
+                {' '}· FGTS: <strong style={{ color: '#E67E22' }}>{fmtPct(fgtsPct)}</strong>
+                {' '}· Outros: <strong>{fmtPct(outrosPct)}</strong>
+              </span>
+            )}
+          </div>
+          <span className="text-xs ml-3 shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {showAliquotas ? '▲ Recolher' : '▼ Gerenciar'}
+          </span>
+        </button>
+
+        {/* Conteúdo expandível */}
+        {showAliquotas && (
+          <div className="px-4 pb-4 border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
+            {usingFallback ? (
+              <div
+                className="mt-3 p-3 rounded-lg flex items-start justify-between gap-4"
+                style={{ backgroundColor: '#FEF9E7', borderLeft: '3px solid #F4D03F' }}
+              >
+                <div>
+                  <p className="text-xs font-semibold" style={{ color: '#9A7D0A' }}>
+                    Usando alíquotas padrão CLT
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: '#B7950B' }}>
+                    Clique em "Inicializar" para salvar e personalizar as alíquotas desta empresa.
+                  </p>
+                </div>
+                <Button size="sm" variant="ghost" loading={seeding} onClick={handleSeed}>
+                  Inicializar padrões
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-3 rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-bg-surface)' }}>
+                <table className="w-full text-sm">
+                  <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Nome / Descrição</th>
+                      <th className="text-right px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Percentual</th>
+                      <th className="text-left px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
+                      <th className="px-3 py-2 w-20" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aliquotas.map(a => (
+                      <tr key={a.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
+                        <td className="px-3 py-1.5" style={{ color: a.ativo ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+                          {a.nome}
+                          {a.nome.toUpperCase().includes('FGTS') && (
+                            <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#FEF3E7', color: '#E67E22' }}>
+                              depósito mensal
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-semibold"
+                          style={{ color: a.ativo ? (a.nome.toUpperCase().includes('FGTS') ? '#E67E22' : '#C0392B') : 'var(--color-text-muted)' }}>
+                          {fmtPct(a.percentual)}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={{
+                              backgroundColor: a.ativo ? '#E9F7EF' : '#F4F6F7',
+                              color: a.ativo ? '#1E8449' : '#717D7E',
+                            }}
+                          >
+                            {a.ativo ? 'Ativa' : 'Inativa'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button
+                              onClick={() => openEdit(a)}
+                              className="text-xs px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                              style={{ color: 'var(--color-text-muted)' }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => handleDelete(a)}
+                              disabled={deletingId === a.id}
+                              className="text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                              style={{ color: '#C0392B' }}
+                            >
+                              {deletingId === a.id ? '...' : 'Excluir'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mt-3">
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                * Estimativa. Valores reais variam conforme RAT/FAP, atividade e regime tributário.
+              </p>
+              <Button size="sm" onClick={openAdd}>+ Adicionar alíquota</Button>
+            </div>
           </div>
         )}
-
-        <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
-          * Estimativa. Valores reais variam conforme RAT/FAP, atividade e regime tributário. FGTS = depósito mensal obrigatório. Demais itens = provisões e contribuições patronais.
-        </p>
       </div>
 
       {/* Busca */}
