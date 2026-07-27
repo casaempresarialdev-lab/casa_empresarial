@@ -28,6 +28,15 @@ function formatCpf(value: string) {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
 }
 
+function formatCnpj(value: string) {
+  const d = value.replace(/\D/g, '').slice(0, 14)
+  if (d.length <= 2) return d
+  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`
+  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
+}
+
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr)
   d.setDate(d.getDate() + days)
@@ -84,6 +93,11 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
   const [status, setStatus]             = useState('admissao')
   const [grauInstrucao, setGrauInstrucao] = useState('')
   const [departamento, setDepartamento] = useState('')
+
+  // PJ / Autônomo
+  const [cnpj, setCnpj]               = useState('')
+  const [servico, setServico]         = useState('')
+  const [valorServico, setValorServico] = useState('')
 
   // 3 — Remuneração
   const [salario, setSalario]       = useState('')
@@ -167,6 +181,9 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
     fd.set('pin', pin)
     fd.set('pin_ativo', String(pinAtivo))
     fd.set('benefit_ids', JSON.stringify(selectedBenefitIds))
+    fd.set('cnpj', cnpj)
+    fd.set('servico', servico)
+    fd.set('valor_servico', valorServico)
     for (const slot of DOC_SLOTS) {
       const file = docFiles[slot.key]
       if (file) fd.set(`doc_${slot.key}`, file)
@@ -208,7 +225,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
           ✅
         </div>
         <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-          Funcionário cadastrado!
+          Colaborador cadastrado!
         </h2>
         <p className="text-sm mb-6" style={{ color: 'var(--color-text-muted)' }}>
           {nome.split(' ')[0]} foi adicionado ao sistema.
@@ -244,6 +261,8 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
             setSuccess(null); setNome(''); setCpf(''); setRg(''); setNascimento(''); setTelefone(''); setEmail('')
             setCargo(''); setLocalTrabalho(''); setTipoContrato(''); setStatus('admissao')
             setGrauInstrucao(''); setDepartamento(''); setSalario(''); setPlanoSaude(false)
+            setCnpj(''); setServico(''); setValorServico('')
+            setCnpj(''); setServico(''); setValorServico('')
             setDataAdmissao(''); setFimExp1(''); setFimExp2(''); setVctoFerias(''); setExame('')
             setStatusContrato(''); setDataDemissao(''); setPisPasep(''); setMatricula('')
             setSerieCtps(''); setCertReservista(''); setDependentes('0'); setDadosBancarios('')
@@ -251,7 +270,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
           }}
             className="text-sm py-2 rounded-lg"
             style={{ color: 'var(--color-text-muted)' }}>
-            Cadastrar outro funcionário
+            Cadastrar outro colaborador
           </button>
         </div>
       </div>
@@ -261,6 +280,14 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
   const lbl: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }
   const sec: React.CSSProperties = { color: 'var(--color-primary-darker)', fontSize: '0.75rem', fontWeight: 700, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid var(--color-bg-surface)', letterSpacing: '0.05em' }
   const card: React.CSSProperties = { backgroundColor: 'white', borderRadius: '0.75rem', border: '1px solid var(--color-bg-surface)', padding: '1.5rem' }
+
+  const isPJ        = tipoContrato === 'pj'
+  const isAutonomo  = tipoContrato === 'autonomo'
+  const isCLT       = tipoContrato === 'clt'
+  const isEstagio   = tipoContrato === 'estagio'
+  const isAprendiz  = tipoContrato === 'menor_aprendiz'
+  const isPJOrAut   = isPJ || isAutonomo
+  const isCLTStyle  = isCLT || isEstagio || isAprendiz
 
   const concederAte = vctoFerias ? fmtDate(
     (() => { const d = new Date(vctoFerias); d.setDate(d.getDate() + 330); return d.toISOString().split('T')[0] })()
@@ -280,10 +307,10 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
               Admissão
             </button>
             <span>/</span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>Novo funcionário</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Novo colaborador</span>
           </div>
           <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Novo Funcionário
+            Novo Colaborador
           </h1>
         </div>
         <Button type="button" variant="ghost" onClick={() => router.push('/pessoas/admissao')}>
@@ -293,6 +320,25 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
 
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
+
+          {/* 0 — Forma de Contratação */}
+          <div style={card}>
+            <p style={sec}>FORMA DE CONTRATAÇÃO</p>
+            <select
+              value={tipoContrato}
+              onChange={e => setTipoContrato(e.target.value)}
+              required
+              className="w-full px-3 py-2 rounded-lg border text-sm"
+              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+            >
+              <option value="">Selecionar...</option>
+              <option value="clt">CLT</option>
+              <option value="estagio">Estágio</option>
+              <option value="menor_aprendiz">Menor Aprendiz</option>
+              <option value="pj">PJ (Pessoa Jurídica)</option>
+              <option value="autonomo">Autônomo</option>
+            </select>
+          </div>
 
           {/* 1 — Identificação */}
           <div style={card}>
@@ -329,7 +375,8 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
             </div>
           </div>
 
-          {/* 2 — Dados Profissionais */}
+          {/* 2 — Dados Profissionais (CLT / Estágio / Menor Aprendiz) */}
+          {!isPJOrAut && (
           <div style={card}>
             <p style={sec}>2. DADOS PROFISSIONAIS</p>
             <div className="space-y-3">
@@ -345,18 +392,6 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label style={lbl}>Tipo de Contrato</label>
-                  <select value={tipoContrato} onChange={e => setTipoContrato(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border text-sm"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
-                    <option value="">Selecionar...</option>
-                    <option value="clt">CLT</option>
-                    <option value="pj">PJ</option>
-                    <option value="estagio">Estágio</option>
-                    <option value="menor_aprendiz">Menor Aprendiz</option>
-                  </select>
-                </div>
-                <div>
                   <label style={lbl}>Status</label>
                   <select value={status} onChange={e => setStatus(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border text-sm"
@@ -368,26 +403,64 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
                     <option value="demitido">Demitido</option>
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label style={lbl}>Departamento</label>
                   <Input value={departamento} onChange={e => setDepartamento(e.target.value)} placeholder="Ex: Operacional" />
                 </div>
-                <div>
-                  <label style={lbl}>Grau de Instrução</label>
-                  <select value={grauInstrucao} onChange={e => setGrauInstrucao(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border text-sm"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
-                    <option value="">Selecionar...</option>
-                    {GRAU_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
+              </div>
+              <div>
+                <label style={lbl}>Grau de Instrução</label>
+                <select value={grauInstrucao} onChange={e => setGrauInstrucao(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                  <option value="">Selecionar...</option>
+                  {GRAU_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
               </div>
             </div>
           </div>
+          )}
 
-          {/* 3 — Remuneração */}
+          {/* 2 — Dados do Contrato (PJ / Autônomo) */}
+          {isPJOrAut && (
+          <div style={card}>
+            <p style={sec}>2. DADOS DO CONTRATO</p>
+            <div className="space-y-3">
+              {isPJ && (
+                <div>
+                  <label style={lbl}>CNPJ</label>
+                  <Input value={cnpj} onChange={e => setCnpj(formatCnpj(e.target.value))} placeholder="00.000.000/0001-00" />
+                </div>
+              )}
+              <div>
+                <label style={lbl}>Serviço prestado</label>
+                <Input value={servico} onChange={e => setServico(e.target.value)} placeholder="Ex: Consultoria de TI, Limpeza, etc." />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={lbl}>Valor do contrato (R$)</label>
+                  <Input value={valorServico} onChange={e => setValorServico(e.target.value)} placeholder="0,00" inputMode="decimal" />
+                </div>
+                <div>
+                  <label style={lbl}>Data de início</label>
+                  <Input type="date" value={dataAdmissao} onChange={e => setDataAdmissao(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Status</label>
+                <select value={status} onChange={e => setStatus(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          )}
+
+          {/* 3 — Remuneração (CLT / Estágio) */}
+          {!isPJOrAut && (
           <div style={card}>
             <p style={sec}>3. REMUNERAÇÃO</p>
             <div className="grid grid-cols-2 gap-3 items-end">
@@ -403,8 +476,10 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
               Vale-alimentação e vale-transporte são configurados em Benefícios e vinculados na seção 6.
             </p>
           </div>
+          )}
 
-          {/* 4 — Datas Trabalhistas */}
+          {/* 4 — Datas Trabalhistas (CLT / Estágio) */}
+          {!isPJOrAut && (
           <div style={card}>
             <p style={sec}>4. DATAS TRABALHISTAS</p>
             <div className="space-y-3">
@@ -463,8 +538,10 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
               )}
             </div>
           </div>
+          )}
 
-          {/* 5 — Documentos e Dados Bancários */}
+          {/* 5 — Documentos e Dados Bancários (CLT / Estágio) */}
+          {!isPJOrAut && (
           <div style={card}>
             <p style={sec}>5. DOCUMENTOS E DADOS BANCÁRIOS</p>
             <div className="space-y-3">
@@ -505,8 +582,10 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
               </div>
             </div>
           </div>
+          )}
 
-          {/* 6 — Benefícios */}
+          {/* 6 — Benefícios (CLT / Estágio) */}
+          {!isPJOrAut && (
           <div style={card}>
             <p style={sec}>6. BENEFÍCIOS</p>
             {companyBenefits.length === 0 ? (
@@ -537,6 +616,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
               </div>
             )}
           </div>
+          )}
 
           {/* 7 — Documentos */}
           <div style={card}>
@@ -580,7 +660,8 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
             </div>
           </div>
 
-          {/* 8 — Acesso ao Portal de Ponto */}
+          {/* 8 — Acesso ao Portal de Ponto (CLT / Estágio) */}
+          {isCLTStyle && (
           <div style={card}>
             <p style={sec}>8. ACESSO AO PORTAL DE PONTO</p>
             <div className="space-y-3">
@@ -602,6 +683,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
               )}
             </div>
           </div>
+          )}
 
         </div>
 
