@@ -94,6 +94,12 @@ export default async function DashboardPage() {
     { count: comprasAbertasCount },
     { count: vendasAbertasCount },
     { count: produtosCount },
+    // Administrativo
+    { count: docsCount },
+    { count: docsVencidosCount },
+    { data: docsVencendo },
+    { count: usuariosCount },
+    { count: convitesPendentesCount },
   ] = await Promise.all([
     // Financeiro
     admin.from('bank_accounts').select('saldo_inicial')
@@ -133,6 +139,19 @@ export default async function DashboardPage() {
       .eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelado'),
     admin.from('products').select('*', { count: 'exact', head: true })
       .eq('company_id', companyId),
+    // Administrativo
+    admin.from('documents').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId),
+    admin.from('documents').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).not('vencimento', 'is', null).lt('vencimento', today),
+    admin.from('documents').select('descricao, nome, vencimento')
+      .eq('company_id', companyId).not('vencimento', 'is', null)
+      .gte('vencimento', today).lte('vencimento', in30d)
+      .order('vencimento').limit(3),
+    admin.from('company_members').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).eq('status', 'active'),
+    admin.from('invitations').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).eq('status', 'pending'),
   ])
 
   // Computações financeiras
@@ -158,6 +177,13 @@ export default async function DashboardPage() {
   const comprasAbertas = comprasAbertasCount ?? 0
   const vendasAbertas  = vendasAbertasCount ?? 0
   const totalProdutos  = produtosCount ?? 0
+
+  // Computações administrativo
+  const totalDocs        = docsCount ?? 0
+  const docsVencidos     = docsVencidosCount ?? 0
+  const docsVencendoList = docsVencendo ?? []
+  const totalUsuarios    = usuariosCount ?? 0
+  const convitesPendentes = convitesPendentesCount ?? 0
 
   // Montar alertas ordenados por severidade
   const alerts: AlertItem[] = []
@@ -185,6 +211,26 @@ export default async function DashboardPage() {
     })
   }
 
+  // Documentos vencidos (perigo)
+  if (docsVencidos > 0) {
+    alerts.push({
+      icon: '📄',
+      text: `${docsVencidos} documento${docsVencidos !== 1 ? 's' : ''} com vencimento expirado`,
+      href: '/admin/documentacao',
+      level: 'danger',
+    })
+  }
+
+  // Documentos vencendo nos próximos 30 dias (atenção)
+  for (const d of docsVencendoList) {
+    alerts.push({
+      icon: '📋',
+      text: `${d.descricao ?? d.nome} — vence em ${fmtDate(d.vencimento!)}`,
+      href: '/admin/documentacao',
+      level: 'warning',
+    })
+  }
+
   // Exames periódicos nos próximos 30 dias (atenção)
   for (const e of empExamesAlert ?? []) {
     alerts.push({
@@ -208,8 +254,8 @@ export default async function DashboardPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-5">
 
-      {/* 3 seções por módulo */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* 4 seções por módulo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <ModuleSection
           icon="💰"
           title="FINANCEIRO"
@@ -244,6 +290,19 @@ export default async function DashboardPage() {
           ]}
           href="/operacional/pedidos-compra"
           linkLabel="Ver pedidos"
+        />
+        <ModuleSection
+          icon="🏢"
+          title="ADMINISTRATIVO"
+          metrics={[
+            { label: 'Documentos',         value: totalDocs },
+            { label: 'Vencidos',           value: docsVencidos,      accent: docsVencidos      > 0 ? 'red'    : undefined },
+            { label: 'Vencendo (30 dias)', value: docsVencendoList.length, accent: docsVencendoList.length > 0 ? 'yellow' : undefined },
+            { label: 'Usuários ativos',    value: totalUsuarios },
+            { label: 'Convites pendentes', value: convitesPendentes,  accent: convitesPendentes > 0 ? 'yellow' : undefined },
+          ]}
+          href="/admin/documentacao"
+          linkLabel="Ver documentação"
         />
       </div>
 
