@@ -8,6 +8,7 @@ import { ModalUsuario } from './modal-usuario'
 import { removeMemberAction, cancelInvitationAction } from '../actions'
 import type { MemberWithProfile, Invitation } from '../queries'
 import { formatDate } from '@/lib/utils'
+import { ModalPainelUsuario } from './modal-painel-usuario'
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Proprietário',
@@ -22,6 +23,7 @@ interface Props {
   companyId: string
   currentProfileId: string
   currentUserRole: string
+  currentUserEmail: string
 }
 
 function cpfMask(cpf: string | null) {
@@ -100,10 +102,81 @@ function ThreeDotMenu({ onEdit, onRemove, loading }: { onEdit: () => void; onRem
   )
 }
 
-export function UsuariosClient({ members, invitations, companyId, currentProfileId, currentUserRole }: Props) {
+function ThreeDotMenuSelf({ onView, onEdit }: { onView: () => void; onEdit: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) {
+      const openUp = rect.bottom + 90 > window.innerHeight - 8
+      setPos(openUp
+        ? { top: rect.top - 94, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+      )
+    }
+    setOpen((v) => !v)
+  }
+
+  return (
+    <div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={handleOpen}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        aria-label="Opções"
+      >
+        ···
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="fixed w-44 rounded-xl border shadow-lg py-1 z-50"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onView() }}
+          >
+            Visualizar painel
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onEdit() }}
+          >
+            Editar
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function UsuariosClient({ members, invitations, companyId, currentProfileId, currentUserRole, currentUserEmail }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<MemberWithProfile | null>(null)
+  const [painelOpen, setPainelOpen] = useState(false)
+  const [painelMember, setPainelMember] = useState<MemberWithProfile | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -226,15 +299,10 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
                   )}
                   {m.status === 'active' && m.profile_id === currentProfileId && (
                     <div className="flex justify-end">
-                      <button
-                        type="button"
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
-                        style={{ color: 'var(--color-text-muted)' }}
-                        onClick={() => openEdit(m)}
-                        aria-label="Editar perfil"
-                      >
-                        ···
-                      </button>
+                      <ThreeDotMenuSelf
+                        onView={() => { setPainelMember(m); setPainelOpen(true) }}
+                        onEdit={() => openEdit(m)}
+                      />
                     </div>
                   )}
                 </td>
@@ -300,6 +368,13 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
         companyId={companyId}
         member={editingMember}
         currentUserRole={currentUserRole}
+      />
+
+      <ModalPainelUsuario
+        open={painelOpen}
+        onClose={() => { setPainelOpen(false); setPainelMember(null) }}
+        member={painelMember}
+        email={currentUserEmail}
       />
     </>
   )

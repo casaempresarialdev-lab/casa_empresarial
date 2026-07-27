@@ -37,6 +37,7 @@ export default async function UsuariosPage() {
         companyId={companyId}
         currentProfileId={user.id}
         currentUserRole={currentMember?.role ?? 'member'}
+        currentUserEmail={user.email ?? ''}
       />
     </div>
   )

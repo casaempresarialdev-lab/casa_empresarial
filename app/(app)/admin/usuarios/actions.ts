@@ -17,7 +17,12 @@ async function getAppUrl() {
   return `${proto}://${host}`
 }
 
-export async function addMemberAction(companyId: string, cpf: string, role: string) {
+export async function addMemberAction(
+  companyId: string,
+  cpf: string,
+  role: string,
+  avatarFile?: File | null,
+) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -48,18 +53,29 @@ export async function addMemberAction(companyId: string, cpf: string, role: stri
       .update({ status: 'active', role })
       .eq('id', existing.id)
     if (error) return { error: error.message }
-    revalidatePath('/admin/usuarios')
-    return { success: true }
+  } else {
+    const { error } = await admin.from('company_members').insert({
+      company_id: companyId,
+      profile_id: profile.id,
+      role,
+      status: 'active',
+    })
+    if (error) return { error: error.message }
   }
 
-  const { error } = await admin.from('company_members').insert({
-    company_id: companyId,
-    profile_id: profile.id,
-    role,
-    status: 'active',
-  })
+  if (avatarFile && avatarFile.size > 0) {
+    const ext = avatarFile.name.split('.').pop() ?? 'jpg'
+    const path = `${profile.id}/avatar.${ext}`
+    const arrayBuffer = await avatarFile.arrayBuffer()
+    const { error: uploadErr } = await admin.storage
+      .from('avatars')
+      .upload(path, arrayBuffer, { contentType: avatarFile.type, upsert: true })
+    if (!uploadErr) {
+      const { data: urlData } = admin.storage.from('avatars').getPublicUrl(path)
+      await admin.from('profiles').update({ avatar_url: `${urlData.publicUrl}?t=${Date.now()}` }).eq('id', profile.id)
+    }
+  }
 
-  if (error) return { error: error.message }
   revalidatePath('/admin/usuarios')
   return { success: true }
 }
@@ -207,6 +223,19 @@ export async function updateMemberProfileAction(
 
   revalidatePath('/admin/usuarios')
   return { success: true, avatar_url }
+}
+
+export async function changePasswordAction(newPassword: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  if (newPassword.length < 6) return { error: 'A senha deve ter no mínimo 6 caracteres.' }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) return { error: error.message }
+
+  return { success: true }
 }
 
 export async function removeMemberAction(memberId: string, companyId: string) {
