@@ -34,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Contas e Cartões', href: '/financeiro/contas-cartoes' },
       { label: 'Fluxo de Caixa', href: '/financeiro/fluxo-de-caixa' },
       { label: 'DRE', href: '/financeiro/dre' },
+      { label: 'Balanço', href: '/financeiro/balanco' },
       { label: 'Faturas', href: '/financeiro/faturas' },
     ],
   },
