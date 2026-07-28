@@ -6,7 +6,25 @@ import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createCategoryAction, updateCategoryAction } from '../actions'
-import type { Category } from '../queries'
+import type { Category, DreGrupo } from '../queries'
+
+const DRE_GRUPOS_RECEITA: { value: DreGrupo; label: string }[] = [
+  { value: 'receita_operacional', label: 'Receita Operacional' },
+  { value: 'outras_receitas',     label: 'Outras Receitas' },
+  { value: 'receita_financeira',  label: 'Receitas Financeiras' },
+  { value: 'deducao_receita',     label: 'Deduções da Receita' },
+  { value: 'nao_classificado',    label: 'Não classificado' },
+]
+
+const DRE_GRUPOS_DESPESA: { value: DreGrupo; label: string }[] = [
+  { value: 'cmv_cpv',               label: 'CMV / CPV' },
+  { value: 'despesa_pessoal',       label: 'Despesas com Pessoal' },
+  { value: 'despesa_administrativa', label: 'Despesas Administrativas' },
+  { value: 'despesa_comercial',     label: 'Despesas Comerciais' },
+  { value: 'despesa_financeira',    label: 'Despesas Financeiras' },
+  { value: 'imposto',               label: 'Impostos (DAS / Simples)' },
+  { value: 'nao_classificado',      label: 'Não classificado' },
+]
 
 const ICONE_OPTIONS = ['📦', '🏠', '🚗', '💡', '🍽️', '👕', '💊', '📱', '✈️', '🎓', '💼', '🔧', '📣', '💰', '🏦', '📊']
 const COR_OPTIONS = ['#EF4444', '#F97316', '#EAB308', '#22C55E', '#14B8A6', '#3B82F6', '#8B5CF6', '#EC4899', '#6B7280', '#C19A6B']
@@ -30,6 +48,7 @@ export function ModalCategoria({ open, onClose, companyId, category, allCategori
   const [cor, setCor] = useState('')
   const [icone, setIcone] = useState('')
   const [ativo, setAtivo] = useState(true)
+  const [dreGrupo, setDreGrupo] = useState<DreGrupo>('nao_classificado')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -41,6 +60,7 @@ export function ModalCategoria({ open, onClose, companyId, category, allCategori
       setCor(category?.cor ?? '')
       setIcone(category?.icone ?? '')
       setAtivo(category?.ativo ?? true)
+      setDreGrupo(category?.dre_grupo ?? 'nao_classificado')
       setError('')
     }
   }, [open, category, defaultTipo])
@@ -62,6 +82,7 @@ export function ModalCategoria({ open, onClose, companyId, category, allCategori
     fd.set('cor', cor)
     fd.set('icone', icone)
     fd.set('ativo', String(ativo))
+    fd.set('dre_grupo', dreGrupo)
 
     const result = isEdit
       ? await updateCategoryAction(category.id, fd)
@@ -125,6 +146,28 @@ export function ModalCategoria({ open, onClose, companyId, category, allCategori
               <option key={p.id} value={p.id}>{p.icone ? `${p.icone} ` : ''}{p.nome}</option>
             ))}
           </select>
+        </div>
+
+        {/* Grupo DRE */}
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+            Grupo no DRE
+          </label>
+          <select
+            value={dreGrupo}
+            onChange={e => setDreGrupo(e.target.value as DreGrupo)}
+            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            style={{ borderColor: dreGrupo === 'nao_classificado' ? '#F59E0B' : 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
+          >
+            {(tipo === 'receita' ? DRE_GRUPOS_RECEITA : DRE_GRUPOS_DESPESA).map(g => (
+              <option key={g.value} value={g.value}>{g.label}</option>
+            ))}
+          </select>
+          {dreGrupo === 'nao_classificado' && (
+            <p className="text-xs" style={{ color: '#D97706' }}>
+              ⚠ Sem classificação esta categoria não aparecerá no DRE.
+            </p>
+          )}
         </div>
 
         {/* Ícone */}

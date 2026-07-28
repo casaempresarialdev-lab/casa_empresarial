@@ -1,5 +1,18 @@
 import { createAdminClient } from '@/lib/supabase/server'
 
+export type DreGrupo =
+  | 'receita_operacional'
+  | 'deducao_receita'
+  | 'cmv_cpv'
+  | 'despesa_pessoal'
+  | 'despesa_administrativa'
+  | 'despesa_comercial'
+  | 'outras_receitas'
+  | 'receita_financeira'
+  | 'despesa_financeira'
+  | 'imposto'
+  | 'nao_classificado'
+
 export type Category = {
   id: string
   company_id: string
@@ -9,6 +22,7 @@ export type Category = {
   cor: string | null
   icone: string | null
   ativo: boolean
+  dre_grupo: DreGrupo
   created_at: string
 }
 

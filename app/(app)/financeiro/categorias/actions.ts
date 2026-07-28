@@ -28,6 +28,7 @@ export async function createCategoryAction(companyId: string, formData: FormData
     cor: (formData.get('cor') as string) || null,
     icone: (formData.get('icone') as string) || null,
     ativo: formData.get('ativo') === 'true',
+    dre_grupo: (formData.get('dre_grupo') as string) || 'nao_classificado',
   })
 
   if (error) {
@@ -52,6 +53,7 @@ export async function updateCategoryAction(categoryId: string, formData: FormDat
     cor: (formData.get('cor') as string) || null,
     icone: (formData.get('icone') as string) || null,
     ativo: formData.get('ativo') === 'true',
+    dre_grupo: (formData.get('dre_grupo') as string) || 'nao_classificado',
   }).eq('id', categoryId)
 
   if (error) {
