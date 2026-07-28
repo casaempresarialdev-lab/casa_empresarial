@@ -321,18 +321,6 @@ export function FluxoClient({ transactions, companyId, mes, ano, categories, con
 
         {/* Ações do lado direito */}
         <div className="flex items-center gap-2">
-          {/* Botões de adicionar — aparecem no header apenas no modo detalhado */}
-          {view === 'detalhado' && (
-            <>
-              <Button size="sm" variant="primary" onClick={() => openAdd('recebimento')}>
-                + Recebimento
-              </Button>
-              <Button size="sm" variant="danger" onClick={() => openAdd('pagamento')}>
-                + Pagamento
-              </Button>
-            </>
-          )}
-
           {/* Toggle de visualização */}
           <div className="flex items-center rounded-lg border overflow-hidden text-xs font-medium"
             style={{ borderColor: 'var(--color-bg-surface)' }}>

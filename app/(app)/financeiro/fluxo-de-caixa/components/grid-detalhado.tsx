@@ -1,6 +1,6 @@
 'use client'
 
-import { Button } from '@/components/ui/button'
+import { useState, useEffect, useRef } from 'react'
 import type { TransactionRow } from '../queries'
 
 function formatCurrency(v: number) {
@@ -29,6 +29,114 @@ const STATUS_CONFIG = {
   conciliado: { label: 'Conciliado', bg: '#EBF5FB', text: '#2471A3' },
 }
 
+// ── ThreeDotMenu ──────────────────────────────────────────────────────────────
+
+function ThreeDotMenu({ status, onPagar, onDesfazer, onEdit, onDelete, loading }: {
+  status: TransactionRow['status']
+  onPagar: () => void
+  onDesfazer: () => void
+  onEdit: () => void
+  onDelete: () => void
+  loading: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  const hasToggle = status === 'pendente' || status === 'pago'
+  // 3 items com toggle, 2 sem — calcular threshold pelo máximo
+  const menuH = hasToggle ? 126 : 88
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) {
+      const openUp = rect.bottom + menuH + 12 > window.innerHeight - 8
+      setPos(openUp
+        ? { top: rect.top - menuH - 4, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4,      right: window.innerWidth - rect.right }
+      )
+    }
+    setOpen(v => !v)
+  }
+
+  return (
+    <div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={handleOpen}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        aria-label="Opções"
+      >
+        ···
+      </button>
+
+      {open && (
+        <div
+          ref={menuRef}
+          className="fixed w-40 rounded-xl border shadow-lg py-1 z-50"
+          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
+        >
+          {status === 'pendente' && (
+            <button
+              type="button"
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: '#1E8449' }}
+              onClick={() => { setOpen(false); onPagar() }}
+              disabled={loading}
+            >
+              ✓ Marcar como Pago
+            </button>
+          )}
+          {status === 'pago' && (
+            <button
+              type="button"
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: 'var(--color-text-secondary)' }}
+              onClick={() => { setOpen(false); onDesfazer() }}
+              disabled={loading}
+            >
+              Desfazer pagamento
+            </button>
+          )}
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => { setOpen(false); onEdit() }}
+          >
+            Editar
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: 'var(--color-error)' }}
+            onClick={() => { setOpen(false); onDelete() }}
+            disabled={loading}
+          >
+            {loading ? 'Excluindo…' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Linha do grid ─────────────────────────────────────────────────────────────
+
 interface RowProps {
   tx: TransactionRow
   onEdit: (tx: TransactionRow) => void
@@ -39,7 +147,6 @@ interface RowProps {
 
 function GridRow({ tx, onEdit, onDelete, onTogglePaid, actionId }: RowProps) {
   const isRec = tx.tipo === 'recebimento'
-  const isPending = tx.status === 'pendente'
   const isBusy = actionId === tx.id
   const s = STATUS_CONFIG[tx.status] ?? STATUS_CONFIG.pendente
   const conta = tx.conta?.banco ?? tx.cartao?.nome ?? null
@@ -100,35 +207,24 @@ function GridRow({ tx, onEdit, onDelete, onTogglePaid, actionId }: RowProps) {
         </span>
       </td>
 
-      {/* Ações */}
+      {/* Ações — ThreeDotMenu */}
       <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1 justify-end">
-          {isPending ? (
-            <button
-              onClick={() => onTogglePaid(tx)}
-              disabled={isBusy}
-              className="text-xs px-2 py-1 rounded-lg font-medium transition-colors disabled:opacity-50"
-              style={{ backgroundColor: '#E9F7EF', color: '#1E8449' }}
-            >
-              {isBusy ? '...' : '✓ Pagar'}
-            </button>
-          ) : tx.status === 'pago' ? (
-            <button
-              onClick={() => onTogglePaid(tx)}
-              disabled={isBusy}
-              className="text-xs px-2 py-1 rounded-lg font-medium transition-colors disabled:opacity-50"
-              style={{ backgroundColor: '#F2F3F4', color: '#717D7E' }}
-            >
-              {isBusy ? '...' : 'Desfazer'}
-            </button>
-          ) : null}
-          <Button variant="ghost" size="sm" onClick={() => onEdit(tx)}>Editar</Button>
-          <Button variant="danger" size="sm" loading={isBusy} onClick={() => onDelete(tx)}>Excluir</Button>
+        <div className="flex justify-end">
+          <ThreeDotMenu
+            status={tx.status}
+            onPagar={() => onTogglePaid(tx)}
+            onDesfazer={() => onTogglePaid(tx)}
+            onEdit={() => onEdit(tx)}
+            onDelete={() => onDelete(tx)}
+            loading={isBusy}
+          />
         </div>
       </td>
     </tr>
   )
 }
+
+// ── Componente principal ──────────────────────────────────────────────────────
 
 interface Props {
   transactions: TransactionRow[]
@@ -139,7 +235,6 @@ interface Props {
 }
 
 export function GridDetalhado({ transactions, onEdit, onDelete, onTogglePaid, actionId }: Props) {
-  // Agrupar por data (vencimento ou competência)
   const grouped: Record<string, TransactionRow[]> = {}
   for (const tx of transactions) {
     const date = tx.data_vencimento ?? tx.data_competencia
@@ -151,7 +246,7 @@ export function GridDetalhado({ transactions, onEdit, onDelete, onTogglePaid, ac
   if (transactions.length === 0) {
     return (
       <div
-        className="rounded-xl border flex flex-col items-center justify-center py-16 gap-2"
+        className="rounded-xl border flex flex-col items-center justify-center py-16"
         style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-muted)' }}
       >
         <p className="text-sm">Nenhum lançamento neste período.</p>
@@ -171,7 +266,7 @@ export function GridDetalhado({ transactions, onEdit, onDelete, onTogglePaid, ac
               <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Data</th>
               <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Valor</th>
               <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-              <th className="px-3 py-2" />
+              <th className="w-10 px-3 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -182,7 +277,6 @@ export function GridDetalhado({ transactions, onEdit, onDelete, onTogglePaid, ac
 
               return (
                 <>
-                  {/* Cabeçalho do dia */}
                   <tr key={`d-${date}`} style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                     <td colSpan={7} className="px-4 py-1.5">
                       <div className="flex items-center justify-between">
@@ -190,18 +284,12 @@ export function GridDetalhado({ transactions, onEdit, onDelete, onTogglePaid, ac
                           {formatDayHeader(date)}
                         </span>
                         <div className="flex items-center gap-3 text-xs">
-                          {entradas > 0 && (
-                            <span style={{ color: '#1E8449' }}>+ {formatCurrency(entradas)}</span>
-                          )}
-                          {saidas > 0 && (
-                            <span style={{ color: '#C0392B' }}>− {formatCurrency(saidas)}</span>
-                          )}
+                          {entradas > 0 && <span style={{ color: '#1E8449' }}>+ {formatCurrency(entradas)}</span>}
+                          {saidas > 0 && <span style={{ color: '#C0392B' }}>− {formatCurrency(saidas)}</span>}
                         </div>
                       </div>
                     </td>
                   </tr>
-
-                  {/* Linhas de transação */}
                   {txs.map(tx => (
                     <GridRow
                       key={tx.id}
