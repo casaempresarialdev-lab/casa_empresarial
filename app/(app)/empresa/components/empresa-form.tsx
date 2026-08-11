@@ -119,14 +119,6 @@ export function EmpresaForm({ company }: Props) {
   const [corInput, setCorInput] = useState(corAtual)
   useEffect(() => { setCorInput(corAtual) }, [corAtual])
 
-  function handleCorTextChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value
-    setCorInput(raw)
-    const val = raw.startsWith('#') ? raw : '#' + raw
-    if (/^#[0-9A-Fa-f]{6}$/.test(val) || /^#[0-9A-Fa-f]{3}$/.test(val)) {
-      setValue('cor_primaria', val)
-    }
-  }
 
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -409,29 +401,59 @@ export function EmpresaForm({ company }: Props) {
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
               Cor da empresa (opcional)
             </label>
-            <div className="flex items-center gap-3 flex-wrap">
+
+            {/* Presets */}
+            <div className="flex items-center gap-2 flex-wrap">
               {COR_PRESETS.map(cor => (
                 <button key={cor} type="button" onClick={() => setValue('cor_primaria', cor)}
                   className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
                   style={{ backgroundColor: cor, borderColor: corAtual === cor ? 'var(--color-text-primary)' : 'transparent' }}
                   title={cor} />
               ))}
-              <label className="relative cursor-pointer" title="Abrir seletor de cor">
-                <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center overflow-hidden"
-                  style={{ backgroundColor: corAtual, borderColor: 'var(--color-bg-surface)' }}>
-                  <input type="color" className="absolute opacity-0 w-full h-full cursor-pointer"
-                    {...register('cor_primaria')} />
-                </div>
-              </label>
-              <input
-                type="text"
-                value={corInput}
-                onChange={handleCorTextChange}
-                maxLength={7}
-                placeholder="#C19A6B"
-                className="h-7 w-24 rounded-lg border px-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
-                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
-              />
+            </div>
+
+            {/* Swatch + input hex combinados */}
+            <div className="flex items-center gap-3">
+              <div
+                className="flex items-center rounded-lg border overflow-hidden h-9"
+                style={{ borderColor: 'var(--color-bg-surface)' }}
+              >
+                {/* Swatch clicável — abre o seletor nativo */}
+                <label className="relative flex-shrink-0 cursor-pointer h-full" title="Clique para abrir o seletor de cor">
+                  <div className="w-9 h-full" style={{ backgroundColor: corAtual }} />
+                  <input
+                    type="color"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    {...register('cor_primaria')}
+                  />
+                </label>
+
+                {/* Divisor */}
+                <div className="w-px h-full flex-shrink-0" style={{ backgroundColor: 'var(--color-bg-surface)' }} />
+
+                {/* # fixo */}
+                <span className="pl-2 pr-0.5 text-sm font-mono select-none" style={{ color: 'var(--color-text-muted)' }}>#</span>
+
+                {/* Input: só os 6 dígitos hex */}
+                <input
+                  type="text"
+                  value={(corInput.startsWith('#') ? corInput.slice(1) : corInput).toUpperCase()}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/[^0-9A-Fa-f]/g, '').slice(0, 6).toUpperCase()
+                    const withHash = '#' + raw
+                    setCorInput(withHash)
+                    if (raw.length === 6 || raw.length === 3) setValue('cor_primaria', withHash)
+                  }}
+                  onFocus={e => e.target.select()}
+                  maxLength={6}
+                  placeholder="C19A6B"
+                  className="h-full bg-white focus:outline-none text-sm font-mono pr-3"
+                  style={{ color: 'var(--color-text-primary)', width: '7ch' }}
+                />
+              </div>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                Clique no quadrado para o seletor, ou digite o código hex
+              </p>
             </div>
           </div>
         </Card>
