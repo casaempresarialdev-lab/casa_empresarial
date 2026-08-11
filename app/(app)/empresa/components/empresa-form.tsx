@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useRef, useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -115,6 +115,18 @@ export function EmpresaForm({ company }: Props) {
 
   const corAtual = watch('cor_primaria') ?? '#C19A6B'
   const loading  = isSubmitting || isPending
+
+  const [corInput, setCorInput] = useState(corAtual)
+  useEffect(() => { setCorInput(corAtual) }, [corAtual])
+
+  function handleCorTextChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value
+    setCorInput(raw)
+    const val = raw.startsWith('#') ? raw : '#' + raw
+    if (/^#[0-9A-Fa-f]{6}$/.test(val) || /^#[0-9A-Fa-f]{3}$/.test(val)) {
+      setValue('cor_primaria', val)
+    }
+  }
 
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -404,14 +416,22 @@ export function EmpresaForm({ company }: Props) {
                   style={{ backgroundColor: cor, borderColor: corAtual === cor ? 'var(--color-text-primary)' : 'transparent' }}
                   title={cor} />
               ))}
-              <label className="relative cursor-pointer" title="Cor personalizada">
+              <label className="relative cursor-pointer" title="Abrir seletor de cor">
                 <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center overflow-hidden"
                   style={{ backgroundColor: corAtual, borderColor: 'var(--color-bg-surface)' }}>
                   <input type="color" className="absolute opacity-0 w-full h-full cursor-pointer"
                     {...register('cor_primaria')} />
                 </div>
               </label>
-              <span className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{corAtual}</span>
+              <input
+                type="text"
+                value={corInput}
+                onChange={handleCorTextChange}
+                maxLength={7}
+                placeholder="#C19A6B"
+                className="h-7 w-24 rounded-lg border px-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
+              />
             </div>
           </div>
         </Card>
