@@ -33,7 +33,7 @@ export function ModuleSection({ icon, title, metrics, href, linkLabel }: Props) 
       </div>
 
       <div className="flex-1 space-y-3">
-        {metrics.map((m, i) => (
+        {metrics.length > 0 ? metrics.map((m, i) => (
           <div key={i} className="flex items-center justify-between">
             <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{m.label}</span>
             <span className="text-sm font-semibold"
@@ -41,7 +41,11 @@ export function ModuleSection({ icon, title, metrics, href, linkLabel }: Props) 
               {m.value}
             </span>
           </div>
-        ))}
+        )) : (
+          <div className="flex items-center justify-center h-16">
+            <p className="text-xs italic" style={{ color: 'var(--color-text-muted)' }}>Em breve</p>
+          </div>
+        )}
       </div>
 
       <Link href={href}

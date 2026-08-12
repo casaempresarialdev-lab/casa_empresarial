@@ -2,9 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { formatCurrency } from '@/lib/utils'
 import { ModuleSection } from '@/components/modules/dashboard/module-section'
-import { AlertList, type AlertItem } from '@/components/modules/dashboard/alert-list'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,13 +12,8 @@ function offsetDate(days: number) {
   return isoDate(new Date(Date.now() + days * 86400000))
 }
 
-function startOfMonth() {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR')
+function formatCurrency(value: number) {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 export default async function DashboardPage() {
@@ -72,49 +65,56 @@ export default async function DashboardPage() {
   const activeCompany = companies.find(c => c.id === cookieCompanyId) ?? companies[0]
   const companyId = activeCompany.id
 
-  const today      = isoDate(new Date())
-  const monthStart = startOfMonth()
-  const in7d       = offsetDate(7)
-  const in30d      = offsetDate(30)
+  const today    = isoDate(new Date())
+  const in30d    = offsetDate(30)
+  const now      = new Date()
+  const inicioMes = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const fimMes    = isoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0))
 
   const [
+    // Administrativo — Documentação
+    { count: docsCount },
+    { count: docsVencidosCount },
+    { data: docsVencendo },
     // Financeiro
     { data: bankAccounts },
     { data: receitasMes },
     { data: despesasMes },
-    { count: vencidosCount },
-    { data: transVencidas },
+    // Operacional
+    { count: comprasAbertasCount },
+    { count: vendasAbertasCount },
+    { count: produtosCount },
     // Pessoas
     { count: empAtivosCount },
     { count: empAdmissaoCount },
     { data: empFeriasAlert },
     { data: empExamesAlert },
-    { data: empExpRaw },
-    // Operacional
-    { count: comprasAbertasCount },
-    { count: vendasAbertasCount },
-    { count: produtosCount },
-    // Administrativo
-    { count: docsCount },
-    { count: docsVencidosCount },
-    { data: docsVencendo },
-    { count: usuariosCount },
-    { count: convitesPendentesCount },
   ] = await Promise.all([
+    // Administrativo — Documentação
+    admin.from('documents').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId),
+    admin.from('documents').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).not('vencimento', 'is', null).lt('vencimento', today),
+    admin.from('documents').select('descricao, nome, vencimento')
+      .eq('company_id', companyId).not('vencimento', 'is', null)
+      .gte('vencimento', today).lte('vencimento', in30d)
+      .order('vencimento').limit(3),
     // Financeiro
-    admin.from('bank_accounts').select('saldo_inicial')
+    admin.from('bank_accounts').select('saldo_atual')
       .eq('company_id', companyId).eq('ativo', true),
     admin.from('transactions').select('valor')
-      .eq('company_id', companyId).eq('tipo', 'recebimento').eq('status', 'pago')
-      .gte('data_competencia', monthStart),
+      .eq('company_id', companyId).eq('tipo', 'receita')
+      .gte('data_transacao', inicioMes).lte('data_transacao', fimMes),
     admin.from('transactions').select('valor')
-      .eq('company_id', companyId).eq('tipo', 'pagamento').eq('status', 'pago')
-      .gte('data_competencia', monthStart),
-    admin.from('transactions').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).eq('status', 'pendente').lt('data_vencimento', today),
-    admin.from('transactions').select('descricao, valor, tipo, data_vencimento')
-      .eq('company_id', companyId).eq('status', 'pendente').lt('data_vencimento', today)
-      .order('data_vencimento').limit(3),
+      .eq('company_id', companyId).eq('tipo', 'despesa')
+      .gte('data_transacao', inicioMes).lte('data_transacao', fimMes),
+    // Operacional
+    admin.from('purchase_orders').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).neq('status', 'recebido').neq('status', 'cancelado'),
+    admin.from('sale_orders').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelado'),
+    admin.from('products').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId),
     // Pessoas
     admin.from('employees').select('*', { count: 'exact', head: true })
       .eq('company_id', companyId).eq('status', 'ativo'),
@@ -130,156 +130,62 @@ export default async function DashboardPage() {
       .not('exame_periodico', 'is', null)
       .gte('exame_periodico', today).lte('exame_periodico', in30d)
       .order('exame_periodico').limit(3),
-    admin.from('employees').select('nome, fim_experiencia_1, fim_experiencia_2')
-      .eq('company_id', companyId).in('status', ['admissao', 'experiencia']).limit(20),
-    // Operacional
-    admin.from('purchase_orders').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).neq('status', 'recebido').neq('status', 'cancelado'),
-    admin.from('sale_orders').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelado'),
-    admin.from('products').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId),
-    // Administrativo
-    admin.from('documents').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId),
-    admin.from('documents').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).not('vencimento', 'is', null).lt('vencimento', today),
-    admin.from('documents').select('descricao, nome, vencimento')
-      .eq('company_id', companyId).not('vencimento', 'is', null)
-      .gte('vencimento', today).lte('vencimento', in30d)
-      .order('vencimento').limit(3),
-    admin.from('company_members').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).eq('status', 'active'),
-    admin.from('invitations').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).eq('status', 'pending'),
   ])
 
-  // Computações financeiras
-  const saldoTotal    = (bankAccounts ?? []).reduce((s, a) => s + (a.saldo_inicial ?? 0), 0)
+  // Administrativo
+  const totalDocs        = docsCount ?? 0
+  const docsVencidos     = docsVencidosCount ?? 0
+  const docsVencendoList = docsVencendo ?? []
+
+  // Financeiro
+  const saldoTotal   = (bankAccounts ?? []).reduce((s, a) => s + (a.saldo_atual ?? 0), 0)
   const totalReceitas = (receitasMes ?? []).reduce((s, t) => s + (t.valor ?? 0), 0)
   const totalDespesas = (despesasMes ?? []).reduce((s, t) => s + (t.valor ?? 0), 0)
   const resultado     = totalReceitas - totalDespesas
-  const vencidos      = vencidosCount ?? 0
 
-  // Computações pessoas
+  // Operacional
+  const comprasAbertas = comprasAbertasCount ?? 0
+  const vendasAbertas  = vendasAbertasCount ?? 0
+  const totalProdutos  = produtosCount ?? 0
+
+  // Pessoas
   const empAtivos   = empAtivosCount ?? 0
   const empAdmissao = empAdmissaoCount ?? 0
   const feriasCount = (empFeriasAlert ?? []).length
   const examesCount = (empExamesAlert ?? []).length
 
-  // Fim de experiência nos próximos 7 dias
-  const expProximos = (empExpRaw ?? []).filter(e => {
-    const fim = e.fim_experiencia_2 ?? e.fim_experiencia_1
-    return fim && fim <= in7d
-  })
-
-  // Computações operacional
-  const comprasAbertas = comprasAbertasCount ?? 0
-  const vendasAbertas  = vendasAbertasCount ?? 0
-  const totalProdutos  = produtosCount ?? 0
-
-  // Computações administrativo
-  const totalDocs        = docsCount ?? 0
-  const docsVencidos     = docsVencidosCount ?? 0
-  const docsVencendoList = docsVencendo ?? []
-  const totalUsuarios    = usuariosCount ?? 0
-  const convitesPendentes = convitesPendentesCount ?? 0
-
-  // Montar alertas ordenados por severidade
-  const alerts: AlertItem[] = []
-
-  // Transações vencidas (perigo — impacto financeiro direto)
-  for (const t of transVencidas ?? []) {
-    alerts.push({
-      icon: t.tipo === 'pagamento' ? '🔴' : '🟡',
-      text: `${t.descricao ?? 'Lançamento'} — ${formatCurrency(t.valor ?? 0)} · venceu em ${fmtDate(t.data_vencimento)}`,
-      href: t.tipo === 'pagamento'
-        ? '/financeiro/fluxo-de-caixa/pagamentos'
-        : '/financeiro/fluxo-de-caixa/recebimentos',
-      level: 'danger',
-    })
-  }
-
-  // Fim de experiência próximo (perigo — prazo legal)
-  for (const e of expProximos) {
-    const fim = e.fim_experiencia_2 ?? e.fim_experiencia_1
-    alerts.push({
-      icon: '📋',
-      text: `${e.nome} — fim de experiência em ${fmtDate(fim!)}`,
-      href: '/pessoas/admissao',
-      level: 'danger',
-    })
-  }
-
-  // Documentos vencidos (perigo)
-  if (docsVencidos > 0) {
-    alerts.push({
-      icon: '📄',
-      text: `${docsVencidos} documento${docsVencidos !== 1 ? 's' : ''} com vencimento expirado`,
-      href: '/admin/documentacao',
-      level: 'danger',
-    })
-  }
-
-  // Documentos vencendo nos próximos 30 dias (atenção)
-  for (const d of docsVencendoList) {
-    alerts.push({
-      icon: '📋',
-      text: `${d.descricao ?? d.nome} — vence em ${fmtDate(d.vencimento!)}`,
-      href: '/admin/documentacao',
-      level: 'warning',
-    })
-  }
-
-  // Exames periódicos nos próximos 30 dias (atenção)
-  for (const e of empExamesAlert ?? []) {
-    alerts.push({
-      icon: '🩺',
-      text: `${e.nome} — exame periódico em ${fmtDate(e.exame_periodico!)}`,
-      href: '/pessoas/funcionarios',
-      level: 'warning',
-    })
-  }
-
-  // Férias vencendo nos próximos 30 dias (atenção)
-  for (const e of empFeriasAlert ?? []) {
-    alerts.push({
-      icon: '🏖️',
-      text: `${e.nome} — férias vencem em ${fmtDate(e.vcto_ferias!)}`,
-      href: '/pessoas/funcionarios',
-      level: 'warning',
-    })
-  }
-
   return (
-    <div className="max-w-7xl mx-auto space-y-5">
+    <div className="max-w-7xl mx-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
 
-      {/* 4 seções por módulo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 1 — Administrativo: Documentação */}
+        <ModuleSection
+          icon="🏢"
+          title="ADMINISTRATIVO"
+          metrics={[
+            { label: 'Documentos',         value: totalDocs },
+            { label: 'Vencidos',           value: docsVencidos,           accent: docsVencidos           > 0 ? 'red'    : undefined },
+            { label: 'Vencendo (30 dias)', value: docsVencendoList.length, accent: docsVencendoList.length > 0 ? 'yellow' : undefined },
+          ]}
+          href="/admin/documentacao"
+          linkLabel="Ver documentação"
+        />
+
+        {/* 2 — Financeiro */}
         <ModuleSection
           icon="💰"
           title="FINANCEIRO"
           metrics={[
-            { label: 'Receitas do mês',  value: formatCurrency(totalReceitas), accent: totalReceitas > 0 ? 'green' : undefined },
-            { label: 'Despesas do mês',  value: formatCurrency(totalDespesas), accent: totalDespesas > 0 ? 'red'   : undefined },
-            { label: 'Resultado',        value: formatCurrency(resultado),     accent: resultado >= 0 ? 'green' : 'red' },
-            { label: 'Vencidos',         value: `${vencidos} lançamento${vencidos !== 1 ? 's' : ''}`, accent: vencidos > 0 ? 'red' : undefined },
+            { label: 'Saldo total',         value: formatCurrency(saldoTotal),   accent: saldoTotal   < 0 ? 'red' : undefined },
+            { label: 'Receitas do mês',     value: formatCurrency(totalReceitas), accent: 'green' },
+            { label: 'Despesas do mês',     value: formatCurrency(totalDespesas), accent: totalDespesas > 0 ? 'red' : undefined },
+            { label: 'Resultado do mês',    value: formatCurrency(resultado),     accent: resultado < 0 ? 'red' : resultado > 0 ? 'green' : undefined },
           ]}
-          href="/financeiro/fluxo-de-caixa"
+          href="/financeiro/fluxo"
           linkLabel="Ver fluxo de caixa"
         />
-        <ModuleSection
-          icon="👥"
-          title="PESSOAS"
-          metrics={[
-            { label: 'Funcionários ativos',         value: empAtivos },
-            { label: 'Em admissão / experiência',   value: empAdmissao,  accent: empAdmissao  > 0 ? 'yellow' : undefined },
-            { label: 'Férias vencendo (30 dias)',    value: feriasCount,  accent: feriasCount  > 0 ? 'yellow' : undefined },
-            { label: 'Exames periódicos (30 dias)',  value: examesCount,  accent: examesCount  > 0 ? 'yellow' : undefined },
-          ]}
-          href="/pessoas/funcionarios"
-          linkLabel="Ver funcionários"
-        />
+
+        {/* 3 — Operacional */}
         <ModuleSection
           icon="📦"
           title="OPERACIONAL"
@@ -291,24 +197,31 @@ export default async function DashboardPage() {
           href="/operacional/pedidos-compra"
           linkLabel="Ver pedidos"
         />
+
+        {/* 4 — Pessoas */}
         <ModuleSection
-          icon="🏢"
-          title="ADMINISTRATIVO"
+          icon="👥"
+          title="PESSOAS"
           metrics={[
-            { label: 'Documentos',         value: totalDocs },
-            { label: 'Vencidos',           value: docsVencidos,      accent: docsVencidos      > 0 ? 'red'    : undefined },
-            { label: 'Vencendo (30 dias)', value: docsVencendoList.length, accent: docsVencendoList.length > 0 ? 'yellow' : undefined },
-            { label: 'Usuários ativos',    value: totalUsuarios },
-            { label: 'Convites pendentes', value: convitesPendentes,  accent: convitesPendentes > 0 ? 'yellow' : undefined },
+            { label: 'Funcionários ativos',        value: empAtivos },
+            { label: 'Em admissão / experiência',  value: empAdmissao,  accent: empAdmissao  > 0 ? 'yellow' : undefined },
+            { label: 'Férias vencendo (30 dias)',   value: feriasCount,  accent: feriasCount  > 0 ? 'yellow' : undefined },
+            { label: 'Exames periódicos (30 dias)', value: examesCount,  accent: examesCount  > 0 ? 'yellow' : undefined },
           ]}
-          href="/admin/documentacao"
-          linkLabel="Ver documentação"
+          href="/pessoas/funcionarios"
+          linkLabel="Ver funcionários"
         />
+
+        {/* 5 — Marketing (em branco) */}
+        <ModuleSection
+          icon="📣"
+          title="MARKETING"
+          metrics={[]}
+          href="/marketing/calendario"
+          linkLabel="Ver marketing"
+        />
+
       </div>
-
-      {/* Alertas consolidados */}
-      <AlertList alerts={alerts} />
-
     </div>
   )
 }
