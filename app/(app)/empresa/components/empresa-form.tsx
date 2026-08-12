@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,10 +17,6 @@ const UF_OPTIONS = [
   'RS','RO','RR','SC','SP','SE','TO',
 ]
 
-const COR_PRESETS = [
-  '#C19A6B','#1A1A2E','#16213E','#2E86AB','#A23B72',
-  '#F18F01','#2ECC71','#E74C3C','#8E44AD','#2C3E50',
-]
 
 function formatCNPJ(value: string) {
   const d = value.replace(/\D/g, '').slice(0, 14)
@@ -80,9 +76,6 @@ export function EmpresaForm({ company }: Props) {
   const [cepLoading, setCepLoading]   = useState(false)
   const [isPending, startTransition]  = useTransition()
 
-  const logoInputRef = useRef<HTMLInputElement>(null)
-  const [logoPreview, setLogoPreview] = useState<string | null>(company?.logo_url ?? null)
-
   const certInputRef = useRef<HTMLInputElement>(null)
   const [certName, setCertName] = useState<string | null>(
     company?.certificado_digital_url ? 'Certificado já cadastrado' : null,
@@ -117,18 +110,7 @@ export function EmpresaForm({ company }: Props) {
         : { cor_primaria: '#C19A6B' },
     })
 
-  const corAtual = watch('cor_primaria') ?? '#C19A6B'
   const loading  = isSubmitting || isPending
-
-  const [corInput, setCorInput] = useState(corAtual)
-  useEffect(() => { setCorInput(corAtual) }, [corAtual])
-
-
-  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setLogoPreview(URL.createObjectURL(file))
-  }
 
   function handleCertChange(e: React.ChangeEvent<HTMLInputElement>) {
     setCertName(e.target.files?.[0]?.name ?? null)
@@ -158,8 +140,6 @@ export function EmpresaForm({ company }: Props) {
     Object.entries(data).forEach(([k, v]) => {
       if (v !== undefined && v !== '') formData.set(k, String(v))
     })
-    const logoFile = logoInputRef.current?.files?.[0]
-    if (logoFile) formData.set('logo_file', logoFile)
     const certFile = certInputRef.current?.files?.[0]
     if (certFile) formData.set('certificado_file', certFile)
 
@@ -354,106 +334,6 @@ export function EmpresaForm({ company }: Props) {
             autoComplete="off"
             {...register('certificado_digital_senha')}
           />
-        </Card>
-
-        {/* 4 — Identidade Visual */}
-        <Card>
-          <SectionTitle>Identidade Visual</SectionTitle>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Logo da empresa
-            </label>
-            <div className="flex items-center gap-4">
-              {logoPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoPreview} alt="Preview logo"
-                  className="w-14 h-14 rounded-lg object-contain border"
-                  style={{ borderColor: 'var(--color-bg-surface)' }} />
-              ) : (
-                <div className="w-14 h-14 rounded-lg border flex items-center justify-center text-2xl"
-                  style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
-                  🏢
-                </div>
-              )}
-              <label
-                className="cursor-pointer text-sm px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50"
-                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
-              >
-                {logoPreview ? 'Trocar imagem' : 'Selecionar imagem'}
-                <input ref={logoInputRef} type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  className="hidden" onChange={handleLogoChange} />
-              </label>
-              {logoPreview && (
-                <button type="button" className="text-xs" style={{ color: 'var(--color-text-muted)' }}
-                  onClick={() => { setLogoPreview(null); if (logoInputRef.current) logoInputRef.current.value = '' }}>
-                  Remover
-                </button>
-              )}
-            </div>
-            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>PNG, JPG ou SVG — máx. 5 MB</p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Cor da empresa
-            </label>
-
-            {/* Presets */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {COR_PRESETS.map(cor => (
-                <button key={cor} type="button" onClick={() => setValue('cor_primaria', cor)}
-                  className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
-                  style={{ backgroundColor: cor, borderColor: corAtual === cor ? 'var(--color-text-primary)' : 'transparent' }}
-                  title={cor} />
-              ))}
-            </div>
-
-            {/* Swatch + input hex combinados */}
-            <div className="flex items-center gap-3">
-              <div
-                className="flex items-center rounded-lg border overflow-hidden h-9"
-                style={{ borderColor: 'var(--color-bg-surface)' }}
-              >
-                {/* Swatch clicável — abre o seletor nativo */}
-                <label className="relative flex-shrink-0 cursor-pointer h-full" title="Clique para abrir o seletor de cor">
-                  <div className="w-9 h-full" style={{ backgroundColor: corAtual }} />
-                  <input
-                    type="color"
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                    {...register('cor_primaria')}
-                  />
-                </label>
-
-                {/* Divisor */}
-                <div className="w-px h-full flex-shrink-0" style={{ backgroundColor: 'var(--color-bg-surface)' }} />
-
-                {/* # fixo */}
-                <span className="pl-2 pr-0.5 text-sm font-mono select-none" style={{ color: 'var(--color-text-muted)' }}>#</span>
-
-                {/* Input: só os 6 dígitos hex */}
-                <input
-                  type="text"
-                  value={(corInput.startsWith('#') ? corInput.slice(1) : corInput).toUpperCase()}
-                  onChange={e => {
-                    const raw = e.target.value.replace(/[^0-9A-Fa-f]/g, '').slice(0, 6).toUpperCase()
-                    const withHash = '#' + raw
-                    setCorInput(withHash)
-                    if (raw.length === 6 || raw.length === 3) setValue('cor_primaria', withHash)
-                  }}
-                  onFocus={e => e.target.select()}
-                  maxLength={6}
-                  placeholder="C19A6B"
-                  className="h-full bg-white focus:outline-none text-sm font-mono pr-3"
-                  style={{ color: 'var(--color-text-primary)', width: '7ch' }}
-                />
-              </div>
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                Clique no quadrado para o seletor, ou digite o código hex
-              </p>
-            </div>
-          </div>
         </Card>
 
         {successMsg && (

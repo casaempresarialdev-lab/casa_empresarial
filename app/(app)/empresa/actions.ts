@@ -134,7 +134,6 @@ export async function updateCompanyAction(companyId: string, formData: FormData)
       ie_situacao:                   parsed.data.ie_situacao || null,
       inscricao_estadual:            parsed.data.inscricao_estadual || null,
       inscricao_municipal:           parsed.data.inscricao_municipal || null,
-      cor_primaria:                  parsed.data.cor_primaria || '#C19A6B',
       ...(certSenhaEnc !== undefined && { certificado_digital_senha_enc: certSenhaEnc }),
       cep:                           parsed.data.cep?.replace(/\D/g, '') || null,
       uf:                            parsed.data.uf || null,
