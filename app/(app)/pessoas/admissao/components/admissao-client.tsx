@@ -20,19 +20,6 @@ const STAGES = [
 
 type StageKey = typeof STAGES[number]['key']
 
-const CHECKLIST = [
-  'Contrato de trabalho assinado',
-  'CTPS registrada',
-  'Exame admissional (ASO)',
-  'Ficha de registro preenchida',
-  'Declaração de dependentes (IRRF)',
-  'Declaração de VT',
-  'Dados bancários',
-  'Foto 3x4',
-  'Comprovante de residência',
-  'Cópia do CPF e RG',
-]
-
 function formatDate(d: string | null) {
   if (!d) return '—'
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
@@ -62,7 +49,6 @@ function CardDetailModal({
   onClose: () => void
   onRefresh: () => void
 }) {
-  const [checked, setChecked] = useState<Record<number, boolean>>({})
   const [advancing, setAdvancing] = useState(false)
   const [generatingLink, setGeneratingLink] = useState(false)
   const [linkUrl, setLinkUrl] = useState<string | null>(null)
@@ -71,11 +57,6 @@ function CardDetailModal({
   const tStatus = tokenStatus(token)
   const nextStatus = emp.status === 'admissao' ? 'experiencia' : 'ativo'
   const nextLabel = emp.status === 'admissao' ? 'Iniciar experiência' : 'Efetuar contratação'
-  const checkCount = Object.values(checked).filter(Boolean).length
-
-  function toggleChecked(idx: number) {
-    setChecked(prev => ({ ...prev, [idx]: !prev[idx] }))
-  }
 
   async function handleAdvance() {
     const label = nextStatus === 'experiencia' ? 'período de experiência' : 'ativo'
@@ -189,37 +170,6 @@ function CardDetailModal({
           )}
           {tStatus === 'expired' && !linkUrl && (
             <p className="text-xs mt-1" style={{ color: '#C0392B' }}>Link anterior expirado</p>
-          )}
-        </div>
-
-        {/* Checklist */}
-        <div className="px-6 py-4 border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
-          <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
-            DOCUMENTOS ({checkCount}/{CHECKLIST.length})
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {CHECKLIST.map((item, idx) => {
-              const done = checked[idx] ?? false
-              return (
-                <label key={idx} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={done} onChange={() => toggleChecked(idx)} className="rounded" />
-                  <span
-                    className="text-xs"
-                    style={{
-                      color: done ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-                      textDecoration: done ? 'line-through' : 'none',
-                    }}
-                  >
-                    {item}
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-          {emp.data_experiencia_fim && (
-            <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
-              Fim do período de experiência: {formatDate(emp.data_experiencia_fim)}
-            </p>
           )}
         </div>
 
