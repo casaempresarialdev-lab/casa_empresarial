@@ -63,6 +63,10 @@ function SubTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
+function Req() {
+  return <span style={{ color: '#EF4444' }}>*</span>
+}
+
 interface Props {
   company: Company | null
 }
@@ -196,42 +200,42 @@ export function EmpresaForm({ company }: Props) {
         <Card>
           <SectionTitle>Dados da Empresa</SectionTitle>
 
-          {/* Razão Social primeiro */}
+          {/* Razão Social — linha inteira */}
+          <Input label={<>Razão Social <Req /></>} type="text" placeholder="Nome oficial da empresa"
+            error={errors.razao_social?.message} {...register('razao_social')} />
+
+          {/* CNPJ + Nome Fantasia */}
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Razão Social" type="text" placeholder="Nome oficial da empresa"
-              error={errors.razao_social?.message} {...register('razao_social')} />
-            <Input label="Nome Fantasia (opcional)" type="text" placeholder="Como a empresa é conhecida"
+            <div className="flex flex-col gap-1">
+              <Input
+                label={<>CNPJ <Req /></>}
+                type="text"
+                placeholder="00.000.000/0000-00"
+                inputMode="numeric"
+                error={errors.cnpj?.message}
+                readOnly={isEdit}
+                className={isEdit ? 'bg-gray-50 cursor-not-allowed' : ''}
+                {...register('cnpj', {
+                  onChange: isEdit ? undefined : (e) => {
+                    const f = formatCNPJ(e.target.value)
+                    e.target.value = f
+                    setValue('cnpj', f, { shouldValidate: false })
+                  },
+                })}
+              />
+              {isEdit && (
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  O CNPJ não pode ser alterado após o cadastro.
+                </p>
+              )}
+            </div>
+            <Input label="Nome Fantasia" type="text" placeholder="Como a empresa é conhecida"
               {...register('nome_fantasia')} />
           </div>
 
-          {/* CNPJ */}
-          <div className="flex flex-col gap-1">
-            <Input
-              label="CNPJ"
-              type="text"
-              placeholder="00.000.000/0000-00"
-              inputMode="numeric"
-              error={errors.cnpj?.message}
-              readOnly={isEdit}
-              className={isEdit ? 'bg-gray-50 cursor-not-allowed' : ''}
-              {...register('cnpj', {
-                onChange: isEdit ? undefined : (e) => {
-                  const f = formatCNPJ(e.target.value)
-                  e.target.value = f
-                  setValue('cnpj', f, { shouldValidate: false })
-                },
-              })}
-            />
-            {isEdit && (
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                O CNPJ não pode ser alterado após o cadastro.
-              </p>
-            )}
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Telefone (opcional)" type="tel" placeholder="(11) 99999-9999" {...register('telefone')} />
-            <Input label="E-mail da empresa (opcional)" type="email" placeholder="empresa@email.com"
+            <Input label="Telefone" type="tel" placeholder="(11) 99999-9999" {...register('telefone')} />
+            <Input label="E-mail da empresa" type="email" placeholder="empresa@email.com"
               error={errors.email?.message} {...register('email')} />
           </div>
 
@@ -279,7 +283,7 @@ export function EmpresaForm({ company }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <Input label="Bairro" type="text" placeholder="Bairro" {...register('bairro')} />
-            <Input label="Complemento (opcional)" type="text" placeholder="Apto, sala..." {...register('complemento')} />
+            <Input label="Complemento" type="text" placeholder="Apto, sala..." {...register('complemento')} />
           </div>
         </Card>
 
@@ -287,11 +291,11 @@ export function EmpresaForm({ company }: Props) {
         <Card>
           <SectionTitle>Dados Fiscais</SectionTitle>
 
-          {/* Regime Tributário */}
+          {/* Regime Tributário + IM */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                Regime Tributário (opcional)
+                Regime Tributário
               </label>
               <select className={selectCls} style={selectSty} {...register('regime_tributario')}>
                 <option value="">Selecione...</option>
@@ -301,7 +305,8 @@ export function EmpresaForm({ company }: Props) {
                 <option value="lucro_real">Lucro Real</option>
               </select>
             </div>
-            <div />
+            <Input label={<>IM — Inscrição Municipal <Req /></>} type="text" placeholder="00000000"
+              {...register('inscricao_municipal')} />
           </div>
 
           {/* IE */}
@@ -319,13 +324,6 @@ export function EmpresaForm({ company }: Props) {
             </div>
             <Input label="IE — Número" type="text" placeholder="000.000.000.000"
               {...register('inscricao_estadual')} />
-          </div>
-
-          {/* IM */}
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="IM — Inscrição Municipal (opcional)" type="text" placeholder="00000000"
-              {...register('inscricao_municipal')} />
-            <div />
           </div>
         </Card>
 
@@ -364,7 +362,7 @@ export function EmpresaForm({ company }: Props) {
 
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Logo da empresa (opcional)
+              Logo da empresa
             </label>
             <div className="flex items-center gap-4">
               {logoPreview ? (
@@ -399,7 +397,7 @@ export function EmpresaForm({ company }: Props) {
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Cor da empresa (opcional)
+              Cor da empresa
             </label>
 
             {/* Presets */}
