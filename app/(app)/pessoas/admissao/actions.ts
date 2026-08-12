@@ -9,6 +9,24 @@ async function getAuthUser() {
   return user
 }
 
+export async function updateAdmissionStageAction(
+  employeeId: string,
+  stage: string,
+) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('employees')
+    .update({ admission_stage: stage })
+    .eq('id', employeeId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/pessoas/admissao')
+  return { success: true }
+}
+
 export async function updateEmployeeStatusAction(
   employeeId: string,
   status: 'admissao' | 'experiencia' | 'ativo' | 'inativo' | 'demitido',

@@ -3,21 +3,22 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { updateEmployeeStatusAction } from '../actions'
+import { updateEmployeeStatusAction, updateAdmissionStageAction } from '../actions'
 import { generateOnboardingTokenAction } from '../../funcionarios/actions'
 import type { Employee } from '../../funcionarios/queries'
 import type { OnboardingTokenInfo } from '../queries'
 
-interface Props {
-  employees: Employee[]
-  tokens: Record<string, OnboardingTokenInfo>
-  companyId: string
-}
+const STAGES = [
+  { key: 'entrevista',               label: 'Entrevista',               color: '#818cf8' },
+  { key: 'enviar_formulario',        label: 'Enviar Formulário',        color: '#fbbf24' },
+  { key: 'aguardando_preenchimento', label: 'Aguard. Preenchimento',    color: '#f97316' },
+  { key: 'agendar_exame',            label: 'Agendar Exame',            color: '#38bdf8' },
+  { key: 'aguardando_contabilidade', label: 'Aguard. Contabilidade',    color: '#a78bfa' },
+  { key: 'assinatura',               label: 'Assinatura',               color: '#34d399' },
+  { key: 'finalizado',               label: 'Finalizado',               color: '#22c55e' },
+] as const
 
-const STATUS_CONFIG = {
-  admissao:    { label: 'Em admissão', bg: '#FEF9E7', text: '#D4AC0D' },
-  experiencia: { label: 'Experiência', bg: '#EBF5FB', text: '#2471A3' },
-}
+type StageKey = typeof STAGES[number]['key']
 
 const CHECKLIST = [
   'Contrato de trabalho assinado',
@@ -44,217 +45,459 @@ function tokenStatus(t: OnboardingTokenInfo | undefined): 'none' | 'pending' | '
   return 'pending'
 }
 
-export function AdmissaoClient({ employees, tokens, companyId }: Props) {
-  const router = useRouter()
-  const [expandedId, setExpandedId]   = useState<string | null>(null)
-  const [checked, setChecked]         = useState<Record<string, Record<number, boolean>>>({})
-  const [updatingId, setUpdatingId]   = useState<string | null>(null)
-  const [generatingId, setGeneratingId] = useState<string | null>(null)
-  // linkPanels: employeeId → URL gerado
-  const [linkPanels, setLinkPanels]   = useState<Record<string, string>>({})
-  const [copied, setCopied]           = useState<Record<string, boolean>>({})
+function getStage(emp: Employee): StageKey {
+  return (emp.admission_stage as StageKey) ?? 'entrevista'
+}
 
-  function toggleChecked(empId: string, idx: number) {
-    setChecked(prev => ({ ...prev, [empId]: { ...prev[empId], [idx]: !prev[empId]?.[idx] } }))
+// ── Card Detail Modal ────────────────────────────────────────────────────────
+
+function CardDetailModal({
+  emp,
+  token,
+  onClose,
+  onRefresh,
+}: {
+  emp: Employee
+  token: OnboardingTokenInfo | undefined
+  onClose: () => void
+  onRefresh: () => void
+}) {
+  const [checked, setChecked] = useState<Record<number, boolean>>({})
+  const [advancing, setAdvancing] = useState(false)
+  const [generatingLink, setGeneratingLink] = useState(false)
+  const [linkUrl, setLinkUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const tStatus = tokenStatus(token)
+  const nextStatus = emp.status === 'admissao' ? 'experiencia' : 'ativo'
+  const nextLabel = emp.status === 'admissao' ? 'Iniciar experiência' : 'Efetuar contratação'
+  const checkCount = Object.values(checked).filter(Boolean).length
+
+  function toggleChecked(idx: number) {
+    setChecked(prev => ({ ...prev, [idx]: !prev[idx] }))
   }
 
-  function getCheckCount(empId: string) {
-    return Object.values(checked[empId] ?? {}).filter(Boolean).length
-  }
-
-  async function handleAdvance(emp: Employee) {
-    const nextStatus = emp.status === 'admissao' ? 'experiencia' : 'ativo'
+  async function handleAdvance() {
     const label = nextStatus === 'experiencia' ? 'período de experiência' : 'ativo'
     if (!confirm(`Avançar ${emp.nome} para status "${label}"?`)) return
-    setUpdatingId(emp.id)
+    setAdvancing(true)
     const result = await updateEmployeeStatusAction(emp.id, nextStatus)
-    setUpdatingId(null)
+    setAdvancing(false)
     if ('error' in result) alert(result.error)
-    else router.refresh()
+    else { onRefresh(); onClose() }
   }
 
-  async function handleGenerateLink(emp: Employee) {
-    setGeneratingId(emp.id)
+  async function handleGenerateLink() {
+    setGeneratingLink(true)
     const result = await generateOnboardingTokenAction(emp.id)
-    setGeneratingId(null)
+    setGeneratingLink(false)
     if ('error' in result || !result.url) { alert(result.error ?? 'Erro ao gerar link.'); return }
-    setLinkPanels(p => ({ ...p, [emp.id]: result.url! }))
-    router.refresh()
+    setLinkUrl(result.url!)
+    onRefresh()
   }
 
-  async function handleCopy(empId: string, url: string) {
+  async function handleCopy(url: string) {
     await navigator.clipboard.writeText(url)
-    setCopied(p => ({ ...p, [empId]: true }))
-    setTimeout(() => setCopied(p => ({ ...p, [empId]: false })), 2000)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
-  function handleWhatsApp(emp: Employee, url: string) {
+  function handleWhatsApp(url: string) {
     const phone = emp.telefone?.replace(/\D/g, '') ?? ''
-    const nome  = emp.nome.split(' ')[0]
-    const msg   = encodeURIComponent(`Olá ${nome}! Acesse o link abaixo para preencher seus dados de admissão:\n${url}`)
+    const nome = emp.nome.split(' ')[0]
+    const msg = encodeURIComponent(`Olá ${nome}! Acesse o link abaixo para preencher seus dados de admissão:\n${url}`)
     window.open(`https://wa.me/55${phone}?text=${msg}`, '_blank')
   }
 
   return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl" style={{ backgroundColor: 'white' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+              style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+            >
+              {emp.nome.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div className="font-semibold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+                {emp.nome}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                {emp.cargo ?? 'Sem cargo'}{emp.data_admissao ? ` · ${formatDate(emp.data_admissao)}` : ''}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-sm"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Formulário de auto-cadastro */}
+        <div className="px-6 py-4 border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+            FORMULÁRIO DE AUTO-CADASTRO
+          </p>
+          {tStatus === 'done' && (
+            <p className="text-sm" style={{ color: '#1E8449' }}>
+              ✓ Dados preenchidos em {formatDate(token!.used_at!.split('T')[0])}
+            </p>
+          )}
+          {tStatus !== 'done' && !linkUrl && (
+            <button
+              onClick={handleGenerateLink}
+              disabled={generatingLink}
+              className="text-sm px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
+              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-primary-darker)' }}
+            >
+              {generatingLink ? 'Gerando…' : tStatus === 'pending' ? 'Gerar novo link' : tStatus === 'expired' ? 'Novo link' : 'Gerar link de cadastro'}
+            </button>
+          )}
+          {linkUrl && (
+            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: '#EBF5FB' }}>
+              <span className="text-xs truncate flex-1" style={{ color: '#2471A3' }}>{linkUrl}</span>
+              <button
+                onClick={() => handleCopy(linkUrl)}
+                className="text-xs px-2 py-1 rounded border shrink-0"
+                style={{ borderColor: '#2471A3', color: '#2471A3', backgroundColor: 'white' }}
+              >
+                {copied ? '✓ Copiado' : 'Copiar'}
+              </button>
+              {emp.telefone && (
+                <button
+                  onClick={() => handleWhatsApp(linkUrl)}
+                  className="text-xs px-2 py-1 rounded shrink-0"
+                  style={{ backgroundColor: '#25D366', color: 'white' }}
+                >
+                  WhatsApp
+                </button>
+              )}
+            </div>
+          )}
+          {tStatus === 'pending' && !linkUrl && (
+            <p className="text-xs mt-1" style={{ color: '#9A7D0A' }}>⏳ Link enviado — aguardando preenchimento</p>
+          )}
+          {tStatus === 'expired' && !linkUrl && (
+            <p className="text-xs mt-1" style={{ color: '#C0392B' }}>Link anterior expirado</p>
+          )}
+        </div>
+
+        {/* Checklist */}
+        <div className="px-6 py-4 border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+            DOCUMENTOS ({checkCount}/{CHECKLIST.length})
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {CHECKLIST.map((item, idx) => {
+              const done = checked[idx] ?? false
+              return (
+                <label key={idx} className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={done} onChange={() => toggleChecked(idx)} className="rounded" />
+                  <span
+                    className="text-xs"
+                    style={{
+                      color: done ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                      textDecoration: done ? 'line-through' : 'none',
+                    }}
+                  >
+                    {item}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+          {emp.data_experiencia_fim && (
+            <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
+              Fim do período de experiência: {formatDate(emp.data_experiencia_fim)}
+            </p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 flex justify-end gap-3">
+          <Button variant="ghost" onClick={onClose}>Fechar</Button>
+          <Button loading={advancing} onClick={handleAdvance}>{nextLabel}</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Kanban Board ─────────────────────────────────────────────────────────────
+
+interface Props {
+  employees: Employee[]
+  tokens: Record<string, OnboardingTokenInfo>
+  companyId: string
+}
+
+export function AdmissaoClient({ employees, tokens }: Props) {
+  const router = useRouter()
+
+  const [stageMap, setStageMap] = useState<Record<string, StageKey>>(() => {
+    const map: Record<string, StageKey> = {}
+    for (const emp of employees) map[emp.id] = getStage(emp)
+    return map
+  })
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragOverStage, setDragOverStage] = useState<StageKey | null>(null)
+  const [movingId, setMovingId] = useState<string | null>(null)
+  const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null)
+
+  function getEmployeesInStage(stageKey: StageKey) {
+    return employees.filter(e => (stageMap[e.id] ?? 'entrevista') === stageKey)
+  }
+
+  async function moveToStage(empId: string, newStage: StageKey) {
+    const prevStage = stageMap[empId] ?? 'entrevista'
+    if (prevStage === newStage) return
+    setMovingId(empId)
+    setStageMap(prev => ({ ...prev, [empId]: newStage }))
+    const result = await updateAdmissionStageAction(empId, newStage)
+    setMovingId(null)
+    if ('error' in result) {
+      setStageMap(prev => ({ ...prev, [empId]: prevStage }))
+      alert(result.error)
+    }
+  }
+
+  function handleDragStart(e: React.DragEvent, empId: string) {
+    e.dataTransfer.setData('empId', empId)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggingId(empId)
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null)
+    setDragOverStage(null)
+  }
+
+  function handleDragOver(e: React.DragEvent, stageKey: StageKey) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverStage(stageKey)
+  }
+
+  function handleDrop(e: React.DragEvent, stageKey: StageKey) {
+    e.preventDefault()
+    const empId = e.dataTransfer.getData('empId')
+    setDragOverStage(null)
+    setDraggingId(null)
+    if (empId) moveToStage(empId, stageKey)
+  }
+
+  function adjacentStage(current: StageKey, dir: 'prev' | 'next'): StageKey | null {
+    const idx = STAGES.findIndex(s => s.key === current)
+    if (dir === 'prev') return idx > 0 ? STAGES[idx - 1].key : null
+    return idx < STAGES.length - 1 ? STAGES[idx + 1].key : null
+  }
+
+  return (
     <>
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
             Admissão
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            Funcionários em processo de admissão ou período de experiência
+            Arraste os cards entre as etapas ou use as setas ← →
           </p>
         </div>
-        <Button onClick={() => router.push('/pessoas/admissao/novo')}>Adicionar</Button>
+        <Button onClick={() => router.push('/pessoas/admissao/novo')}>+ Adicionar</Button>
       </div>
 
+      {/* Kanban */}
+      <div className="overflow-x-auto pb-4 -mx-1 px-1">
+        <div className="flex gap-3" style={{ minWidth: `${STAGES.length * 268}px` }}>
+          {STAGES.map((stage, stageIdx) => {
+            const colEmps = getEmployeesInStage(stage.key)
+            const isOver = dragOverStage === stage.key
+
+            return (
+              <div
+                key={stage.key}
+                className="flex flex-col flex-shrink-0 rounded-xl"
+                style={{
+                  width: 256,
+                  backgroundColor: isOver ? `${stage.color}12` : 'var(--color-bg-surface)',
+                  border: `2px solid ${isOver ? stage.color : 'transparent'}`,
+                  transition: 'background-color 0.15s, border-color 0.15s',
+                }}
+                onDragOver={(e) => handleDragOver(e, stage.key)}
+                onDragLeave={(e) => {
+                  // only clear if leaving the column entirely (not entering a child)
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDragOverStage(null)
+                  }
+                }}
+                onDrop={(e) => handleDrop(e, stage.key)}
+              >
+                {/* Column header */}
+                <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
+                  <span className="text-xs font-semibold flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
+                    {stage.label}
+                  </span>
+                  <span
+                    className="text-xs rounded-full px-1.5 py-0.5 font-semibold shrink-0"
+                    style={{ backgroundColor: `${stage.color}22`, color: stage.color }}
+                  >
+                    {colEmps.length}
+                  </span>
+                </div>
+
+                {/* Cards */}
+                <div className="flex flex-col gap-2 px-2 pb-3 flex-1 min-h-[80px]">
+                  {colEmps.map(emp => {
+                    const tok = tokens[emp.id]
+                    const tStatus = tokenStatus(tok)
+                    const isDragging = draggingId === emp.id
+                    const isMoving = movingId === emp.id
+                    const cur = stageMap[emp.id] ?? 'entrevista'
+                    const prev = adjacentStage(cur, 'prev')
+                    const next = adjacentStage(cur, 'next')
+
+                    return (
+                      <div
+                        key={emp.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, emp.id)}
+                        onDragEnd={handleDragEnd}
+                        onClick={() => setSelectedEmp(emp)}
+                        className="rounded-lg border cursor-pointer select-none"
+                        style={{
+                          backgroundColor: 'white',
+                          borderColor: 'var(--color-bg-surface)',
+                          opacity: isDragging ? 0.35 : isMoving ? 0.65 : 1,
+                          boxShadow: isDragging
+                            ? '0 8px 20px rgba(0,0,0,0.18)'
+                            : '0 1px 3px rgba(0,0,0,0.06)',
+                          transition: 'opacity 0.15s, box-shadow 0.15s',
+                        }}
+                      >
+                        {/* Card body */}
+                        <div className="px-3 pt-3 pb-2">
+                          <div className="flex items-start gap-2">
+                            <div
+                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5"
+                              style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+                            >
+                              {emp.nome.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
+                                {emp.nome}
+                              </div>
+                              <div className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
+                                {emp.cargo ?? 'Sem cargo'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                              {formatDate(emp.data_admissao)}
+                            </span>
+                            {tStatus === 'done' && (
+                              <span className="text-xs font-medium" style={{ color: '#1E8449' }}>✓ Preenchido</span>
+                            )}
+                            {tStatus === 'pending' && (
+                              <span className="text-xs" style={{ color: '#9A7D0A' }}>⏳ Aguardando</span>
+                            )}
+                            {tStatus === 'expired' && (
+                              <span className="text-xs" style={{ color: '#C0392B' }}>Link expirado</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Move arrows — stopPropagation to not open modal */}
+                        <div
+                          className="border-t px-2 py-1.5 flex items-center justify-between"
+                          style={{ borderColor: 'var(--color-bg-surface)' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => prev && moveToStage(emp.id, prev)}
+                            disabled={!prev || isMoving}
+                            className="w-6 h-6 flex items-center justify-center rounded text-sm hover:bg-gray-100 disabled:opacity-25 transition-colors"
+                            style={{ color: 'var(--color-text-muted)' }}
+                            title={prev ? STAGES.find(s => s.key === prev)?.label : undefined}
+                          >
+                            ←
+                          </button>
+                          <span className="text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+                            {stageIdx + 1}/{STAGES.length}
+                          </span>
+                          <button
+                            onClick={() => next && moveToStage(emp.id, next)}
+                            disabled={!next || isMoving}
+                            className="w-6 h-6 flex items-center justify-center rounded text-sm hover:bg-gray-100 disabled:opacity-25 transition-colors"
+                            style={{ color: 'var(--color-text-muted)' }}
+                            title={next ? STAGES.find(s => s.key === next)?.label : undefined}
+                          >
+                            →
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Drop placeholder */}
+                  {colEmps.length === 0 && isOver && (
+                    <div
+                      className="rounded-lg border-2 border-dashed h-16 flex items-center justify-center"
+                      style={{ borderColor: stage.color }}
+                    >
+                      <span className="text-xs" style={{ color: stage.color }}>Soltar aqui</span>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {colEmps.length === 0 && !isOver && (
+                    <div className="h-16" />
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Empty total state */}
       {employees.length === 0 && (
-        <div className="rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div
+          className="rounded-xl border p-10 text-center mt-4"
+          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}
+        >
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            Nenhum funcionário em admissão ou período de experiência.
+            Nenhum candidato em processo de admissão.
           </p>
           <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            Clique em "Adicionar" para iniciar uma admissão.
+            Clique em "+ Adicionar" para iniciar uma admissão.
           </p>
         </div>
       )}
 
-      <div className="space-y-3">
-        {employees.map(emp => {
-          const cfg       = STATUS_CONFIG[emp.status as keyof typeof STATUS_CONFIG]
-          const checkCount = getCheckCount(emp.id)
-          const isExpanded = expandedId === emp.id
-          const nextLabel  = emp.status === 'admissao' ? 'Iniciar experiência' : 'Efetuar contratação'
-          const token      = tokens[emp.id]
-          const status     = tokenStatus(token)
-          const panelUrl   = linkPanels[emp.id]
-
-          return (
-            <div key={emp.id} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-              {/* Header do card */}
-              <div className="flex items-center justify-between px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
-                    style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}>
-                    {emp.nome.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</div>
-                    <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                      {emp.cargo ?? 'Sem cargo'}{emp.data_admissao ? ` · Admitido em ${formatDate(emp.data_admissao)}` : ''}
-                    </div>
-                    {/* Status do auto-cadastro */}
-                    {status === 'done' && (
-                      <span className="text-xs" style={{ color: '#1E8449' }}>
-                        ✓ Dados preenchidos em {formatDate(token!.used_at!.split('T')[0])}
-                      </span>
-                    )}
-                    {status === 'pending' && !panelUrl && (
-                      <span className="text-xs" style={{ color: '#9A7D0A' }}>⏳ Aguardando preenchimento</span>
-                    )}
-                    {status === 'expired' && (
-                      <span className="text-xs" style={{ color: '#C0392B' }}>Link expirado</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                    {checkCount}/{CHECKLIST.length} docs
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                    style={{ backgroundColor: cfg.bg, color: cfg.text }}>
-                    {cfg.label}
-                  </span>
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : emp.id)}
-                    className="text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}>
-                    {isExpanded ? 'Recolher' : 'Checklist'}
-                  </button>
-                  {/* Botão de link de auto-cadastro */}
-                  {status !== 'done' && (
-                    <button
-                      onClick={() => panelUrl
-                        ? setLinkPanels(p => ({ ...p })) // já visível — não faz nada (painel aberto abaixo)
-                        : handleGenerateLink(emp)
-                      }
-                      disabled={generatingId === emp.id || !!panelUrl}
-                      className="text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
-                      style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-primary-darker)', opacity: panelUrl ? 0.5 : 1 }}>
-                      {generatingId === emp.id ? '...' : panelUrl ? 'Link gerado ↓' : status === 'pending' ? 'Gerar novo link' : status === 'expired' ? 'Novo link' : 'Enviar link'}
-                    </button>
-                  )}
-                  <Button size="sm" loading={updatingId === emp.id} onClick={() => handleAdvance(emp)}>
-                    {nextLabel}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Painel do link de auto-cadastro */}
-              {panelUrl && (
-                <div className="border-t px-5 py-3 flex items-center gap-3"
-                  style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: '#EBF5FB' }}>
-                  <span className="text-lg">🔗</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-primary-darker)' }}>
-                      Link de auto-cadastro — válido por 7 dias
-                    </p>
-                    <p className="text-xs truncate" style={{ color: '#2471A3' }}>{panelUrl}</p>
-                  </div>
-                  <button onClick={() => handleCopy(emp.id, panelUrl)}
-                    className="text-xs px-3 py-1.5 rounded-lg border flex-shrink-0"
-                    style={{ borderColor: '#2471A3', color: '#2471A3', backgroundColor: 'white' }}>
-                    {copied[emp.id] ? '✓ Copiado' : 'Copiar'}
-                  </button>
-                  {emp.telefone && (
-                    <button onClick={() => handleWhatsApp(emp, panelUrl)}
-                      className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0"
-                      style={{ backgroundColor: '#25D366', color: 'white' }}>
-                      WhatsApp
-                    </button>
-                  )}
-                  <button onClick={() => setLinkPanels(p => { const n = { ...p }; delete n[emp.id]; return n })}
-                    className="text-xs px-2 py-1.5 rounded-lg flex-shrink-0"
-                    style={{ color: 'var(--color-text-muted)' }}>
-                    ✕
-                  </button>
-                </div>
-              )}
-
-              {/* Checklist expandido */}
-              {isExpanded && (
-                <div className="border-t px-5 py-4" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
-                  <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    DOCUMENTOS E ETAPAS DE ADMISSÃO
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {CHECKLIST.map((item, idx) => {
-                      const done = checked[emp.id]?.[idx] ?? false
-                      return (
-                        <label key={idx} className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={done} onChange={() => toggleChecked(emp.id, idx)} className="rounded" />
-                          <span className="text-xs" style={{
-                            color: done ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-                            textDecoration: done ? 'line-through' : 'none',
-                          }}>
-                            {item}
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  {emp.data_experiencia_fim && (
-                    <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
-                      Fim do período de experiência: {formatDate(emp.data_experiencia_fim)}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
+      {/* Card detail modal */}
+      {selectedEmp && (
+        <CardDetailModal
+          emp={selectedEmp}
+          token={tokens[selectedEmp.id]}
+          onClose={() => setSelectedEmp(null)}
+          onRefresh={() => router.refresh()}
+        />
+      )}
     </>
   )
 }

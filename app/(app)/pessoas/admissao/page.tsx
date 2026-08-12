@@ -27,8 +27,6 @@ export default async function AdmissaoPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <AdmissaoClient employees={employees} tokens={tokens} companyId={companyId} />
-    </div>
+    <AdmissaoClient employees={employees} tokens={tokens} companyId={companyId} />
   )
 }
