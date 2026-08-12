@@ -163,7 +163,10 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
   const [editing, setEditing]       = useState<Employee | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const ativos   = employees.filter(e => ['admissao', 'experiencia', 'ativo', 'ferias', 'afastado'].includes(e.status))
+  const ativos   = employees.filter(e =>
+    ['admissao', 'experiencia', 'ativo', 'ferias', 'afastado'].includes(e.status) &&
+    e.admission_stage === 'finalizado'
+  )
   const inativos = employees.filter(e => ['inativo', 'demitido'].includes(e.status))
   const byTab    = tab === 'ativos' ? ativos : inativos
   const rows     = tipoFiltro === 'todos' ? byTab : byTab.filter(e => e.tipo_contrato === tipoFiltro)

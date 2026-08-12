@@ -96,6 +96,8 @@ function parseEmployeeFields(formData: FormData) {
 
   const depRaw = parseInt((formData.get('dependentes') as string) || '0')
 
+  const status = (formData.get('status') as string) || 'admissao'
+
   return {
     nome: (formData.get('nome') as string)?.toUpperCase() || '',
     cpf: (formData.get('cpf') as string)?.replace(/\D/g, '') || null,
@@ -108,7 +110,10 @@ function parseEmployeeFields(formData: FormData) {
     local_trabalho: (formData.get('local_trabalho') as string) || null,
     salario: dec(formData, 'salario'),
     plano_saude: formData.get('plano_saude') === 'true',
-    status: (formData.get('status') as string) || 'admissao',
+    status,
+    // Quando o funcionário sai do fluxo de admissão, marca admission_stage como finalizado
+    // para que apareça na aba Ativos da Equipe.
+    ...(status !== 'admissao' && { admission_stage: 'finalizado' }),
     data_admissao: dataAdmissao,
     fim_experiencia_1,
     fim_experiencia_2,
