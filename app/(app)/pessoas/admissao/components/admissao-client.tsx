@@ -41,11 +41,13 @@ function getStage(emp: Employee): StageKey {
 function CardDetailModal({
   emp,
   token,
+  photoUrl,
   onClose,
   onRefresh,
 }: {
   emp: Employee
   token: OnboardingTokenInfo | undefined
+  photoUrl?: string
   onClose: () => void
   onRefresh: () => void
 }) {
@@ -100,12 +102,17 @@ function CardDetailModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
           <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-              style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
-            >
-              {emp.nome.charAt(0).toUpperCase()}
-            </div>
+            {photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photoUrl} alt={emp.nome} className="w-10 h-10 rounded-full object-cover shrink-0" />
+            ) : (
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+              >
+                {emp.nome.charAt(0).toUpperCase()}
+              </div>
+            )}
             <div>
               <div className="font-semibold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
                 {emp.nome}
@@ -189,9 +196,10 @@ interface Props {
   employees: Employee[]
   tokens: Record<string, OnboardingTokenInfo>
   companyId: string
+  photoUrls: Record<string, string>
 }
 
-export function AdmissaoClient({ employees, tokens }: Props) {
+export function AdmissaoClient({ employees, tokens, photoUrls }: Props) {
   const router = useRouter()
 
   const [stageMap, setStageMap] = useState<Record<string, StageKey>>(() => {
@@ -339,12 +347,21 @@ export function AdmissaoClient({ employees, tokens }: Props) {
                         {/* Card body */}
                         <div className="px-3 pt-3 pb-2">
                           <div className="flex items-start gap-2">
-                            <div
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5"
-                              style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
-                            >
-                              {emp.nome.charAt(0).toUpperCase()}
-                            </div>
+                            {photoUrls[emp.id] ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={photoUrls[emp.id]}
+                                alt={emp.nome}
+                                className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5"
+                              />
+                            ) : (
+                              <div
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5"
+                                style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+                              >
+                                {emp.nome.charAt(0).toUpperCase()}
+                              </div>
+                            )}
                             <div className="flex-1 min-w-0">
                               <div className="text-xs font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
                                 {emp.nome}
@@ -444,6 +461,7 @@ export function AdmissaoClient({ employees, tokens }: Props) {
         <CardDetailModal
           emp={selectedEmp}
           token={tokens[selectedEmp.id]}
+          photoUrl={photoUrls[selectedEmp.id]}
           onClose={() => setSelectedEmp(null)}
           onRefresh={() => router.refresh()}
         />

@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getAdmissaoEmployees, getOnboardingTokens, type OnboardingTokenInfo } from './queries'
 import { AdmissaoClient } from './components/admissao-client'
 
@@ -26,7 +26,21 @@ export default async function AdmissaoPage() {
     if (!tokens[t.employee_id]) tokens[t.employee_id] = t
   }
 
+  // Gera signed URLs para fotos (bucket privado, TTL 1h)
+  const admin = createAdminClient()
+  const photoUrls: Record<string, string> = {}
+  await Promise.all(
+    employees
+      .filter(e => e.foto_path)
+      .map(async e => {
+        const { data } = await admin.storage
+          .from('documentos')
+          .createSignedUrl(e.foto_path!, 3600)
+        if (data?.signedUrl) photoUrls[e.id] = data.signedUrl
+      })
+  )
+
   return (
-    <AdmissaoClient employees={employees} tokens={tokens} companyId={companyId} />
+    <AdmissaoClient employees={employees} tokens={tokens} companyId={companyId} photoUrls={photoUrls} />
   )
 }

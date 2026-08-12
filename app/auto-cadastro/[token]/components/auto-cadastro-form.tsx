@@ -11,7 +11,6 @@ const GRAU_OPTIONS = [
 ]
 
 const DOC_SLOTS = [
-  { key: 'foto',                   label: 'Foto',                       accept: 'image/*' },
   { key: 'rg_cnh_frente',          label: 'RG Frente / CNH',            accept: 'image/*,application/pdf' },
   { key: 'rg_verso',               label: 'RG Verso (opcional)',         accept: 'image/*,application/pdf' },
   { key: 'exame_admissional',       label: 'Exame Admissional',          accept: 'image/*,application/pdf' },
@@ -51,6 +50,8 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
   const [serieCtps, setSerieCtps]       = useState('')
   const [certReservista, setCertReservista] = useState('')
   const [dadosBancarios, setDadosBancarios] = useState('')
+  const [fotoFile, setFotoFile]         = useState<File | null>(null)
+  const [fotoPreview, setFotoPreview]   = useState<string | null>(null)
   const [docFiles, setDocFiles]         = useState<Record<string, File | null>>({})
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
@@ -73,6 +74,7 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
     fd.set('serie_ctps', serieCtps)
     fd.set('certificado_reservista', certReservista)
     fd.set('dados_bancarios', dadosBancarios)
+    if (fotoFile) fd.set('doc_foto', fotoFile)
     for (const slot of DOC_SLOTS) {
       const file = docFiles[slot.key]
       if (file) fd.set(`doc_${slot.key}`, file)
@@ -148,7 +150,62 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
 
-            {/* 1 — Dados Pessoais */}
+            {/* Foto de perfil */}
+            <div style={card}>
+              <p style={sec}>FOTO DE PERFIL</p>
+              <div className="flex items-center gap-5">
+                <div className="relative shrink-0">
+                  <div
+                    className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center"
+                    style={{
+                      backgroundColor: fotoPreview ? 'transparent' : 'var(--color-bg-surface)',
+                      border: '2px solid var(--color-bg-surface)',
+                    }}
+                  >
+                    {fotoPreview
+                      ? <img src={fotoPreview} alt="Foto" className="w-full h-full object-cover" />
+                      : <span className="text-3xl">👤</span>
+                    }
+                  </div>
+                  <label
+                    className="absolute bottom-0 right-0 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer text-white text-xs"
+                    style={{ backgroundColor: 'var(--color-primary-dark)' }}
+                  >
+                    ✏️
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => {
+                        const f = e.target.files?.[0]
+                        if (f) { setFotoFile(f); setFotoPreview(URL.createObjectURL(f)) }
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                    {fotoPreview ? 'Foto selecionada' : 'Sem foto'}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                    Clique no lápis para selecionar uma imagem
+                  </p>
+                  {fotoPreview && (
+                    <button
+                      type="button"
+                      onClick={() => { setFotoFile(null); setFotoPreview(null) }}
+                      className="text-xs mt-1.5"
+                      style={{ color: 'var(--color-error)' }}
+                    >
+                      Remover foto
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+          {/* 1 — Dados Pessoais */}
             <div style={card}>
               <p style={sec}>1. DADOS PESSOAIS</p>
               <div className="space-y-3">

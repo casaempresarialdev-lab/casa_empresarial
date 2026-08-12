@@ -8,7 +8,6 @@ import { createEmployeeAction, generateOnboardingTokenAction } from '../../../fu
 import type { CompanyBenefit } from '../../../beneficios/queries'
 
 const DOC_SLOTS = [
-  { key: 'foto',                   label: 'Foto',                        accept: 'image/*' },
   { key: 'rg_cnh_frente',          label: 'RG Frente / CNH',             accept: 'image/*,application/pdf' },
   { key: 'rg_verso',               label: 'RG Verso (opcional)',          accept: 'image/*,application/pdf' },
   { key: 'exame_admissional',       label: 'Exame Admissional',           accept: 'image/*,application/pdf' },
@@ -125,6 +124,10 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
   const [pin, setPin]           = useState('')
   const [pinAtivo, setPinAtivo] = useState(false)
 
+  // Foto de perfil
+  const [fotoFile, setFotoFile]       = useState<File | null>(null)
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
+
   // 8 — Documentos
   const [docFiles, setDocFiles] = useState<Record<string, File | null>>({})
 
@@ -184,6 +187,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
     fd.set('cnpj', cnpj)
     fd.set('servico', servico)
     fd.set('valor_servico', valorServico)
+    if (fotoFile) fd.set('doc_foto', fotoFile)
     for (const slot of DOC_SLOTS) {
       const file = docFiles[slot.key]
       if (file) fd.set(`doc_${slot.key}`, file)
@@ -258,7 +262,8 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
             Ir para Admissão
           </Button>
           <button onClick={() => {
-            setSuccess(null); setNome(''); setCpf(''); setRg(''); setNascimento(''); setTelefone(''); setEmail('')
+            setSuccess(null); setFotoFile(null); setFotoPreview(null)
+            setNome(''); setCpf(''); setRg(''); setNascimento(''); setTelefone(''); setEmail('')
             setCargo(''); setLocalTrabalho(''); setTipoContrato(''); setStatus('admissao')
             setGrauInstrucao(''); setDepartamento(''); setSalario(''); setPlanoSaude(false)
             setCnpj(''); setServico(''); setValorServico('')
@@ -328,6 +333,61 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
 
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
+
+          {/* Foto de perfil */}
+          <div style={card}>
+            <p style={sec}>FOTO DO COLABORADOR</p>
+            <div className="flex items-center gap-5">
+              <div className="relative shrink-0">
+                <div
+                  className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center"
+                  style={{
+                    backgroundColor: fotoPreview ? 'transparent' : 'var(--color-bg-surface)',
+                    border: '2px solid var(--color-bg-surface)',
+                  }}
+                >
+                  {fotoPreview
+                    ? <img src={fotoPreview} alt="Foto" className="w-full h-full object-cover" />
+                    : <span className="text-3xl">👤</span>
+                  }
+                </div>
+                <label
+                  className="absolute bottom-0 right-0 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer text-white text-xs"
+                  style={{ backgroundColor: 'var(--color-primary-dark)' }}
+                >
+                  ✏️
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0]
+                      if (f) { setFotoFile(f); setFotoPreview(URL.createObjectURL(f)) }
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                  {fotoPreview ? 'Foto selecionada' : 'Sem foto'}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                  Clique no lápis para selecionar uma imagem
+                </p>
+                {fotoPreview && (
+                  <button
+                    type="button"
+                    onClick={() => { setFotoFile(null); setFotoPreview(null) }}
+                    className="text-xs mt-1.5"
+                    style={{ color: 'var(--color-error)' }}
+                  >
+                    Remover foto
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* 0 — Forma de Contratação */}
           <div style={card}>
