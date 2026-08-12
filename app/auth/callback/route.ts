@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     const { data: pendingInvites } = await admin
       .from('invitations')
-      .select('id, company_id, role')
+      .select('id, company_id, role, avatar_url')
       .eq('email', userEmail.toLowerCase())
       .eq('status', 'pending')
 
@@ -58,6 +58,14 @@ export async function GET(request: NextRequest) {
           },
           { onConflict: 'company_id,profile_id' },
         )
+
+        // Aplica avatar pré-definido no convite (se houver)
+        if (inv.avatar_url) {
+          await admin
+            .from('profiles')
+            .update({ avatar_url: inv.avatar_url })
+            .eq('id', session.user.id)
+        }
 
         // Marca convite como aceito
         await admin

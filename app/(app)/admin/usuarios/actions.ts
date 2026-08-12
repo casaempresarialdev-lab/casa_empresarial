@@ -80,7 +80,12 @@ export async function addMemberAction(
   return { success: true }
 }
 
-export async function inviteUserAction(companyId: string, email: string, role: string) {
+export async function inviteUserAction(
+  companyId: string,
+  email: string,
+  role: string,
+  avatarFile?: File | null,
+) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -99,25 +104,40 @@ export async function inviteUserAction(companyId: string, email: string, role: s
   if (existing) return { error: 'Já existe um convite pendente para este e-mail.' }
 
   // Cria registro do convite
-  const { error: dbErr } = await admin.from('invitations').insert({
+  const { data: inv, error: dbErr } = await admin.from('invitations').insert({
     company_id: companyId,
     email: normalizedEmail,
     role,
     invited_by: user.id,
     status: 'pending',
-  })
+  }).select('id').single()
 
-  if (dbErr) return { error: dbErr.message }
+  if (dbErr || !inv) return { error: dbErr?.message ?? 'Erro ao criar convite.' }
+
+  // Faz upload do avatar e salva URL no convite
+  let avatarUrl: string | null = null
+  if (avatarFile && avatarFile.size > 0) {
+    const ext = avatarFile.name.split('.').pop() ?? 'jpg'
+    const path = `invitations/${inv.id}/avatar.${ext}`
+    const arrayBuffer = await avatarFile.arrayBuffer()
+    const { error: uploadErr } = await admin.storage
+      .from('avatars')
+      .upload(path, arrayBuffer, { contentType: avatarFile.type, upsert: true })
+    if (!uploadErr) {
+      const { data: urlData } = admin.storage.from('avatars').getPublicUrl(path)
+      avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`
+      await admin.from('invitations').update({ avatar_url: avatarUrl }).eq('id', inv.id)
+    }
+  }
 
   // Envia convite via Supabase Auth (cria usuário em estado "invited" + dispara e-mail)
   const appUrl = await getAppUrl()
   const { error: emailErr } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
     redirectTo: `${appUrl}/auth/callback`,
-    data: { company_id: companyId, role },
+    data: { company_id: companyId, role, ...(avatarUrl && { avatar_url: avatarUrl }) },
   })
 
   if (emailErr) {
-    // Convite salvo no banco mas e-mail falhou
     return { warning: `Convite registrado, mas o e-mail não pôde ser enviado: ${emailErr.message}` }
   }
 

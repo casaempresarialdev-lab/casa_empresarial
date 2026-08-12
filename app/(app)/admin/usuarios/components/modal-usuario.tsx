@@ -43,6 +43,9 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
   const [addAvatarFile, setAddAvatarFile] = useState<File | null>(null)
   const [addAvatarPreview, setAddAvatarPreview] = useState<string | null>(null)
   const addFileRef = useRef<HTMLInputElement>(null)
+  const inviteFileRef = useRef<HTMLInputElement>(null)
+  const [inviteAvatarFile, setInviteAvatarFile] = useState<File | null>(null)
+  const [inviteAvatarPreview, setInviteAvatarPreview] = useState<string | null>(null)
 
   // ── Modo edição ──
   const [role, setRole] = useState('member')
@@ -69,6 +72,8 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
       setEmail('')
       setAddAvatarFile(null)
       setAddAvatarPreview(null)
+      setInviteAvatarFile(null)
+      setInviteAvatarPreview(null)
       setRole(member?.role ?? 'member')
       setName(member?.profiles?.name ?? '')
       setAvatarPreview(member?.profiles?.avatar_url ?? null)
@@ -113,7 +118,7 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
     } else if (tab === 'cpf') {
       result = await addMemberAction(companyId, cpf, role, addAvatarFile)
     } else {
-      result = await inviteUserAction(companyId, email, role)
+      result = await inviteUserAction(companyId, email, role, inviteAvatarFile)
     }
 
     setLoading(false)
@@ -224,15 +229,61 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
         )}
 
         {!isEditing && tab === 'invite' && (
-          <Input
-            label="E-mail do usuário"
-            type="email"
-            placeholder="usuario@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            hint="O usuário receberá um e-mail com o link para criar a conta"
-            required
-          />
+          <>
+            {/* Avatar para convite */}
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div
+                  className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden shrink-0"
+                  style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+                >
+                  {inviteAvatarPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={inviteAvatarPreview} alt="Foto" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xl font-bold">👤</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => inviteFileRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs border-2 border-white"
+                  style={{ backgroundColor: 'var(--color-primary)' }}
+                  title="Selecionar foto"
+                >
+                  ✏️
+                </button>
+              </div>
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Foto do usuário</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                  {inviteAvatarPreview ? 'Foto selecionada' : 'Opcional — JPG, PNG ou WebP'}
+                </p>
+              </div>
+              <input
+                ref={inviteFileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  setInviteAvatarFile(f)
+                  setInviteAvatarPreview(URL.createObjectURL(f))
+                }}
+              />
+            </div>
+
+            <Input
+              label="E-mail do usuário"
+              type="email"
+              placeholder="usuario@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              hint="O usuário receberá um e-mail com o link para criar a conta"
+              required
+            />
+          </>
         )}
 
         {/* ── Modo edição ── */}
