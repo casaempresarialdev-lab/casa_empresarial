@@ -334,7 +334,26 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
               <tbody>
                 {invitations.map((inv) => (
                   <tr key={inv.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                    <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>{inv.email}</td>
+                    <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
+                      <div className="flex items-center gap-2">
+                        {inv.avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={inv.avatar_url}
+                            alt={inv.email}
+                            className="w-7 h-7 rounded-full object-cover shrink-0"
+                          />
+                        ) : (
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                            style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+                          >
+                            ✉️
+                          </div>
+                        )}
+                        <span>{inv.email}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
                       {ROLE_LABELS[inv.role] ?? inv.role}
                     </td>

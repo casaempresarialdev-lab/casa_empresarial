@@ -27,6 +27,7 @@ export type Invitation = {
   status: string
   created_at: string
   expires_at: string
+  avatar_url: string | null
 }
 
 export async function getCompanyMembers(companyId: string): Promise<MemberWithProfile[]> {
@@ -45,7 +46,7 @@ export async function getPendingInvitations(companyId: string): Promise<Invitati
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('invitations')
-    .select('id, email, role, status, created_at, expires_at')
+    .select('id, email, role, status, created_at, expires_at, avatar_url')
     .eq('company_id', companyId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
