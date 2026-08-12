@@ -318,6 +318,14 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
         </Button>
       </div>
 
+      <div className="flex gap-3 items-start px-4 py-3 rounded-xl mb-4" style={{ backgroundColor: '#EBF5FB', border: '1px solid #AED6F1' }}>
+        <span className="shrink-0 mt-0.5">🔗</span>
+        <p className="text-xs" style={{ color: '#1A5276' }}>
+          Preencha pelo menos <strong>Nome completo</strong>, <strong>Telefone</strong> e <strong>E-mail</strong>.
+          O restante pode ser completado pelo próprio colaborador via link.
+        </p>
+      </div>
+
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
 
