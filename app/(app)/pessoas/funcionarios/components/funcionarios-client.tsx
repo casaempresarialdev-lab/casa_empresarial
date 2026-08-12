@@ -281,11 +281,11 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
           <thead>
             <tr>
               <th style={{ ...TH, textAlign: 'left', minWidth: 200 }}>Nome</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 130 }}>Contrato</th>
+              <th style={{ ...TH, textAlign: 'left', minWidth: 140 }}>Cargo</th>
+              <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Salário</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 130 }}>Telefone</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 180 }}>E-mail</th>
-              <th style={{ ...TH, textAlign: 'left', minWidth: 140 }}>Cargo</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Valor</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 130 }}>Contrato</th>
               <th style={{ ...TH, minWidth: 70 }} />
             </tr>
           </thead>
@@ -307,20 +307,6 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
                   <td className="px-3 py-2.5">
                     <p className="font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</p>
                   </td>
-                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                    {emp.telefone ?? '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                    {emp.email ?? '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                    {emp.cargo ?? '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-                    {(emp.salario ?? emp.valor_servico) != null
-                      ? (emp.salario ?? emp.valor_servico)!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                      : '—'}
-                  </td>
                   <td className="px-3 py-2.5" style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
                       {tipoCfg ? (
@@ -336,6 +322,20 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
                         </span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {emp.cargo ?? '—'}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)', textAlign: 'right' }}>
+                    {(emp.salario ?? emp.valor_servico) != null
+                      ? (emp.salario ?? emp.valor_servico)!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {emp.telefone ?? '—'}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {emp.email ?? '—'}
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex justify-end">
