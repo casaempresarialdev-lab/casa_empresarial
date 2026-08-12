@@ -71,7 +71,7 @@ export async function getActiveEmployees(companyId: string): Promise<Employee[]>
     .from('employees')
     .select('*, employee_benefits(benefit_id)')
     .eq('company_id', companyId)
-    .in('status', ['admissao', 'experiencia', 'ativo'])
+    .in('status', ['experiencia', 'ativo'])
     .order('nome', { ascending: true })
 
   if (error) throw error
