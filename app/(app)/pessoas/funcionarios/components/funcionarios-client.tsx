@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalFuncionario } from './modal-funcionario'
-import { ModalViewFuncionario } from './modal-view-funcionario'
 import { deleteEmployeeAction } from '../actions'
 import type { Employee } from '../queries'
 import type { CompanyBenefit } from '../../beneficios/queries'
@@ -162,8 +161,6 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
   const [tipoFiltro, setTipoFiltro] = useState<string>('todos')
   const [modalOpen, setModalOpen]   = useState(false)
   const [editing, setEditing]       = useState<Employee | null>(null)
-  const [viewing, setViewing]       = useState<Employee | null>(null)
-  const [viewOpen, setViewOpen]     = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const ativos   = employees.filter(e => ['admissao', 'experiencia', 'ativo', 'ferias', 'afastado'].includes(e.status))
@@ -173,15 +170,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
 
   const countByStatus = (s: string) => employees.filter(e => e.status === s).length
 
-  function openView(e: Employee) { setViewing(e); setViewOpen(true) }
   function openEdit(e: Employee) { setEditing(e); setModalOpen(true) }
-
-  function handleEditFromView() {
-    if (!viewing) return
-    setViewOpen(false)
-    setEditing(viewing)
-    setModalOpen(true)
-  }
 
   async function handleDelete(e: Employee) {
     if (!confirm(`Excluir ${e.nome}? Esta ação não pode ser desfeita.`)) return
@@ -340,7 +329,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
                   <td className="px-3 py-2.5">
                     <div className="flex justify-end">
                       <ThreeDotMenu
-                        onView={() => openView(emp)}
+                        onView={() => router.push(`/pessoas/funcionarios/${emp.id}`)}
                         onEdit={() => openEdit(emp)}
                         onDelete={() => handleDelete(emp)}
                         loading={deletingId === emp.id}
@@ -362,14 +351,6 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
           )}
         </table>
       </div>
-
-      <ModalViewFuncionario
-        open={viewOpen}
-        employee={viewing}
-        onClose={() => setViewOpen(false)}
-        onEdit={handleEditFromView}
-        companyBenefits={companyBenefits}
-      />
 
       <ModalFuncionario
         open={modalOpen}

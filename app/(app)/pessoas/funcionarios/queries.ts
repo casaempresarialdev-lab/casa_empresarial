@@ -65,6 +65,19 @@ export async function getEmployees(companyId: string): Promise<Employee[]> {
   return (data ?? []) as unknown as Employee[]
 }
 
+export async function getEmployeeById(id: string, companyId: string): Promise<Employee | null> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('employees')
+    .select('*, employee_benefits(benefit_id)')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .single()
+
+  if (error) return null
+  return data as unknown as Employee
+}
+
 export async function getActiveEmployees(companyId: string): Promise<Employee[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
