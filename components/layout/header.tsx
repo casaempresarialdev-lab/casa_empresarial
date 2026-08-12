@@ -148,14 +148,6 @@ export function Header({ companies = [], userName, userAvatar }: HeaderProps) {
             {/* Links */}
             <nav className="py-1">
               <Link
-                href="/empresa"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
-                <span>🏠</span> Minha Empresa
-              </Link>
-              <Link
                 href="/meu-plano"
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
