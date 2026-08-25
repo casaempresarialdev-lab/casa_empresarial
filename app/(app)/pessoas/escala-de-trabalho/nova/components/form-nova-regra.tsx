@@ -241,7 +241,7 @@ export function FormNovaRegra({ companyId, employees }: Props) {
                   color: tipoEscala === t ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
                 }}
               >
-                {t === 'semanal' ? 'Normal' : 'Personalizado'}
+                {t === 'semanal' ? 'Fixa' : 'Personalizado'}
               </button>
             ))}
           </div>
