@@ -96,27 +96,10 @@ export function FormNovaRegra({ companyId, employees }: Props) {
   const [loading,           setLoading]           = useState(false)
   const [error,             setError]             = useState('')
 
-  // Folgas adicionais — checkboxes por tipo
-  const [pChecked, setPChecked] = useState({
-    quinzenal:         false,
-    intervalo_dias:    false,
-    intervalo_semanas: false,
-    intervalo_meses:   false,
-  })
-  const [pConfig, setPConfig] = useState({
-    quinzenal:         { dia: 1, intervalo: 2 },
-    intervalo_dias:    { dia: 0, intervalo: 7 },
-    intervalo_semanas: { dia: 1, intervalo: 2 },
-    intervalo_meses:   { dia: 0, intervalo: 1 },
-  })
-
-  function togglePattern(tipo: keyof typeof pChecked) {
-    setPChecked(prev => ({ ...prev, [tipo]: !prev[tipo] }))
-  }
-
-  function updatePConfig(tipo: keyof typeof pConfig, patch: Partial<{ dia: number; intervalo: number }>) {
-    setPConfig(prev => ({ ...prev, [tipo]: { ...prev[tipo], ...patch } }))
-  }
+  // Folgas adicionais — seleção única (radio) + valor numérico
+  type PTipo = 'quinzenal' | 'intervalo_dias' | 'intervalo_semanas' | 'intervalo_meses' | null
+  const [pTipo,  setPTipo]  = useState<PTipo>(null)
+  const [pValor, setPValor] = useState(1)
 
   function toggleDiaFolga(idx: number) {
     setDiasFolga(prev =>
@@ -128,21 +111,21 @@ export function FormNovaRegra({ companyId, employees }: Props) {
     e.preventDefault()
     setError('')
 
-    const folga_patterns: FolgaPattern[] = tipoEscala === 'semanal'
-      ? (Object.keys(pChecked) as (keyof typeof pChecked)[])
-          .filter(tipo => pChecked[tipo])
-          .map(tipo => {
-            const cfg = pConfig[tipo]
-            const data_ref = computeDataRef(tipo as FolgaPattern['tipo'], cfg.dia, dataInicio)
-            if (tipo === 'quinzenal')
-              return { tipo, dia: cfg.dia, data_ref } as FolgaPattern
-            if (tipo === 'intervalo_dias')
-              return { tipo, intervalo: cfg.intervalo, data_ref } as FolgaPattern
-            if (tipo === 'intervalo_semanas')
-              return { tipo, intervalo: cfg.intervalo, dia: cfg.dia, data_ref } as FolgaPattern
-            return { tipo: 'intervalo_meses', intervalo: cfg.intervalo, data_ref } as FolgaPattern
-          })
-      : []
+    const dia = dataInicio ? new Date(dataInicio + 'T00:00:00').getDay() : 0
+    let folga_patterns: FolgaPattern[] = []
+    if (tipoEscala === 'semanal' && pTipo) {
+      if (pTipo === 'quinzenal') {
+        const data_ref = computeDataRef('intervalo_semanas', dia, dataInicio)
+        folga_patterns = [{ tipo: 'intervalo_semanas', intervalo: pValor * 2, dia, data_ref }]
+      } else if (pTipo === 'intervalo_dias') {
+        folga_patterns = [{ tipo: 'intervalo_dias', intervalo: pValor, data_ref: dataInicio }]
+      } else if (pTipo === 'intervalo_semanas') {
+        const data_ref = computeDataRef('intervalo_semanas', dia, dataInicio)
+        folga_patterns = [{ tipo: 'intervalo_semanas', intervalo: pValor, dia, data_ref }]
+      } else {
+        folga_patterns = [{ tipo: 'intervalo_meses', intervalo: pValor, data_ref: dataInicio }]
+      }
+    }
 
     const payload = {
       employee_id:         employeeId,
@@ -358,100 +341,63 @@ export function FormNovaRegra({ companyId, employees }: Props) {
           <div style={sec}>
             <p style={secTitle}>Folgas adicionais</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-              Para folgas que não seguem um dia fixo da semana.
+              Repetição de folga além dos dias fixos. Selecione um tipo.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-
-              {/* Quinzenal */}
-              <div style={{ padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: 'var(--color-text-primary)' }}>
-                  <input type="checkbox" checked={pChecked.quinzenal} onChange={() => togglePattern('quinzenal')} />
-                  Quinzenal (a cada 2 semanas)
-                </label>
-                {pChecked.quinzenal && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
-                    <div>
-                      <label style={{ ...lbl, marginBottom: '0.2rem' }}>Dia da semana</label>
-                      <select style={selectSm} value={pConfig.quinzenal.dia} onChange={e => updatePConfig('quinzenal', { dia: parseInt(e.target.value) })}>
-                        {DIAS_SEMANA.map(d => <option key={d.idx} value={d.idx}>{d.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* A cada N dias */}
-              <div style={{ padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: 'var(--color-text-primary)' }}>
-                  <input type="checkbox" checked={pChecked.intervalo_dias} onChange={() => togglePattern('intervalo_dias')} />
-                  A cada N dias
-                </label>
-                {pChecked.intervalo_dias && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>A cada</span>
-                    <input
-                      type="number"
-                      min="1"
-                      value={pConfig.intervalo_dias.intervalo}
-                      onChange={e => updatePConfig('intervalo_dias', { intervalo: parseInt(e.target.value) || 1 })}
-                      style={{ ...selectSm, width: '4rem', textAlign: 'center' }}
-                    />
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>dias</span>
-                  </div>
-                )}
-              </div>
-
-              {/* A cada N semanas */}
-              <div style={{ padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: 'var(--color-text-primary)' }}>
-                  <input type="checkbox" checked={pChecked.intervalo_semanas} onChange={() => togglePattern('intervalo_semanas')} />
-                  A cada N semanas
-                </label>
-                {pChecked.intervalo_semanas && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', paddingLeft: '1.5rem', flexWrap: 'wrap' }}>
-                    <div>
-                      <label style={{ ...lbl, marginBottom: '0.2rem' }}>Dia da semana</label>
-                      <select style={selectSm} value={pConfig.intervalo_semanas.dia} onChange={e => updatePConfig('intervalo_semanas', { dia: parseInt(e.target.value) })}>
-                        {DIAS_SEMANA.map(d => <option key={d.idx} value={d.idx}>{d.label}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.1rem' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>a cada</span>
+              {([
+                { tipo: 'quinzenal',         label: 'Quinzenal',    sufixo: 'quinzena(s)' },
+                { tipo: 'intervalo_dias',    label: 'Por dias',     sufixo: 'dia(s)'      },
+                { tipo: 'intervalo_semanas', label: 'Por semanas',  sufixo: 'semana(s)'   },
+                { tipo: 'intervalo_meses',   label: 'Por meses',    sufixo: 'mês/meses'   },
+              ] as const).map(({ tipo, label, sufixo }) => {
+                const ativo = pTipo === tipo
+                return (
+                  <div
+                    key={tipo}
+                    style={{
+                      padding: '0.6rem 0.75rem',
+                      borderRadius: '0.5rem',
+                      border: `1px solid ${ativo ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)'}`,
+                      backgroundColor: ativo ? 'var(--color-primary)' : 'white',
+                    }}
+                  >
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: ativo ? 'var(--color-primary-darker)' : 'var(--color-text-primary)' }}>
                       <input
-                        type="number"
-                        min="1"
-                        value={pConfig.intervalo_semanas.intervalo}
-                        onChange={e => updatePConfig('intervalo_semanas', { intervalo: parseInt(e.target.value) || 1 })}
-                        style={{ ...selectSm, width: '4rem', textAlign: 'center' }}
+                        type="radio"
+                        name="pTipo"
+                        checked={ativo}
+                        onChange={() => { setPTipo(tipo); setPValor(1) }}
                       />
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>semanas</span>
-                    </div>
+                      {label}
+                    </label>
+                    {ativo && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-primary-darker)' }}>A cada</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={pValor}
+                          onChange={e => setPValor(parseInt(e.target.value) || 1)}
+                          style={{ ...selectSm, width: '4rem', textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-primary-darker)' }}>{sufixo}</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                )
+              })}
 
-              {/* A cada N meses */}
-              <div style={{ padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: 'var(--color-text-primary)' }}>
-                  <input type="checkbox" checked={pChecked.intervalo_meses} onChange={() => togglePattern('intervalo_meses')} />
-                  A cada N meses
-                </label>
-                {pChecked.intervalo_meses && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>A cada</span>
-                    <input
-                      type="number"
-                      min="1"
-                      value={pConfig.intervalo_meses.intervalo}
-                      onChange={e => updatePConfig('intervalo_meses', { intervalo: parseInt(e.target.value) || 1 })}
-                      style={{ ...selectSm, width: '4rem', textAlign: 'center' }}
-                    />
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>meses</span>
-                  </div>
-                )}
-              </div>
-
+              {/* Nenhuma */}
+              {pTipo && (
+                <button
+                  type="button"
+                  onClick={() => setPTipo(null)}
+                  style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '0.25rem 0' }}
+                >
+                  ✕ Remover folga adicional
+                </button>
+              )}
             </div>
           </div>
         )}
