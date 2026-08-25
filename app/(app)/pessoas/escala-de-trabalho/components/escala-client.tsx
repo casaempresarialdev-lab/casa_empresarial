@@ -121,7 +121,7 @@ function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void
       <button ref={btnRef} type="button" onClick={handleOpen}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
         style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}>
-        Exportar ▾
+        Baixar ▾
       </button>
       {open && (
         <div ref={menuRef} className="fixed w-40 rounded-xl border shadow-lg py-1 z-50"
