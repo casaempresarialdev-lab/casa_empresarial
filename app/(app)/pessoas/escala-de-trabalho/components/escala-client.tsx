@@ -250,7 +250,7 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
             ))}
           </div>
           <ExportMenu onPDF={handleExportPDF} onExcel={handleExportExcel} />
-          <Button variant="ghost" onClick={() => { setEditingRule(null); setModalRegra(true) }}>Adicionar</Button>
+          <Button variant="ghost" onClick={() => router.push('/pessoas/escala-de-trabalho/nova')}>Adicionar</Button>
         </div>
       </div>
 
