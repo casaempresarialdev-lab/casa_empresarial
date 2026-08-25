@@ -188,9 +188,40 @@ export function FormNovaRegra({ companyId, employees }: Props) {
           </label>
         </div>
 
-        {/* Seção 3 — Tipo de escala */}
+        {/* Seção 3 — Horários */}
         <div style={sec}>
-          <p style={secTitle}>Tipo de escala</p>
+          <p style={secTitle}>Horários</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div>
+              <label style={lbl}>Entrada *</label>
+              <Input type="time" required value={horaEntrada} onChange={e => setHoraEntrada(e.target.value)} />
+            </div>
+            <div>
+              <label style={lbl}>Saída *</label>
+              <Input type="time" required value={horaSaida} onChange={e => setHoraSaida(e.target.value)} />
+            </div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--color-text-secondary)', cursor: 'pointer', marginBottom: '0.5rem' }}>
+            <input type="checkbox" checked={temAlmoco} onChange={e => setTemAlmoco(e.target.checked)} />
+            Tem intervalo de almoço
+          </label>
+          {temAlmoco && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div>
+                <label style={lbl}>Início do almoço</label>
+                <Input type="time" value={horaAlmocoInicio} onChange={e => setHoraAlmocoInicio(e.target.value)} />
+              </div>
+              <div>
+                <label style={lbl}>Fim do almoço</label>
+                <Input type="time" value={horaAlmocoFim} onChange={e => setHoraAlmocoFim(e.target.value)} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Seção 4 — Folgas */}
+        <div style={sec}>
+          <p style={secTitle}>Folgas</p>
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
             {(['semanal', 'ciclo'] as const).map(t => (
               <button
@@ -276,37 +307,6 @@ export function FormNovaRegra({ companyId, employees }: Props) {
                 <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
                   Ex: 12x36 → 1 dia trabalhado + 2 dias de folga. 5x2 → 5 + 2.
                 </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Seção 4 — Horários */}
-        <div style={sec}>
-          <p style={secTitle}>Horários</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            <div>
-              <label style={lbl}>Entrada *</label>
-              <Input type="time" required value={horaEntrada} onChange={e => setHoraEntrada(e.target.value)} />
-            </div>
-            <div>
-              <label style={lbl}>Saída *</label>
-              <Input type="time" required value={horaSaida} onChange={e => setHoraSaida(e.target.value)} />
-            </div>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--color-text-secondary)', cursor: 'pointer', marginBottom: '0.5rem' }}>
-            <input type="checkbox" checked={temAlmoco} onChange={e => setTemAlmoco(e.target.checked)} />
-            Tem intervalo de almoço
-          </label>
-          {temAlmoco && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              <div>
-                <label style={lbl}>Início do almoço</label>
-                <Input type="time" value={horaAlmocoInicio} onChange={e => setHoraAlmocoInicio(e.target.value)} />
-              </div>
-              <div>
-                <label style={lbl}>Fim do almoço</label>
-                <Input type="time" value={horaAlmocoFim} onChange={e => setHoraAlmocoFim(e.target.value)} />
               </div>
             </div>
           )}

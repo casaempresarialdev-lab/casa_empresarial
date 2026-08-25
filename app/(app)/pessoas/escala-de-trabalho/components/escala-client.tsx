@@ -145,7 +145,7 @@ type ListRow = { emp: { id: string; nome: string; cargo: string | null }; day: D
 export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano }: Props) {
   const router = useRouter()
 
-  const [view,           setView]        = useState<'calendario' | 'lista' | 'regras'>('calendario')
+  const [view,           setView]        = useState<'calendario' | 'regras'>('calendario')
   const [filterEmployee, setFilter]      = useState('')
   const [modalRegra,     setModalRegra]  = useState(false)
   const [editingRule,    setEditingRule] = useState<ScheduleRule | null>(null)
@@ -207,9 +207,7 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
   }
 
   async function handleExportPDF() {
-    if (view === 'lista') {
-      await exportListaPDF(listaRows.map(r => ({ ...r.day, employeeName: r.emp.nome })), mes, ano)
-    } else if (calendarRef.current) {
+    if (calendarRef.current) {
       await exportCalendarioPDF(calendarRef.current, mes, ano)
     }
   }
@@ -238,14 +236,14 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)' }}>
-            {(['calendario', 'lista', 'regras'] as const).map(v => (
+            {(['calendario', 'regras'] as const).map(v => (
               <button key={v} onClick={() => setView(v)}
                 className="px-3 py-1.5 text-xs font-medium transition-colors"
                 style={{
                   backgroundColor: view === v ? 'var(--color-primary)' : 'white',
                   color: view === v ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
                 }}>
-                {v === 'calendario' ? '📅 Calendário' : v === 'lista' ? '☰ Lista' : '⚙ Escalas'}
+                {v === 'calendario' ? '📅 Calendário' : '⚙ Escalas'}
               </button>
             ))}
           </div>
@@ -366,59 +364,6 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
             ))}
             <span>* = exceção manual</span>
           </div>
-        </div>
-      )}
-
-      {/* ── Lista ────────────────────────────────────────────────────────── */}
-      {view === 'lista' && (
-        <div className="rounded-xl border overflow-x-auto"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <table className="w-full min-w-[680px] text-sm">
-            <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <tr>
-                {['Funcionário','Data','Dia','Entrada','Almoço','Saída',''].map((h, i) => (
-                  <th key={i} className={`${i < 6 ? 'text-left' : ''} px-4 py-3 font-medium`}
-                    style={{ color: 'var(--color-text-secondary)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {listaRows.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  Nenhum dia de trabalho em {MESES[mes - 1]} {ano}.
-                </td></tr>
-              )}
-              {listaRows.map(({ emp, day }, idx) => {
-                const [y, m, d] = day.date.split('-')
-                const dow = DIAS_SEMANA[new Date(day.date + 'T00:00:00').getDay()]
-                return (
-                  <tr key={`${emp.id}-${day.date}`} className="border-t"
-                    style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: idx % 2 === 0 ? 'white' : '#FAFAFA' }}>
-                    <td className="px-4 py-2.5 font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>
-                      {emp.nome}
-                      {day.excecao && <span style={{ fontSize: '0.65rem', marginLeft: 4, color: 'var(--color-text-muted)' }}>(exc.)</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{`${d}/${m}/${y}`}</td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{dow}</td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatTime(day.hora_entrada) || '—'}</td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                      {day.hora_almoco_inicio && day.hora_almoco_fim
-                        ? `${formatTime(day.hora_almoco_inicio)}–${formatTime(day.hora_almoco_fim)}`
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatTime(day.hora_saida) || '—'}</td>
-                    <td className="px-4 py-2.5">
-                      <button onClick={() => openExcecao(day.date, emp.id)}
-                        className="text-xs px-2 py-1 rounded hover:bg-gray-50"
-                        style={{ color: 'var(--color-text-muted)' }}>
-                        Exceção
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
         </div>
       )}
 
