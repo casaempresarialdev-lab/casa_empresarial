@@ -247,7 +247,6 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
               </button>
             ))}
           </div>
-          <ExportMenu onPDF={handleExportPDF} onExcel={handleExportExcel} />
           <Button variant="ghost" onClick={() => router.push('/pessoas/escala-de-trabalho/nova')}>Adicionar</Button>
         </div>
       </div>
@@ -364,6 +363,13 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
             ))}
             <span>* = exceção manual</span>
           </div>
+        </div>
+      )}
+
+      {/* Exportar — abaixo do calendário, alinhado à direita */}
+      {view === 'calendario' && (
+        <div className="flex justify-end mt-3">
+          <ExportMenu onPDF={handleExportPDF} onExcel={handleExportExcel} />
         </div>
       )}
 
