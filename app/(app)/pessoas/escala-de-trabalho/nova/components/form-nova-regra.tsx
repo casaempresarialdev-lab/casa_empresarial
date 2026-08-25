@@ -17,15 +17,24 @@ const DIAS_SEMANA = [
   { idx: 6, label: 'Sáb' },
 ]
 
-const PATTERN_TIPOS = [
-  { value: 'quinzenal',         label: 'Quinzenal (a cada 2 semanas)' },
-  { value: 'intervalo_dias',    label: 'A cada N dias' },
-  { value: 'intervalo_semanas', label: 'A cada N semanas' },
-  { value: 'intervalo_meses',   label: 'A cada N meses' },
-]
+// Calcula a data de referência automaticamente a partir da data de início da regra.
+// Para padrões baseados em dia da semana (quinzenal/intervalo_semanas): avança até
+// a primeira ocorrência do dia alvo >= data_inicio. Para os demais: usa data_inicio.
+function computeDataRef(
+  tipo: FolgaPattern['tipo'],
+  dia: number,
+  dataInicio: string,
+): string {
+  if (!dataInicio) return ''
+  const start = new Date(dataInicio + 'T00:00:00')
 
-function emptyPattern(): FolgaPattern {
-  return { tipo: 'quinzenal', dia: 0, data_ref: '' }
+  if (tipo === 'quinzenal' || tipo === 'intervalo_semanas') {
+    const d = new Date(start)
+    while (d.getDay() !== dia) d.setDate(d.getDate() + 1)
+    return d.toISOString().slice(0, 10)
+  }
+
+  return dataInicio
 }
 
 interface Props {
@@ -58,26 +67,56 @@ const secTitle: React.CSSProperties = {
   marginBottom: '0.75rem',
 }
 
+const selectSm: React.CSSProperties = {
+  padding: '0.35rem 0.6rem',
+  borderRadius: '0.4rem',
+  border: '1px solid var(--color-bg-surface)',
+  fontSize: '0.8rem',
+  backgroundColor: 'white',
+  color: 'var(--color-text-primary)',
+}
+
 export function FormNovaRegra({ companyId, employees }: Props) {
   const router = useRouter()
 
-  const [employeeId,        setEmployeeId]        = useState('')
-  const [dataInicio,        setDataInicio]         = useState('')
-  const [dataFim,           setDataFim]            = useState('')
-  const [semFim,            setSemFim]             = useState(true)
-  const [tipoEscala,        setTipoEscala]         = useState<'semanal' | 'ciclo'>('semanal')
-  const [diasFolga,         setDiasFolga]          = useState<number[]>([0, 6])
-  const [dataReferencia,    setDataReferencia]     = useState('')
-  const [cicloTrabalhoDias, setCicloTrabalhoDias]  = useState(1)
-  const [cicloFolgaDias,    setCicloFolgaDias]     = useState(2)
-  const [horaEntrada,       setHoraEntrada]        = useState('08:00')
-  const [horaSaida,         setHoraSaida]          = useState('17:00')
-  const [temAlmoco,         setTemAlmoco]          = useState(false)
-  const [horaAlmocoInicio,  setHoraAlmocoInicio]   = useState('12:00')
-  const [horaAlmocoFim,     setHoraAlmocoFim]      = useState('13:00')
-  const [folgaPatterns,     setFolgaPatterns]      = useState<FolgaPattern[]>([])
-  const [loading,           setLoading]            = useState(false)
-  const [error,             setError]              = useState('')
+  const [employeeId,        setEmployeeId]       = useState('')
+  const [dataInicio,        setDataInicio]        = useState('')
+  const [dataFim,           setDataFim]           = useState('')
+  const [semFim,            setSemFim]            = useState(true)
+  const [tipoEscala,        setTipoEscala]        = useState<'semanal' | 'ciclo'>('semanal')
+  const [diasFolga,         setDiasFolga]         = useState<number[]>([0, 6])
+  const [dataReferencia,    setDataReferencia]    = useState('')
+  const [cicloTrabalhoDias, setCicloTrabalhoDias] = useState(1)
+  const [cicloFolgaDias,    setCicloFolgaDias]    = useState(2)
+  const [horaEntrada,       setHoraEntrada]       = useState('08:00')
+  const [horaSaida,         setHoraSaida]         = useState('17:00')
+  const [temAlmoco,         setTemAlmoco]         = useState(false)
+  const [horaAlmocoInicio,  setHoraAlmocoInicio]  = useState('12:00')
+  const [horaAlmocoFim,     setHoraAlmocoFim]     = useState('13:00')
+  const [loading,           setLoading]           = useState(false)
+  const [error,             setError]             = useState('')
+
+  // Folgas adicionais — checkboxes por tipo
+  const [pChecked, setPChecked] = useState({
+    quinzenal:         false,
+    intervalo_dias:    false,
+    intervalo_semanas: false,
+    intervalo_meses:   false,
+  })
+  const [pConfig, setPConfig] = useState({
+    quinzenal:         { dia: 1, intervalo: 2 },
+    intervalo_dias:    { dia: 0, intervalo: 7 },
+    intervalo_semanas: { dia: 1, intervalo: 2 },
+    intervalo_meses:   { dia: 0, intervalo: 1 },
+  })
+
+  function togglePattern(tipo: keyof typeof pChecked) {
+    setPChecked(prev => ({ ...prev, [tipo]: !prev[tipo] }))
+  }
+
+  function updatePConfig(tipo: keyof typeof pConfig, patch: Partial<{ dia: number; intervalo: number }>) {
+    setPConfig(prev => ({ ...prev, [tipo]: { ...prev[tipo], ...patch } }))
+  }
 
   function toggleDiaFolga(idx: number) {
     setDiasFolga(prev =>
@@ -85,23 +124,25 @@ export function FormNovaRegra({ companyId, employees }: Props) {
     )
   }
 
-  function addPattern() {
-    setFolgaPatterns(prev => [...prev, emptyPattern()])
-  }
-
-  function removePattern(i: number) {
-    setFolgaPatterns(prev => prev.filter((_, idx) => idx !== i))
-  }
-
-  function updatePattern(i: number, patch: Partial<FolgaPattern>) {
-    setFolgaPatterns(prev =>
-      prev.map((p, idx) => (idx === i ? { ...p, ...patch } as FolgaPattern : p)),
-    )
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+
+    const folga_patterns: FolgaPattern[] = tipoEscala === 'semanal'
+      ? (Object.keys(pChecked) as (keyof typeof pChecked)[])
+          .filter(tipo => pChecked[tipo])
+          .map(tipo => {
+            const cfg = pConfig[tipo]
+            const data_ref = computeDataRef(tipo as FolgaPattern['tipo'], cfg.dia, dataInicio)
+            if (tipo === 'quinzenal')
+              return { tipo, dia: cfg.dia, data_ref } as FolgaPattern
+            if (tipo === 'intervalo_dias')
+              return { tipo, intervalo: cfg.intervalo, data_ref } as FolgaPattern
+            if (tipo === 'intervalo_semanas')
+              return { tipo, intervalo: cfg.intervalo, dia: cfg.dia, data_ref } as FolgaPattern
+            return { tipo: 'intervalo_meses', intervalo: cfg.intervalo, data_ref } as FolgaPattern
+          })
+      : []
 
     const payload = {
       employee_id:         employeeId,
@@ -116,7 +157,7 @@ export function FormNovaRegra({ companyId, employees }: Props) {
       data_referencia:     tipoEscala === 'ciclo' ? dataReferencia : null,
       ciclo_trabalho_dias: tipoEscala === 'ciclo' ? cicloTrabalhoDias : null,
       ciclo_folga_dias:    tipoEscala === 'ciclo' ? cicloFolgaDias    : null,
-      folga_patterns:      tipoEscala === 'semanal' ? folgaPatterns : [],
+      folga_patterns,
     }
 
     setLoading(true)
@@ -317,68 +358,101 @@ export function FormNovaRegra({ companyId, employees }: Props) {
           <div style={sec}>
             <p style={secTitle}>Folgas adicionais</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-              Para folgas que não seguem um dia fixo da semana (quinzenal, a cada N dias, etc.).
+              Para folgas que não seguem um dia fixo da semana.
             </p>
 
-            {folgaPatterns.map((p, i) => (
-              <div key={i} style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white', marginBottom: '0.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <label style={lbl}>Padrão {i + 1}</label>
-                  <button type="button" onClick={() => removePattern(i)} style={{ fontSize: '0.75rem', color: 'var(--color-error)', background: 'none', border: 'none', cursor: 'pointer' }}>Remover</button>
-                </div>
-                <select
-                  value={p.tipo}
-                  onChange={e => updatePattern(i, { tipo: e.target.value as FolgaPattern['tipo'] })}
-                  style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid var(--color-bg-surface)', fontSize: '0.8rem', marginBottom: '0.5rem', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-                >
-                  {PATTERN_TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  {(p.tipo === 'quinzenal' || p.tipo === 'intervalo_semanas') && (
+              {/* Quinzenal */}
+              <div style={{ padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: 'var(--color-text-primary)' }}>
+                  <input type="checkbox" checked={pChecked.quinzenal} onChange={() => togglePattern('quinzenal')} />
+                  Quinzenal (a cada 2 semanas)
+                </label>
+                {pChecked.quinzenal && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
                     <div>
-                      <label style={lbl}>Dia da semana</label>
-                      <select
-                        value={(p as { dia: number }).dia}
-                        onChange={e => updatePattern(i, { dia: parseInt(e.target.value) } as Partial<FolgaPattern>)}
-                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid var(--color-bg-surface)', fontSize: '0.8rem', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-                      >
+                      <label style={{ ...lbl, marginBottom: '0.2rem' }}>Dia da semana</label>
+                      <select style={selectSm} value={pConfig.quinzenal.dia} onChange={e => updatePConfig('quinzenal', { dia: parseInt(e.target.value) })}>
                         {DIAS_SEMANA.map(d => <option key={d.idx} value={d.idx}>{d.label}</option>)}
                       </select>
                     </div>
-                  )}
-                  {(p.tipo === 'intervalo_dias' || p.tipo === 'intervalo_semanas' || p.tipo === 'intervalo_meses') && (
+                  </div>
+                )}
+              </div>
+
+              {/* A cada N dias */}
+              <div style={{ padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: 'var(--color-text-primary)' }}>
+                  <input type="checkbox" checked={pChecked.intervalo_dias} onChange={() => togglePattern('intervalo_dias')} />
+                  A cada N dias
+                </label>
+                {pChecked.intervalo_dias && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>A cada</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={pConfig.intervalo_dias.intervalo}
+                      onChange={e => updatePConfig('intervalo_dias', { intervalo: parseInt(e.target.value) || 1 })}
+                      style={{ ...selectSm, width: '4rem', textAlign: 'center' }}
+                    />
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>dias</span>
+                  </div>
+                )}
+              </div>
+
+              {/* A cada N semanas */}
+              <div style={{ padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: 'var(--color-text-primary)' }}>
+                  <input type="checkbox" checked={pChecked.intervalo_semanas} onChange={() => togglePattern('intervalo_semanas')} />
+                  A cada N semanas
+                </label>
+                {pChecked.intervalo_semanas && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', paddingLeft: '1.5rem', flexWrap: 'wrap' }}>
                     <div>
-                      <label style={lbl}>
-                        {p.tipo === 'intervalo_dias' ? 'A cada (dias)' : p.tipo === 'intervalo_semanas' ? 'A cada (semanas)' : 'A cada (meses)'}
-                      </label>
-                      <Input
+                      <label style={{ ...lbl, marginBottom: '0.2rem' }}>Dia da semana</label>
+                      <select style={selectSm} value={pConfig.intervalo_semanas.dia} onChange={e => updatePConfig('intervalo_semanas', { dia: parseInt(e.target.value) })}>
+                        {DIAS_SEMANA.map(d => <option key={d.idx} value={d.idx}>{d.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.1rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>a cada</span>
+                      <input
                         type="number"
                         min="1"
-                        value={(p as { intervalo: number }).intervalo ?? 1}
-                        onChange={e => updatePattern(i, { intervalo: parseInt(e.target.value) } as Partial<FolgaPattern>)}
+                        value={pConfig.intervalo_semanas.intervalo}
+                        onChange={e => updatePConfig('intervalo_semanas', { intervalo: parseInt(e.target.value) || 1 })}
+                        style={{ ...selectSm, width: '4rem', textAlign: 'center' }}
                       />
+                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>semanas</span>
                     </div>
-                  )}
-                  <div>
-                    <label style={lbl}>Data de referência</label>
-                    <Input
-                      type="date"
-                      value={(p as { data_ref: string }).data_ref ?? ''}
-                      onChange={e => updatePattern(i, { data_ref: e.target.value } as Partial<FolgaPattern>)}
-                    />
                   </div>
-                </div>
+                )}
               </div>
-            ))}
 
-            <button
-              type="button"
-              onClick={addPattern}
-              style={{ fontSize: '0.8rem', color: 'var(--color-primary-darker)', background: 'none', border: '1px dashed var(--color-primary-dark)', borderRadius: '0.5rem', padding: '0.4rem 0.75rem', cursor: 'pointer', width: '100%' }}
-            >
-              + Adicionar padrão de folga
-            </button>
+              {/* A cada N meses */}
+              <div style={{ padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: 'var(--color-text-primary)' }}>
+                  <input type="checkbox" checked={pChecked.intervalo_meses} onChange={() => togglePattern('intervalo_meses')} />
+                  A cada N meses
+                </label>
+                {pChecked.intervalo_meses && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>A cada</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={pConfig.intervalo_meses.intervalo}
+                      onChange={e => updatePConfig('intervalo_meses', { intervalo: parseInt(e.target.value) || 1 })}
+                      style={{ ...selectSm, width: '4rem', textAlign: 'center' }}
+                    />
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>meses</span>
+                  </div>
+                )}
+              </div>
+
+            </div>
           </div>
         )}
 
