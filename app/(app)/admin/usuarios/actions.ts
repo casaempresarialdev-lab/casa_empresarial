@@ -145,6 +145,33 @@ export async function inviteUserAction(
   return { success: true }
 }
 
+export async function resendInvitationAction(invitationId: string, companyId: string) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+
+  const { data: inv } = await admin
+    .from('invitations')
+    .select('email, role, avatar_url')
+    .eq('id', invitationId)
+    .eq('company_id', companyId)
+    .eq('status', 'pending')
+    .single()
+
+  if (!inv) return { error: 'Convite não encontrado.' }
+
+  const appUrl = await getAppUrl()
+  const { error } = await admin.auth.admin.inviteUserByEmail(inv.email, {
+    redirectTo: `${appUrl}/auth/callback`,
+    data: { company_id: companyId, role: inv.role, ...(inv.avatar_url && { avatar_url: inv.avatar_url }) },
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath('/admin/usuarios')
+  return { success: true }
+}
+
 export async function cancelInvitationAction(invitationId: string, companyId: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }

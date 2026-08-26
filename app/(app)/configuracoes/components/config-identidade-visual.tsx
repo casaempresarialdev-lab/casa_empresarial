@@ -180,7 +180,7 @@ export function ConfigIdentidadeVisual({ companyId, logoUrl, corPrimaria }: Prop
               maxLength={6}
               placeholder="C19A6B"
               className="h-full bg-white focus:outline-none text-sm font-mono pr-3"
-              style={{ color: 'var(--color-text-primary)', width: '7ch' }}
+              style={{ color: 'var(--color-text-primary)', width: '12ch' }}
             />
           </div>
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>

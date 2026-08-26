@@ -114,7 +114,10 @@ export function Sidebar({ logoUrl }: SidebarProps) {
         style={{ borderColor: 'var(--color-bg-surface)' }}
       >
         {/* Logo / nome */}
-        <div className="flex items-center h-16 px-4 border-b" style={{ borderColor: 'var(--color-bg-surface)' }}>
+        <div
+          className={cn('flex items-center h-16 border-b', expanded ? 'px-4' : 'px-4 md:px-2')}
+          style={{ borderColor: 'var(--color-bg-surface)' }}
+        >
           {logoUrl ? (
             <>
               {/* Com logo: expandido mostra logo maior, retraído mostra miniatura */}
@@ -123,14 +126,14 @@ export function Sidebar({ logoUrl }: SidebarProps) {
                 src={logoUrl}
                 alt="Logo da empresa"
                 className={cn('object-contain', !expanded && 'md:hidden')}
-                style={{ maxHeight: 40, maxWidth: 160 }}
+                style={{ maxHeight: 48, maxWidth: 200 }}
               />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logoUrl}
                 alt="Logo da empresa"
                 className={cn('object-contain hidden', !expanded && 'md:block')}
-                style={{ maxHeight: 32, maxWidth: 32 }}
+                style={{ maxHeight: 40, maxWidth: 40 }}
               />
             </>
           ) : (

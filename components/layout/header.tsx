@@ -102,9 +102,6 @@ export function Header({ companies = [], userName, userAvatar }: HeaderProps) {
           className="flex items-center gap-2 md:gap-3 rounded-xl px-2 py-1.5 hover:bg-gray-50 transition-colors"
           aria-label="Menu do usuário"
         >
-          <span className="text-sm hidden sm:block" style={{ color: 'var(--color-text-muted)' }}>
-            {userName}
-          </span>
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
             style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}

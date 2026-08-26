@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { RoleBadge, StatusBadge } from '@/components/ui/badge'
 import { ModalUsuario } from './modal-usuario'
-import { removeMemberAction, cancelInvitationAction } from '../actions'
+import { removeMemberAction, cancelInvitationAction, resendInvitationAction } from '../actions'
 import type { MemberWithProfile, Invitation } from '../queries'
 import { formatDate } from '@/lib/utils'
 import { ModalPainelUsuario } from './modal-painel-usuario'
@@ -32,7 +32,7 @@ function cpfMask(cpf: string | null) {
   return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
 }
 
-function ThreeDotMenu({ onEdit, onRemove, loading, hideEdit }: { onEdit: () => void; onRemove: () => void; loading: boolean; hideEdit?: boolean }) {
+function ThreeDotMenu({ onEdit, onRemove, loading, hideEdit, onResend, resending }: { onEdit: () => void; onRemove: () => void; loading: boolean; hideEdit?: boolean; onResend?: () => void; resending?: boolean }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, right: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
@@ -87,6 +87,17 @@ function ThreeDotMenu({ onEdit, onRemove, loading, hideEdit }: { onEdit: () => v
               onClick={() => { setOpen(false); onEdit() }}
             >
               Editar
+            </button>
+          )}
+          {onResend && (
+            <button
+              type="button"
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: 'var(--color-text-secondary)' }}
+              onClick={() => { setOpen(false); onResend() }}
+              disabled={resending}
+            >
+              {resending ? 'Reenviando…' : 'Reenviar convite'}
             </button>
           )}
           <button
@@ -181,7 +192,9 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
   const [painelMember, setPainelMember] = useState<MemberWithProfile | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [resendingId, setResendingId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [infoMsg, setInfoMsg] = useState('')
 
   function openAdd() { setEditingMember(null); setModalOpen(true) }
   function openEdit(member: MemberWithProfile) { setEditingMember(member); setModalOpen(true) }
@@ -200,10 +213,21 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
     if (!confirm(`Cancelar convite para ${inv.email}?`)) return
     setCancellingId(inv.id)
     setErrorMsg('')
+    setInfoMsg('')
     const result = await cancelInvitationAction(inv.id, companyId)
     setCancellingId(null)
     if ('error' in result) setErrorMsg(result.error ?? 'Erro ao cancelar.')
     else router.refresh()
+  }
+
+  async function handleResendInvite(inv: Invitation) {
+    setResendingId(inv.id)
+    setErrorMsg('')
+    setInfoMsg('')
+    const result = await resendInvitationAction(inv.id, companyId)
+    setResendingId(null)
+    if ('error' in result) setErrorMsg(result.error ?? 'Erro ao reenviar convite.')
+    else setInfoMsg(`Convite reenviado para ${inv.email}.`)
   }
 
   const active = members.filter((m) => m.status === 'active')
@@ -226,6 +250,11 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
       {errorMsg && (
         <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>
           {errorMsg}
+        </p>
+      )}
+      {infoMsg && (
+        <p className="text-sm mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700">
+          {infoMsg}
         </p>
       )}
 
@@ -370,6 +399,8 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
                           onRemove={() => handleCancelInvite(inv)}
                           loading={cancellingId === inv.id}
                           hideEdit
+                          onResend={() => handleResendInvite(inv)}
+                          resending={resendingId === inv.id}
                         />
                       </div>
                     </td>
