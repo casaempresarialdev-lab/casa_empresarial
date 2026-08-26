@@ -152,12 +152,14 @@ const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'fer
 function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos]   = useState({ top: 0, right: 0 })
-  const btnRef = useRef<HTMLButtonElement>(null)
+  const btnRef  = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     function handle(e: MouseEvent) {
-      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
@@ -183,7 +185,7 @@ function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void
         Baixar ▾
       </button>
       {open && (
-        <div style={{
+        <div ref={menuRef} style={{
           position: 'fixed', top: pos.top, right: pos.right, zIndex: 50, minWidth: 130,
           backgroundColor: 'white', border: '1px solid var(--color-bg-surface)',
           borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '4px 0',
@@ -215,12 +217,14 @@ function RowMenu({ entry, onEdit, onDetail, onDelete, deletingId }: {
 }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos]   = useState({ top: 0, right: 0 })
-  const btnRef = useRef<HTMLButtonElement>(null)
+  const btnRef  = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     function handle(e: MouseEvent) {
-      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
@@ -247,7 +251,7 @@ function RowMenu({ entry, onEdit, onDetail, onDelete, deletingId }: {
         ···
       </button>
       {open && (
-        <div style={{
+        <div ref={menuRef} style={{
           position: 'fixed', top: pos.top, right: pos.right, zIndex: 50, minWidth: 140,
           backgroundColor: 'white', border: '1px solid var(--color-bg-surface)',
           borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '4px 0',
