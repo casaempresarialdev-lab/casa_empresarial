@@ -17,9 +17,6 @@ const DIAS_SEMANA = [
   { idx: 6, label: 'Sáb' },
 ]
 
-// Calcula a data de referência automaticamente a partir da data de início da regra.
-// Para padrões baseados em dia da semana (quinzenal/intervalo_semanas): avança até
-// a primeira ocorrência do dia alvo >= data_inicio. Para os demais: usa data_inicio.
 function computeDataRef(
   tipo: FolgaPattern['tipo'],
   dia: number,
@@ -27,14 +24,32 @@ function computeDataRef(
 ): string {
   if (!dataInicio) return ''
   const start = new Date(dataInicio + 'T00:00:00')
-
   if (tipo === 'quinzenal' || tipo === 'intervalo_semanas') {
     const d = new Date(start)
     while (d.getDay() !== dia) d.setDate(d.getDate() + 1)
     return d.toISOString().slice(0, 10)
   }
-
   return dataInicio
+}
+
+function computeDataFimPersonalizado(dia: number, ocorrencias: number, dataInicio: string): string {
+  if (!dataInicio || ocorrencias < 1) return ''
+  const d = new Date(dataInicio + 'T00:00:00')
+  let count = 0
+  while (true) {
+    if (d.getDay() === dia) {
+      count++
+      if (count === ocorrencias) break
+    }
+    d.setDate(d.getDate() + 1)
+  }
+  return d.toISOString().slice(0, 10)
+}
+
+function formatDatePT(dateStr: string): string {
+  if (!dateStr) return ''
+  const [y, m, day] = dateStr.split('-')
+  return `${day}/${m}/${y}`
 }
 
 interface Props {
@@ -85,9 +100,10 @@ export function FormNovaRegra({ companyId, employees }: Props) {
   const [semFim,            setSemFim]            = useState(true)
   const [tipoEscala,        setTipoEscala]        = useState<'semanal' | 'ciclo'>('semanal')
   const [diasFolga,         setDiasFolga]         = useState<number[]>([0, 6])
-  const [dataReferencia,    setDataReferencia]    = useState('')
-  const [cicloTrabalhoDias, setCicloTrabalhoDias] = useState(1)
-  const [cicloFolgaDias,    setCicloFolgaDias]    = useState(2)
+  type PersonalizadoEntry = { id: string; dia: number; ocorrencias: number; dataInicio: string }
+  const [personalizados, setPersonalizados] = useState<PersonalizadoEntry[]>([
+    { id: '1', dia: 2, ocorrencias: 1, dataInicio: '' },
+  ])
   const [horaEntrada,       setHoraEntrada]       = useState('08:00')
   const [horaSaida,         setHoraSaida]         = useState('17:00')
   const [temAlmoco,         setTemAlmoco]         = useState(false)
@@ -107,13 +123,55 @@ export function FormNovaRegra({ companyId, employees }: Props) {
     )
   }
 
+  function addPersonalizado() {
+    setPersonalizados(prev => [...prev, { id: String(Date.now()), dia: 2, ocorrencias: 1, dataInicio: '' }])
+  }
+  function removePersonalizado(id: string) {
+    setPersonalizados(prev => prev.filter(e => e.id !== id))
+  }
+  function updatePersonalizado(id: string, field: string, value: number | string) {
+    setPersonalizados(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setLoading(true)
+
+    if (tipoEscala === 'ciclo') {
+      for (const entry of personalizados) {
+        if (!entry.dataInicio) {
+          setLoading(false)
+          setError('Preencha a data de início de todas as folgas personalizadas')
+          return
+        }
+        const dataFimEntry = computeDataFimPersonalizado(entry.dia, entry.ocorrencias, entry.dataInicio)
+        const dataRefEntry = computeDataRef('intervalo_semanas', entry.dia, entry.dataInicio)
+        const result = await createRuleAction(companyId, {
+          employee_id:         employeeId,
+          data_inicio:         entry.dataInicio,
+          data_fim:            dataFimEntry,
+          hora_entrada:        horaEntrada,
+          hora_saida:          horaSaida,
+          hora_almoco_inicio:  temAlmoco ? horaAlmocoInicio : null,
+          hora_almoco_fim:     temAlmoco ? horaAlmocoFim    : null,
+          tipo_escala:         'semanal',
+          dias_folga:          [],
+          data_referencia:     null,
+          ciclo_trabalho_dias: null,
+          ciclo_folga_dias:    null,
+          folga_patterns:      [{ tipo: 'intervalo_semanas', intervalo: 1, dia: entry.dia, data_ref: dataRefEntry }],
+        })
+        if ('error' in result) { setLoading(false); setError(result.error ?? 'Erro desconhecido'); return }
+      }
+      setLoading(false)
+      router.push('/pessoas/escala-de-trabalho')
+      return
+    }
 
     const dia = dataInicio ? new Date(dataInicio + 'T00:00:00').getDay() : 0
     let folga_patterns: FolgaPattern[] = []
-    if (tipoEscala === 'semanal' && pTipo) {
+    if (pTipo) {
       if (pTipo === 'intervalo_dias') {
         folga_patterns = [{ tipo: 'intervalo_dias', intervalo: pValor, data_ref: dataInicio }]
       } else if (pTipo === 'intervalo_semanas') {
@@ -129,7 +187,7 @@ export function FormNovaRegra({ companyId, employees }: Props) {
       }
     }
 
-    const payload = {
+    const result = await createRuleAction(companyId, {
       employee_id:         employeeId,
       data_inicio:         dataInicio,
       data_fim:            semFim ? null : (dataFim || null),
@@ -137,18 +195,14 @@ export function FormNovaRegra({ companyId, employees }: Props) {
       hora_saida:          horaSaida,
       hora_almoco_inicio:  temAlmoco ? horaAlmocoInicio : null,
       hora_almoco_fim:     temAlmoco ? horaAlmocoFim    : null,
-      tipo_escala:         tipoEscala,
-      dias_folga:          tipoEscala === 'semanal' ? diasFolga : [],
-      data_referencia:     tipoEscala === 'ciclo' ? dataReferencia : null,
-      ciclo_trabalho_dias: tipoEscala === 'ciclo' ? cicloTrabalhoDias : null,
-      ciclo_folga_dias:    tipoEscala === 'ciclo' ? cicloFolgaDias    : null,
+      tipo_escala:         'semanal',
+      dias_folga:          diasFolga,
+      data_referencia:     null,
+      ciclo_trabalho_dias: null,
+      ciclo_folga_dias:    null,
       folga_patterns,
-    }
-
-    setLoading(true)
-    const result = await createRuleAction(companyId, payload)
+    })
     setLoading(false)
-
     if ('error' in result) { setError(result.error ?? 'Erro desconhecido'); return }
     router.push('/pessoas/escala-de-trabalho')
   }
@@ -195,8 +249,8 @@ export function FormNovaRegra({ companyId, employees }: Props) {
           </select>
         </div>
 
-        {/* Seção 2 — Vigência */}
-        <div style={sec}>
+        {/* Seção 2 — Vigência (apenas Fixa) */}
+        {tipoEscala === 'semanal' && <div style={sec}>
           <p style={secTitle}>Vigência</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <div>
@@ -212,7 +266,7 @@ export function FormNovaRegra({ companyId, employees }: Props) {
             <input type="checkbox" checked={semFim} onChange={e => setSemFim(e.target.checked)} />
             Sem data de término (regra ativa indefinidamente)
           </label>
-        </div>
+        </div>}
 
         {/* Seção 3 — Horários */}
         <div style={sec}>
@@ -304,36 +358,63 @@ export function FormNovaRegra({ companyId, employees }: Props) {
           )}
 
           {tipoEscala === 'ciclo' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div>
-                  <label style={lbl}>Dias trabalhados seguidos *</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    required
-                    value={cicloTrabalhoDias}
-                    onChange={e => setCicloTrabalhoDias(parseInt(e.target.value) || 1)}
-                  />
-                </div>
-                <div>
-                  <label style={lbl}>Dias de folga seguidos *</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    required
-                    value={cicloFolgaDias}
-                    onChange={e => setCicloFolgaDias(parseInt(e.target.value) || 1)}
-                  />
-                </div>
-              </div>
-              <div>
-                <label style={lbl}>Data do primeiro dia de trabalho *</label>
-                <Input type="date" required value={dataReferencia} onChange={e => setDataReferencia(e.target.value)} />
-                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
-                  Ex: 12x36 → 1 dia trabalhado + 2 dias de folga. 5x2 → 5 + 2.
-                </p>
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {personalizados.map((entry) => {
+                const dataFim = entry.dataInicio ? computeDataFimPersonalizado(entry.dia, entry.ocorrencias, entry.dataInicio) : ''
+                return (
+                  <div key={entry.id} style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-bg-surface)', backgroundColor: 'white', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    <div>
+                      <label style={lbl}>Dia da semana</label>
+                      <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                        {DIAS_SEMANA.map(d => {
+                          const active = entry.dia === d.idx
+                          return (
+                            <button
+                              key={d.idx}
+                              type="button"
+                              onClick={() => updatePersonalizado(entry.id, 'dia', d.idx)}
+                              style={{
+                                padding: '0.25rem 0.65rem', borderRadius: '999px', border: '1px solid',
+                                fontSize: '0.78rem', fontWeight: 500, cursor: 'pointer',
+                                borderColor: active ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)',
+                                backgroundColor: active ? 'var(--color-primary)' : 'white',
+                                color: active ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
+                              }}
+                            >{d.label}</button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div>
+                        <label style={lbl}>Data de início</label>
+                        <Input type="date" value={entry.dataInicio} onChange={e => updatePersonalizado(entry.id, 'dataInicio', e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={lbl}>Ocorrências</label>
+                        <Input type="number" min="1" value={entry.ocorrencias} onChange={e => updatePersonalizado(entry.id, 'ocorrencias', parseInt(e.target.value) || 1)} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {dataFim ? (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                          Folga até {formatDatePT(dataFim)}
+                        </span>
+                      ) : <span />}
+                      {personalizados.length > 1 && (
+                        <button type="button" onClick={() => removePersonalizado(entry.id)}
+                          style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                          ✕ Remover
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              <button type="button" onClick={addPersonalizado}
+                style={{ fontSize: '0.8rem', color: 'var(--color-primary-darker)', background: 'none', border: '1px dashed var(--color-primary-dark)', borderRadius: '0.5rem', padding: '0.5rem', cursor: 'pointer', textAlign: 'center', width: '100%' }}>
+                + Adicionar folga personalizada
+              </button>
             </div>
           )}
         </div>
