@@ -172,9 +172,6 @@ function CardDetailModal({
               )}
             </div>
           )}
-          {tStatus === 'pending' && !linkUrl && (
-            <p className="text-xs mt-1" style={{ color: '#9A7D0A' }}>⏳ Link enviado — aguardando preenchimento</p>
-          )}
           {tStatus === 'expired' && !linkUrl && (
             <p className="text-xs mt-1" style={{ color: '#C0392B' }}>Link anterior expirado</p>
           )}
