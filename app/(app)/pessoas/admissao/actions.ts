@@ -35,9 +35,14 @@ export async function updateEmployeeStatusAction(
   if (!user) return { error: 'Não autenticado' }
 
   const admin = createAdminClient()
+  const updates: Record<string, unknown> = { status }
+  // ao avançar para fora do funil de admissão, garante que o Kanban seja considerado concluído
+  // (senão o funcionário some tanto do Kanban quanto da Equipe — nenhum dos dois mostra status != admissao/experiencia sem isso)
+  if (status !== 'admissao') updates.admission_stage = 'finalizado'
+
   const { error } = await admin
     .from('employees')
-    .update({ status })
+    .update(updates)
     .eq('id', employeeId)
 
   if (error) return { error: error.message }
