@@ -327,16 +327,20 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
                         return (
                           <button key={emp.id}
                             onClick={() => openExcecao(dateStr, emp.id)}
-                            className="w-full text-left mb-0.5 px-1.5 py-0.5 rounded text-xs truncate"
+                            className="w-full text-left mb-0.5 px-1.5 py-0.5 rounded"
                             style={{
                               backgroundColor: isFolga ? '#F4F6F7' : '#E9F7EF',
                               color: isFolga ? '#888' : '#1E8449',
                             }}
                             title={`${emp.nome} — ${isFolga ? 'Folga' : `${formatTime(d.hora_entrada)}–${formatTime(d.hora_saida)}`}${d.excecao ? ' (exceção)' : ''}`}>
-                            {filterEmployee
-                              ? (isFolga ? 'Folga' : `${formatTime(d.hora_entrada)}–${formatTime(d.hora_saida)}`)
-                              : emp.nome.split(' ')[0]}
-                            {d.excecao ? ' *' : ''}
+                            <div style={{ fontSize: '0.72rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {emp.nome.split(' ')[0]}{d.excecao ? ' *' : ''}
+                            </div>
+                            {!isFolga && (
+                              <div style={{ fontSize: '0.63rem', opacity: 0.8 }}>
+                                {formatTime(d.hora_entrada)}–{formatTime(d.hora_saida)}
+                              </div>
+                            )}
                           </button>
                         )
                       })}
