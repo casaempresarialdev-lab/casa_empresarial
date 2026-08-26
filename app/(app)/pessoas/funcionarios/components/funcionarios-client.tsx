@@ -2,11 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ModalFuncionario } from './modal-funcionario'
 import { deleteEmployeeAction } from '../actions'
 import type { Employee } from '../queries'
-import type { CompanyBenefit } from '../../beneficios/queries'
 
 const TODAY = new Date()
 TODAY.setHours(0, 0, 0, 0)
@@ -152,15 +149,12 @@ function ThreeDotMenu({ onView, onEdit, onDelete, loading }: {
 interface Props {
   employees: Employee[]
   companyId: string
-  companyBenefits: CompanyBenefit[]
 }
 
-export function FuncionariosClient({ employees, companyId, companyBenefits }: Props) {
+export function FuncionariosClient({ employees }: Props) {
   const router = useRouter()
   const [tab, setTab]               = useState<'ativos' | 'inativos'>('ativos')
   const [tipoFiltro, setTipoFiltro] = useState<string>('todos')
-  const [modalOpen, setModalOpen]   = useState(false)
-  const [editing, setEditing]       = useState<Employee | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const ativos   = employees.filter(e =>
@@ -172,8 +166,6 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
   const rows     = tipoFiltro === 'todos' ? byTab : byTab.filter(e => e.tipo_contrato === tipoFiltro)
 
   const countByStatus = (s: string) => employees.filter(e => e.status === s).length
-
-  function openEdit(e: Employee) { setEditing(e); setModalOpen(true) }
 
   async function handleDelete(e: Employee) {
     if (!confirm(`Excluir ${e.nome}? Esta ação não pode ser desfeita.`)) return
@@ -333,7 +325,7 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
                     <div className="flex justify-end">
                       <ThreeDotMenu
                         onView={() => router.push(`/pessoas/funcionarios/${emp.id}`)}
-                        onEdit={() => openEdit(emp)}
+                        onEdit={() => router.push(`/pessoas/funcionarios/${emp.id}/editar`)}
                         onDelete={() => handleDelete(emp)}
                         loading={deletingId === emp.id}
                       />
@@ -354,14 +346,6 @@ export function FuncionariosClient({ employees, companyId, companyBenefits }: Pr
           )}
         </table>
       </div>
-
-      <ModalFuncionario
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        employee={editing}
-        companyBenefits={companyBenefits}
-      />
     </>
   )
 }
