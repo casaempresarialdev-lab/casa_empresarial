@@ -211,34 +211,35 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label style={lbl}>CPF</label>
-                    <Input value={cpf} onChange={e => setCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" />
+                    <label style={lbl}>CPF *</label>
+                    <Input value={cpf} onChange={e => setCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" required />
                   </div>
                   <div>
-                    <label style={lbl}>RG</label>
-                    <Input value={rg} onChange={e => setRg(e.target.value)} placeholder="RG" />
+                    <label style={lbl}>RG *</label>
+                    <Input value={rg} onChange={e => setRg(e.target.value)} placeholder="RG" required />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label style={lbl}>Data de Nascimento</label>
-                    <Input type="date" value={nascimento} onChange={e => setNascimento(e.target.value)} />
+                    <label style={lbl}>Data de Nascimento *</label>
+                    <Input type="date" value={nascimento} onChange={e => setNascimento(e.target.value)} required />
                   </div>
                   <div>
-                    <label style={lbl}>Telefone / WhatsApp</label>
-                    <Input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(21) 99999-0000" />
+                    <label style={lbl}>Telefone / WhatsApp *</label>
+                    <Input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(21) 99999-0000" required />
                   </div>
                 </div>
                 <div>
-                  <label style={lbl}>E-mail</label>
-                  <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" />
+                  <label style={lbl}>E-mail *</label>
+                  <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" required />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label style={lbl}>Grau de Instrução</label>
+                    <label style={lbl}>Grau de Instrução *</label>
                     <select
                       value={grauInstrucao}
                       onChange={e => setGrau(e.target.value)}
+                      required
                       className="w-full px-3 py-2 rounded-lg border text-sm"
                       style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
                     >
@@ -247,8 +248,8 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
                     </select>
                   </div>
                   <div>
-                    <label style={lbl}>Dependentes (IR)</label>
-                    <Input type="number" min={0} value={dependentes} onChange={e => setDependentes(e.target.value)} placeholder="0" />
+                    <label style={lbl}>Dependentes (IR) *</label>
+                    <Input type="number" min={0} value={dependentes} onChange={e => setDependentes(e.target.value)} placeholder="0" required />
                   </div>
                 </div>
               </div>
@@ -260,25 +261,26 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label style={lbl}>PIS / PASEP</label>
-                    <Input value={pisPasep} onChange={e => setPisPasep(e.target.value)} placeholder="000.00000.00-0" />
+                    <label style={lbl}>PIS / PASEP *</label>
+                    <Input value={pisPasep} onChange={e => setPisPasep(e.target.value)} placeholder="000.00000.00-0" required />
                   </div>
                   <div>
-                    <label style={lbl}>Série da CTPS</label>
-                    <Input value={serieCtps} onChange={e => setSerieCtps(e.target.value)} placeholder="Ex: 001" />
+                    <label style={lbl}>Série da CTPS *</label>
+                    <Input value={serieCtps} onChange={e => setSerieCtps(e.target.value)} placeholder="Ex: 001" required />
                   </div>
                 </div>
                 <div>
-                  <label style={lbl}>Certificado de Reservista</label>
-                  <Input value={certReservista} onChange={e => setCertReservista(e.target.value)} placeholder="Nº / categoria" />
+                  <label style={lbl}>Certificado de Reservista *</label>
+                  <Input value={certReservista} onChange={e => setCertReservista(e.target.value)} placeholder="Nº / categoria" required />
                 </div>
                 <div>
-                  <label style={lbl}>Dados Bancários</label>
+                  <label style={lbl}>Dados Bancários *</label>
                   <textarea
                     value={dadosBancarios}
                     onChange={e => setDadosBancarios(e.target.value)}
                     placeholder="Banco, agência, conta corrente e/ou chave PIX"
                     rows={2}
+                    required
                     className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
                     style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
                   />

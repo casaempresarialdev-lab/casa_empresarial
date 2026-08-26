@@ -432,13 +432,13 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
                   <Input type="date" value={nascimento} onChange={e => setNascimento(e.target.value)} />
                 </div>
                 <div>
-                  <label style={lbl}>Telefone</label>
-                  <Input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(21) 99999-0000" />
+                  <label style={lbl}>Telefone *</label>
+                  <Input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(21) 99999-0000" required />
                 </div>
               </div>
               <div>
-                <label style={lbl}>E-mail</label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" />
+                <label style={lbl}>E-mail *</label>
+                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" required />
               </div>
             </div>
           </div>
