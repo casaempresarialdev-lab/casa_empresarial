@@ -211,14 +211,11 @@ export function FuncionariosClient({ employees }: Props) {
       </div>
 
       {/* Cards de métricas */}
-      <div className="grid grid-cols-6 gap-2 mb-5">
+      <div className="grid grid-cols-3 gap-2 mb-5">
         {([
-          { key: 'admissao',    label: 'Em Admissão'  },
           { key: 'experiencia', label: 'Experiência'   },
-          { key: 'ativo',       label: 'Ativo'         },
           { key: 'ferias',      label: 'Férias'        },
           { key: 'afastado',    label: 'Afastado'      },
-          { key: 'inativo',     label: 'Inativo'       },
         ] as const).map(({ key, label }) => {
           const cfg   = STATUS_CFG[key]
           const count = countByStatus(key)
