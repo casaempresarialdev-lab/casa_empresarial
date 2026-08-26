@@ -266,6 +266,7 @@ export function FuncionariosClient({ employees }: Props) {
             <tr>
               <th style={{ ...TH, textAlign: 'left', minWidth: 200 }}>Nome</th>
               <th style={{ ...TH, textAlign: 'center', minWidth: 130 }}>Contrato</th>
+              <th style={{ ...TH, textAlign: 'center', minWidth: 110 }}>Status</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 140 }}>Cargo</th>
               <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Salário</th>
               <th style={{ ...TH, textAlign: 'left', minWidth: 130 }}>Telefone</th>
@@ -276,7 +277,7 @@ export function FuncionariosClient({ employees }: Props) {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                   {tab === 'ativos' ? 'Nenhum funcionário ativo cadastrado.' : 'Nenhum funcionário inativo.'}
                 </td>
               </tr>
@@ -284,6 +285,7 @@ export function FuncionariosClient({ employees }: Props) {
             {rows.map((emp, idx) => {
               const tipoCfg     = emp.tipo_contrato ? TIPO_CFG[emp.tipo_contrato] : null
               const contratoCfg = emp.status_contrato ? CONTRATO_CFG[emp.status_contrato] : null
+              const statusCfg   = STATUS_CFG[emp.status]
               const rowBg       = idx % 2 === 0 ? 'white' : '#FAFAFA'
 
               return (
@@ -306,6 +308,15 @@ export function FuncionariosClient({ employees }: Props) {
                         </span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-3 py-2.5" style={{ textAlign: 'center' }}>
+                    {statusCfg ? (
+                      <span style={{ fontSize: '0.62rem', padding: '0.1rem 0.5rem', borderRadius: '999px', backgroundColor: statusCfg.bg, color: statusCfg.color, fontWeight: 600 }}>
+                        {statusCfg.label}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                     {emp.cargo ?? '—'}
@@ -338,7 +349,7 @@ export function FuncionariosClient({ employees }: Props) {
           {rows.length > 0 && (
             <tfoot>
               <tr style={{ backgroundColor: 'var(--color-bg-surface)', borderTop: '2px solid #E5E7EB' }}>
-                <td className="px-3 py-2 text-xs font-bold" colSpan={7} style={{ color: 'var(--color-text-secondary)' }}>
+                <td className="px-3 py-2 text-xs font-bold" colSpan={8} style={{ color: 'var(--color-text-secondary)' }}>
                   {rows.length} {tab === 'ativos' ? 'funcionário' : 'inativo'}{rows.length !== 1 ? 's' : ''}
                 </td>
               </tr>
