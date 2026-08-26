@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalPonto } from './modal-ponto'
@@ -77,14 +77,12 @@ function getSituacao(
     return { label: 'Extra na folga', color: '#2471A3', bg: '#EBF5FB', status: 'folga_extra' }
   }
 
-  // Dia de trabalho
   if (!record || !record.entrada) {
     if (isFuture) return { label: 'Previsto',   color: '#2471A3', bg: '#EBF5FB', status: 'previsto'   }
     if (isToday)  return { label: 'Aguardando', color: '#7F8C8D', bg: '#F2F3F4', status: 'aguardando' }
     return { label: 'Ausente', color: '#C0392B', bg: '#FDEDEC', status: 'ausente' }
   }
 
-  // Tem entrada mas não tem saída
   if (!record.saida) {
     if (isToday) return { label: 'Em andamento', color: '#D35400', bg: '#FDEBD0', status: 'em_andamento' }
     return { label: 'Sem saída', color: '#E67E22', bg: '#FDEBD0', status: 'incompleto' }
@@ -92,7 +90,6 @@ function getSituacao(
 
   if (record.tipo === 'folga') return { label: 'Folga não prevista', color: '#8E44AD', bg: '#F4ECF7', status: 'folga_extra' }
 
-  // Registro completo — verificar pontualidade
   let isLate = false, lateMin = 0, isEarlyOut = false
 
   if (record.entrada && dayResult.hora_entrada) {
@@ -139,7 +136,6 @@ function formatInterval(interval: string | null) {
 }
 
 function getDaysInMonth(ano: number, mes: number) { return new Date(ano, mes, 0).getDate() }
-function getFirstDayOfWeek(ano: number, mes: number) { return new Date(ano, mes - 1, 1).getDay() }
 
 function getPrevistoLabel(dayResult: DayResult | null): string {
   if (!dayResult || dayResult.tipo === 'sem_regra') return '—'
@@ -149,40 +145,240 @@ function getPrevistoLabel(dayResult: DayResult | null): string {
   return `${h}–${s}`
 }
 
-function getChipLabel(
-  sit: SituacaoInfo,
-  record: TimeRecord | null,
-  dayResult: DayResult | null,
-  isSingleEmp: boolean,
-  empNome: string,
-): string {
-  if (!isSingleEmp) return empNome.split(' ')[0]
-  switch (sit.status) {
-    case 'previsto':
-    case 'aguardando':
-      return dayResult?.hora_entrada && dayResult?.hora_saida
-        ? `${dayResult.hora_entrada.slice(0,5)}–${dayResult.hora_saida.slice(0,5)}`
-        : sit.label
-    case 'em_andamento':
-    case 'incompleto':
-      return record?.entrada ? `${formatTime(record.entrada)} →` : sit.label
-    case 'ok':
-    case 'atraso':
-    case 'saida_antecipada':
-      return `${formatTime(record?.entrada ?? null)}–${formatTime(record?.saida ?? null)}`
-    default:
-      return sit.label
+const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'aguardando'])
+
+// ─── ExportMenu ───────────────────────────────────────────────────────────────
+
+function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos]   = useState({ top: 0, right: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) {
+      const openUp = rect.bottom + 88 > window.innerHeight - 8
+      setPos(openUp
+        ? { top: rect.top - 88, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+      )
+    }
+    setOpen(v => !v)
   }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button ref={btnRef} onClick={handleOpen}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors hover:bg-gray-50"
+        style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)', backgroundColor: 'white' }}>
+        Baixar ▾
+      </button>
+      {open && (
+        <div style={{
+          position: 'fixed', top: pos.top, right: pos.right, zIndex: 50, minWidth: 130,
+          backgroundColor: 'white', border: '1px solid var(--color-bg-surface)',
+          borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '4px 0',
+        }}>
+          <button onClick={() => { setOpen(false); onPDF() }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+            style={{ color: 'var(--color-text-primary)' }}>
+            PDF
+          </button>
+          <button onClick={() => { setOpen(false); onExcel() }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+            style={{ color: 'var(--color-text-primary)' }}>
+            Excel
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
-const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'aguardando'])
+// ─── RowMenu ──────────────────────────────────────────────────────────────────
+
+function RowMenu({ entry, onEdit, onDetail, onDelete, deletingId }: {
+  entry: DayEntry
+  onEdit: () => void
+  onDetail: () => void
+  onDelete: () => void
+  deletingId: string | null
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos]   = useState({ top: 0, right: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  function handleOpen() {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) {
+      const menuH = entry.record ? 122 : 44
+      const openUp = rect.bottom + menuH > window.innerHeight - 8
+      setPos(openUp
+        ? { top: rect.top - menuH - 4, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+      )
+    }
+    setOpen(v => !v)
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button ref={btnRef} onClick={handleOpen}
+        className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-secondary)', fontSize: '1.1rem', letterSpacing: 1 }}>
+        ···
+      </button>
+      {open && (
+        <div style={{
+          position: 'fixed', top: pos.top, right: pos.right, zIndex: 50, minWidth: 140,
+          backgroundColor: 'white', border: '1px solid var(--color-bg-surface)',
+          borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '4px 0',
+        }}>
+          <button onClick={() => { setOpen(false); onEdit() }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+            style={{ color: 'var(--color-text-primary)' }}>
+            Editar
+          </button>
+          {entry.record && (
+            <>
+              <button onClick={() => { setOpen(false); onDetail() }}
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+                style={{ color: 'var(--color-text-primary)' }}>
+                Detalhar
+              </button>
+              <button onClick={() => { setOpen(false); onDelete() }}
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+                style={{ color: '#E74C3C' }}>
+                {deletingId === entry.record?.id ? 'Excluindo…' : 'Excluir'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ModalDetalhar ────────────────────────────────────────────────────────────
+
+function ModalDetalhar({ entry, onClose }: { entry: DayEntry; onClose: () => void }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, backgroundColor: 'rgba(0,0,0,0.4)' }}
+      className="flex items-center justify-center p-4">
+      <div className="rounded-2xl shadow-xl w-full max-w-md" style={{ backgroundColor: 'white' }}>
+
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b"
+          style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <h2 className="text-base font-semibold"
+            style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+            Detalhes do Registro
+          </h2>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-sm"
+            style={{ color: 'var(--color-text-muted)' }}>✕</button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Funcionário</div>
+            <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{entry.empNome}</div>
+            {entry.empCargo && (
+              <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{entry.empCargo}</div>
+            )}
+          </div>
+
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Data</div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                {formatDate(entry.date)} · <span className="capitalize">{formatWeekday(entry.date)}</span>
+              </div>
+            </div>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+              style={{ backgroundColor: entry.sit.bg, color: entry.sit.color }}>
+              {entry.sit.label}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Previsto</div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                {getPrevistoLabel(entry.dayResult)}
+              </div>
+            </div>
+            <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Horas trabalhadas</div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                {formatInterval(entry.record?.horas_trabalhadas ?? null)}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Entrada</div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                {formatTime(entry.record?.entrada ?? null)}
+              </div>
+            </div>
+            <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Saída</div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                {formatTime(entry.record?.saida ?? null)}
+              </div>
+            </div>
+          </div>
+
+          {(entry.record?.saida_almoco || entry.record?.retorno_almoco) && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Saída almoço</div>
+                <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  {formatTime(entry.record?.saida_almoco ?? null)}
+                </div>
+              </div>
+              <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Retorno almoço</div>
+                <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  {formatTime(entry.record?.retorno_almoco ?? null)}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 pb-5">
+          <Button onClick={onClose} className="w-full">Fechar</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PontoClient({ records, employees, rules, exceptions, companyId, mes, ano }: Props) {
   const router = useRouter()
 
-  const [view,           setView]          = useState<'lista' | 'calendario'>('lista')
   const [tolerancia,     setTolerancia]    = useState(10)
   const [filterEmployee, setFilter]        = useState('')
   const [modalOpen,      setModalOpen]     = useState(false)
@@ -194,6 +390,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
   const [modalTipo,      setModalTipo]     = useState<string>('normal')
   const [deletingId,     setDeletingId]    = useState<string | null>(null)
   const [deleteError,    setDeleteError]   = useState('')
+  const [detailEntry,    setDetailEntry]   = useState<DayEntry | null>(null)
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -212,7 +409,6 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     return map
   }, [records])
 
-  // DayEntry[]: orientado à escala (não aos registros)
   const dayEntries = useMemo(() => {
     const totalDias = getDaysInMonth(ano, mes)
     const emps = filterEmployee ? employees.filter(e => e.id === filterEmployee) : employees
@@ -228,10 +424,8 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
         const hasSchedule = dayResult && dayResult.tipo !== 'sem_regra'
 
         if (filterEmployee) {
-          // Com filtro: todos os dias com escala ou registro
           if (!hasSchedule && !record) continue
         } else {
-          // Sem filtro: só passado+hoje, só dias de trabalho esperados ou com registro
           if (isFuture) continue
           if (!hasSchedule && !record) continue
           if (dayResult?.tipo === 'folga' && !record) continue
@@ -246,7 +440,6 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     return entries
   }, [employees, scheduleMap, recordsMap, mes, ano, filterEmployee, tolerancia, today])
 
-  // Métricas: só dias passados/hoje com escala de trabalho
   const metrics = useMemo(() => {
     let expected = 0, present = 0, absent = 0, late = 0
     for (const e of dayEntries) {
@@ -266,13 +459,6 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     if (m < 1)  { m = 12; a-- }
     if (m > 12) { m = 1;  a++ }
     router.push(`/pessoas/registro-de-ponto?mes=${m}&ano=${a}`)
-  }
-
-  function openAdd() {
-    setEditingRecord(null)
-    setModalEmpId(filterEmployee || null)
-    setModalDate(null); setModalEntrada(null); setModalSaida(null); setModalTipo('normal')
-    setModalOpen(true)
   }
 
   function openEdit(r: TimeRecord) {
@@ -298,11 +484,6 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     setModalOpen(true)
   }
 
-  function openFromList(entry: DayEntry) {
-    if (entry.record) openEdit(entry.record)
-    else openFromCalendar(entry.date, entry.empId)
-  }
-
   async function handleDelete(entry: DayEntry) {
     if (!entry.record) return
     if (!confirm('Excluir este registro de ponto?')) return
@@ -313,14 +494,78 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     else router.refresh()
   }
 
+  async function handleExportPDF() {
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF({ orientation: 'landscape' })
+    doc.setFontSize(14)
+    doc.text(`Registro de Ponto — ${MESES[mes - 1]} ${ano}`, 14, 16)
+
+    const hasFuncCol = !filterEmployee
+    const headers = [
+      ...(hasFuncCol ? ['Funcionário'] : []),
+      'Data', 'Previsto', 'Entrada', 'Almoço', 'Saída', 'Horas', 'Situação',
+    ]
+    const rows = dayEntries.map(e => [
+      ...(hasFuncCol ? [e.empNome] : []),
+      `${formatDate(e.date)} ${formatWeekday(e.date)}`,
+      getPrevistoLabel(e.dayResult),
+      e.record?.entrada ? formatTime(e.record.entrada) : '—',
+      e.record?.saida_almoco
+        ? `${formatTime(e.record.saida_almoco)}–${formatTime(e.record.retorno_almoco)}`
+        : '—',
+      e.record?.saida ? formatTime(e.record.saida) : '—',
+      formatInterval(e.record?.horas_trabalhadas ?? null),
+      e.sit.label,
+    ])
+
+    const colW = hasFuncCol ? [44, 30, 24, 22, 36, 22, 20, 28] : [30, 24, 22, 36, 22, 20, 28]
+    const rowH = 7
+    let y = 24
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    let x = 10
+    headers.forEach((h, i) => { doc.text(h, x + 2, y + 5); x += colW[i] })
+    y += rowH
+    doc.setFont('helvetica', 'normal')
+    rows.forEach(row => {
+      if (y > 190) { doc.addPage(); y = 14 }
+      x = 10
+      row.forEach((cell, i) => {
+        doc.text(String(cell).slice(0, 24), x + 2, y + 5)
+        x += colW[i]
+      })
+      y += rowH
+    })
+    doc.save(`registro-ponto-${mes}-${ano}.pdf`)
+  }
+
+  async function handleExportExcel() {
+    const XLSX = await import('xlsx')
+    const hasFuncCol = !filterEmployee
+    const headers = [
+      ...(hasFuncCol ? ['Funcionário'] : []),
+      'Data', 'Dia', 'Previsto', 'Entrada', 'Almoço', 'Saída', 'Horas', 'Situação',
+    ]
+    const rows = dayEntries.map(e => [
+      ...(hasFuncCol ? [e.empNome] : []),
+      formatDate(e.date),
+      formatWeekday(e.date),
+      getPrevistoLabel(e.dayResult),
+      e.record?.entrada ? formatTime(e.record.entrada) : '',
+      e.record?.saida_almoco
+        ? `${formatTime(e.record.saida_almoco)}–${formatTime(e.record.retorno_almoco)}`
+        : '',
+      e.record?.saida ? formatTime(e.record.saida) : '',
+      formatInterval(e.record?.horas_trabalhadas ?? null),
+      e.sit.label,
+    ])
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Ponto')
+    XLSX.writeFile(wb, `registro-ponto-${mes}-${ano}.xlsx`)
+  }
+
   const isSingleEmp = !!filterEmployee
-  const firstDay    = getFirstDayOfWeek(ano, mes)
-  const totalDias   = getDaysInMonth(ano, mes)
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: totalDias }, (_, i) => i + 1),
-  ]
-  while (cells.length % 7 !== 0) cells.push(null)
 
   return (
     <>
@@ -335,19 +580,6 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)' }}>
-            {(['lista', 'calendario'] as const).map(v => (
-              <button key={v} onClick={() => setView(v)}
-                className="px-3 py-1.5 text-xs font-medium transition-colors"
-                style={{
-                  backgroundColor: view === v ? 'var(--color-primary)' : 'white',
-                  color: view === v ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
-                }}>
-                {v === 'lista' ? '☰ Lista' : '📅 Calendário'}
-              </button>
-            ))}
-          </div>
-
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)', backgroundColor: 'white' }}>
             <span>Tolerância:</span>
@@ -360,7 +592,11 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
             <span>min</span>
           </div>
 
-          <Button onClick={openAdd}>Adicionar</Button>
+          <ExportMenu onPDF={handleExportPDF} onExcel={handleExportExcel} />
+
+          <Button onClick={() => window.open('https://casa-empresarial.vercel.app/registrar-ponto', '_blank')}>
+            Registro de Ponto
+          </Button>
         </div>
       </div>
 
@@ -411,211 +647,114 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
         <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{deleteError}</p>
       )}
 
-      {/* ── Calendário ── */}
-      {view === 'calendario' && (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <div className="grid grid-cols-7 border-b"
-            style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
-            {DIAS_SEMANA.map(d => (
-              <div key={d} className="text-center py-2 text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>{d}</div>
-            ))}
-          </div>
+      {/* ── Lista ── */}
+      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <table className="w-full min-w-[820px] text-sm">
+          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+            <tr>
+              {!filterEmployee && (
+                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
+              )}
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Data</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Previsto</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Entrada</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Almoço</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Saída</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Horas</th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Situação</th>
+              <th className="w-10 px-2 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {dayEntries.length === 0 && (
+              <tr>
+                <td colSpan={isSingleEmp ? 8 : 9} className="text-center py-10"
+                  style={{ color: 'var(--color-text-muted)' }}>
+                  Nenhum dado para {MESES[mes - 1]} {ano}.
+                </td>
+              </tr>
+            )}
 
-          <div className="grid grid-cols-7">
-            {cells.map((day, idx) => {
-              const dateStr  = day ? `${ano}-${String(mes).padStart(2,'0')}-${String(day).padStart(2,'0')}` : ''
-              const isToday  = dateStr === today
-              const isFuture = dateStr > today
-              const refEmpId = filterEmployee || employees[0]?.id || ''
-              const refDay   = refEmpId && dateStr ? scheduleMap.get(`${refEmpId}|${dateStr}`) : null
-              const isFeriado = refDay?.feriado ?? false
-              const isDomingo = refDay?.domingo ?? false
+            {dayEntries.map((entry, idx) => {
+              const { record, dayResult, sit, isToday, isFuture } = entry
+              const previsto  = getPrevistoLabel(dayResult)
+              const isAbsent  = sit.status === 'ausente' || sit.status === 'falta'
+              const rowBg = isToday
+                ? '#FEFCE8'
+                : isFuture
+                ? '#FAFBFF'
+                : idx % 2 === 0 ? 'white' : '#FAFAFA'
 
-              let cellBg = day ? 'white' : '#FAFAFA'
-              if (day && isDomingo) cellBg = '#F5F5F5'
-              if (day && isFeriado) cellBg = '#EBF5FB'
-              if (day && isToday)   cellBg = '#FEFCE8'
+              const entradaColor = sit.status === 'atraso' ? '#D35400' : 'var(--color-text-primary)'
+              const saidaColor   = sit.status === 'saida_antecipada' ? '#D35400' : 'var(--color-text-primary)'
 
               return (
-                <div key={idx} className="min-h-[90px] border-r border-b p-1"
-                  style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: cellBg }}>
-                  {day && (
-                    <>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full"
-                          style={{
-                            backgroundColor: isToday ? 'var(--color-primary-dark)' : 'transparent',
-                            color: isToday ? 'white' : isDomingo ? '#999' : 'var(--color-text-secondary)',
-                          }}>
-                          {day}
-                        </span>
-                        {isFeriado && refDay?.feriado_nome && (
-                          <span title={refDay.feriado_nome}
-                            style={{ fontSize: '0.58rem', color: '#2471A3', maxWidth: 56, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {refDay.feriado_nome}
-                          </span>
-                        )}
-                      </div>
+                <tr key={`${entry.empId}|${entry.date}`} className="border-t"
+                  style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
 
-                      {(isSingleEmp ? employees.filter(e => e.id === filterEmployee) : employees).map(emp => {
-                        const dayResult = scheduleMap.get(`${emp.id}|${dateStr}`) ?? null
-                        const record    = recordsMap.get(`${emp.id}|${dateStr}`) ?? null
-                        const hasSchedule = dayResult && dayResult.tipo !== 'sem_regra'
-
-                        if (!hasSchedule && !record) return null
-                        if (!isSingleEmp && dayResult?.tipo === 'folga' && !record) return null
-
-                        const sit   = getSituacao(record, dayResult, tolerancia, isToday, isFuture)
-                        const label = getChipLabel(sit, record, dayResult, isSingleEmp, emp.nome)
-
-                        return (
-                          <button key={emp.id}
-                            onClick={() => openFromCalendar(dateStr, emp.id)}
-                            className="w-full text-left mb-0.5 px-1.5 py-0.5 rounded text-xs truncate"
-                            style={{ backgroundColor: sit.bg, color: sit.color }}
-                            title={`${emp.nome} — ${sit.label}${record ? ` · ${formatTime(record.entrada)}–${formatTime(record.saida)}` : ''}`}>
-                            {label}
-                          </button>
-                        )
-                      })}
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Legenda */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 border-t text-xs"
-            style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
-            {[
-              { bg: '#EAF4F4', label: 'No prazo'           },
-              { bg: '#EBF5FB', label: 'Previsto / Extra'   },
-              { bg: '#FDEBD0', label: 'Atraso / Em andamento' },
-              { bg: '#FDEDEC', label: 'Ausente'             },
-              { bg: '#F2F3F4', label: 'Folga / Aguardando' },
-              { bg: '#F4ECF7', label: 'Folga não prevista' },
-              { bg: '#E9F7EF', label: 'Férias'             },
-            ].map(l => (
-              <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: l.bg, border: '1px solid #ddd', display: 'inline-block' }} />
-                {l.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Lista ── */}
-      {view === 'lista' && (
-        <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          <table className="w-full min-w-[860px] text-sm">
-            <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <tr>
-                {!filterEmployee && (
-                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
-                )}
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Data</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Previsto</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Entrada</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Almoço</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Saída</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Horas</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Situação</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {dayEntries.length === 0 && (
-                <tr>
-                  <td colSpan={isSingleEmp ? 8 : 9} className="text-center py-10"
-                    style={{ color: 'var(--color-text-muted)' }}>
-                    Nenhum dado para {MESES[mes - 1]} {ano}.
-                  </td>
-                </tr>
-              )}
-
-              {dayEntries.map((entry, idx) => {
-                const { record, dayResult, sit, isToday, isFuture } = entry
-                const previsto  = getPrevistoLabel(dayResult)
-                const isAbsent  = sit.status === 'ausente' || sit.status === 'falta'
-                const rowBg = isToday
-                  ? '#FEFCE8'
-                  : isFuture
-                  ? '#FAFBFF'
-                  : idx % 2 === 0 ? 'white' : '#FAFAFA'
-
-                const entradaColor = sit.status === 'atraso' ? '#D35400' : 'var(--color-text-primary)'
-                const saidaColor   = sit.status === 'saida_antecipada' ? '#D35400' : 'var(--color-text-primary)'
-
-                return (
-                  <tr key={`${entry.empId}|${entry.date}`} className="border-t"
-                    style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
-
-                    {!filterEmployee && (
-                      <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-primary)' }}>
-                        <div className="font-medium">{entry.empNome}</div>
-                        {entry.empCargo && (
-                          <div style={{ color: 'var(--color-text-muted)' }}>{entry.empCargo}</div>
-                        )}
-                      </td>
-                    )}
-
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                      <div className="font-medium">{formatDate(entry.date)}</div>
-                      <div className="capitalize" style={{ color: 'var(--color-text-muted)' }}>{formatWeekday(entry.date)}</div>
-                    </td>
-
-                    <td className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                      {previsto}
-                    </td>
-
-                    <td className="px-4 py-2.5 text-xs font-semibold"
-                      style={{ color: isAbsent ? '#C0392B' : entradaColor }}>
-                      {record?.entrada ? formatTime(record.entrada) : (isAbsent ? 'Ausente' : '—')}
-                    </td>
-
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                      {record?.saida_almoco
-                        ? `${formatTime(record.saida_almoco)}–${formatTime(record.retorno_almoco)}`
-                        : '—'}
-                    </td>
-
-                    <td className="px-4 py-2.5 text-xs font-semibold"
-                      style={{ color: isAbsent ? '#C0392B' : saidaColor }}>
-                      {record?.saida ? formatTime(record.saida) : '—'}
-                    </td>
-
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                      {formatInterval(record?.horas_trabalhadas ?? null)}
-                    </td>
-
-                    <td className="px-4 py-2.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: sit.bg, color: sit.color }}>
-                        {sit.label}
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-2.5">
-                      {record && (
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(record)}>Editar</Button>
-                          <Button variant="danger" size="sm"
-                            loading={deletingId === record.id}
-                            onClick={() => handleDelete(entry)}>
-                            Excluir
-                          </Button>
-                        </div>
+                  {!filterEmployee && (
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                      <div className="font-medium">{entry.empNome}</div>
+                      {entry.empCargo && (
+                        <div style={{ color: 'var(--color-text-muted)' }}>{entry.empCargo}</div>
                       )}
                     </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                  )}
+
+                  <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    <div className="font-medium">{formatDate(entry.date)}</div>
+                    <div className="capitalize" style={{ color: 'var(--color-text-muted)' }}>{formatWeekday(entry.date)}</div>
+                  </td>
+
+                  <td className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                    {previsto}
+                  </td>
+
+                  <td className="px-4 py-2.5 text-xs font-semibold"
+                    style={{ color: isAbsent ? '#C0392B' : entradaColor }}>
+                    {record?.entrada ? formatTime(record.entrada) : (isAbsent ? 'Ausente' : '—')}
+                  </td>
+
+                  <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {record?.saida_almoco
+                      ? `${formatTime(record.saida_almoco)}–${formatTime(record.retorno_almoco)}`
+                      : '—'}
+                  </td>
+
+                  <td className="px-4 py-2.5 text-xs font-semibold"
+                    style={{ color: isAbsent ? '#C0392B' : saidaColor }}>
+                    {record?.saida ? formatTime(record.saida) : '—'}
+                  </td>
+
+                  <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {formatInterval(record?.horas_trabalhadas ?? null)}
+                  </td>
+
+                  <td className="px-4 py-2.5">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{ backgroundColor: sit.bg, color: sit.color }}>
+                      {sit.label}
+                    </span>
+                  </td>
+
+                  <td className="px-2 py-2.5">
+                    <RowMenu
+                      entry={entry}
+                      onEdit={() => {
+                        if (entry.record) openEdit(entry.record)
+                        else openFromCalendar(entry.date, entry.empId)
+                      }}
+                      onDetail={() => setDetailEntry(entry)}
+                      onDelete={() => handleDelete(entry)}
+                      deletingId={deletingId}
+                    />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
 
       <ModalPonto
         open={modalOpen}
@@ -633,6 +772,10 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
         defaultSaida={modalSaida}
         defaultTipo={modalTipo}
       />
+
+      {detailEntry && (
+        <ModalDetalhar entry={detailEntry} onClose={() => setDetailEntry(null)} />
+      )}
     </>
   )
 }
