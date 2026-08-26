@@ -97,7 +97,7 @@ export function FormNovaRegra({ companyId, employees }: Props) {
   const [error,             setError]             = useState('')
 
   // Folgas adicionais — seleção única (radio) + valor numérico
-  type PTipo = 'quinzenal' | 'intervalo_dias' | 'intervalo_semanas' | 'intervalo_meses' | null
+  type PTipo = 'intervalo_dias' | 'intervalo_semanas' | 'quinzenal' | 'intervalo_meses' | 'intervalo_anos' | null
   const [pTipo,  setPTipo]  = useState<PTipo>(null)
   const [pValor, setPValor] = useState(1)
 
@@ -114,16 +114,18 @@ export function FormNovaRegra({ companyId, employees }: Props) {
     const dia = dataInicio ? new Date(dataInicio + 'T00:00:00').getDay() : 0
     let folga_patterns: FolgaPattern[] = []
     if (tipoEscala === 'semanal' && pTipo) {
-      if (pTipo === 'quinzenal') {
-        const data_ref = computeDataRef('intervalo_semanas', dia, dataInicio)
-        folga_patterns = [{ tipo: 'intervalo_semanas', intervalo: pValor * 2, dia, data_ref }]
-      } else if (pTipo === 'intervalo_dias') {
+      if (pTipo === 'intervalo_dias') {
         folga_patterns = [{ tipo: 'intervalo_dias', intervalo: pValor, data_ref: dataInicio }]
       } else if (pTipo === 'intervalo_semanas') {
         const data_ref = computeDataRef('intervalo_semanas', dia, dataInicio)
         folga_patterns = [{ tipo: 'intervalo_semanas', intervalo: pValor, dia, data_ref }]
-      } else {
+      } else if (pTipo === 'quinzenal') {
+        const data_ref = computeDataRef('intervalo_semanas', dia, dataInicio)
+        folga_patterns = [{ tipo: 'intervalo_semanas', intervalo: pValor * 2, dia, data_ref }]
+      } else if (pTipo === 'intervalo_meses') {
         folga_patterns = [{ tipo: 'intervalo_meses', intervalo: pValor, data_ref: dataInicio }]
+      } else if (pTipo === 'intervalo_anos') {
+        folga_patterns = [{ tipo: 'intervalo_meses', intervalo: pValor * 12, data_ref: dataInicio }]
       }
     }
 
@@ -346,10 +348,11 @@ export function FormNovaRegra({ companyId, employees }: Props) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {([
-                { tipo: 'quinzenal',         label: 'Quinzenal',    sufixo: 'quinzena(s)' },
-                { tipo: 'intervalo_dias',    label: 'Por dias',     sufixo: 'dia(s)'      },
-                { tipo: 'intervalo_semanas', label: 'Por semanas',  sufixo: 'semana(s)'   },
-                { tipo: 'intervalo_meses',   label: 'Por meses',    sufixo: 'mês/meses'   },
+                { tipo: 'intervalo_dias',    label: 'Por dias',    sufixo: 'dia(s)'      },
+                { tipo: 'intervalo_semanas', label: 'Por semanas', sufixo: 'semana(s)'   },
+                { tipo: 'quinzenal',         label: 'Quinzenal',   sufixo: 'quinzena(s)' },
+                { tipo: 'intervalo_meses',   label: 'Mensal',      sufixo: 'mês/meses'   },
+                { tipo: 'intervalo_anos',    label: 'Anual',       sufixo: 'ano(s)'      },
               ] as const).map(({ tipo, label, sufixo }) => {
                 const ativo = pTipo === tipo
                 return (
@@ -387,17 +390,6 @@ export function FormNovaRegra({ companyId, employees }: Props) {
                   </div>
                 )
               })}
-
-              {/* Nenhuma */}
-              {pTipo && (
-                <button
-                  type="button"
-                  onClick={() => setPTipo(null)}
-                  style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '0.25rem 0' }}
-                >
-                  ✕ Remover folga adicional
-                </button>
-              )}
             </div>
           </div>
         )}
