@@ -16,7 +16,11 @@ function parsePontoFields(formData: FormData) {
   const retorno_almoco = (formData.get('retorno_almoco') as string) || null
   const saida          = (formData.get('saida')          as string) || null
 
-  const ts = (h: string | null) => h ? `${data}T${h}:00` : null
+  const ts = (h: string | null) => {
+    if (!h) return null
+    const [hh = '00', mm = '00', ss = '00'] = h.split(':')
+    return `${data}T${hh}:${mm}:${ss}`
+  }
 
   return {
     employee_id:    formData.get('employee_id') as string,
