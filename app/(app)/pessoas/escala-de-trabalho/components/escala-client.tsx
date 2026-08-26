@@ -30,24 +30,35 @@ function formatTime(t: string | null) {
 function getDaysInMonth(ano: number, mes: number) { return new Date(ano, mes, 0).getDate() }
 function getFirstDayOfWeek(ano: number, mes: number) { return new Date(ano, mes - 1, 1).getDay() }
 
-function getWeekStart(offset: number): Date {
-  const today = new Date()
-  const sun = new Date(today)
-  sun.setDate(today.getDate() - today.getDay() + offset * 7)
-  sun.setHours(0, 0, 0, 0)
-  return sun
-}
-
 function getInitials(nome: string): string {
   return nome.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase()
 }
 
-function formatWeekRange(dates: Date[]): string {
-  const s = dates[0], e = dates[6]
-  const M = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
-  if (s.getMonth() === e.getMonth())
-    return `${s.getDate()} – ${e.getDate()} de ${M[s.getMonth()]} de ${s.getFullYear()}`
-  return `${s.getDate()} ${M[s.getMonth()]} – ${e.getDate()} ${M[e.getMonth()]} ${e.getFullYear()}`
+function getWeeksOfMonth(mes: number, ano: number): Date[][] {
+  const firstDay = new Date(ano, mes - 1, 1)
+  const sun = new Date(firstDay)
+  sun.setDate(firstDay.getDate() - firstDay.getDay())
+  sun.setHours(0, 0, 0, 0)
+  const lastDay = new Date(ano, mes, 0)
+  const weeks: Date[][] = []
+  const d = new Date(sun)
+  while (d <= lastDay) {
+    weeks.push(Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(d)
+      day.setDate(d.getDate() + i)
+      return day
+    }))
+    d.setDate(d.getDate() + 7)
+  }
+  return weeks
+}
+
+function weekTabLabel(week: Date[], mes: number): string {
+  const inMonth = week.filter(d => d.getMonth() + 1 === mes)
+  if (!inMonth.length) return ''
+  const min = inMonth[0].getDate()
+  const max = inMonth[inMonth.length - 1].getDate()
+  return `${String(min).padStart(2, '0')} – ${String(max).padStart(2, '0')}`
 }
 
 // ── ThreeDotMenu ──────────────────────────────────────────────────────────────
@@ -166,7 +177,14 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
   const router = useRouter()
 
   const [view,           setView]        = useState<'calendario' | 'cronograma'>('calendario')
-  const [weekOffset,     setWeekOffset]  = useState(0)
+  const [weekIdx,        setWeekIdx]     = useState(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    if (today.getMonth() + 1 === mes && today.getFullYear() === ano) {
+      const idx = getWeeksOfMonth(mes, ano).findIndex(w => w[0] <= today && today <= w[6])
+      return idx >= 0 ? idx : 0
+    }
+    return 0
+  })
   const [filterEmployee, setFilter]      = useState('')
   const [modalRegra,     setModalRegra]  = useState(false)
   const [editingRule,    setEditingRule] = useState<ScheduleRule | null>(null)
@@ -199,12 +217,8 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
   listaRows.sort((a, b) => a.day.date.localeCompare(b.day.date) || a.emp.nome.localeCompare(b.emp.nome))
 
   // Cronograma semanal
-  const weekStart = getWeekStart(weekOffset)
-  const weekDates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart)
-    d.setDate(weekStart.getDate() + i)
-    return d
-  })
+  const weeksOfMonth = getWeeksOfMonth(mes, ano)
+  const weekDates    = weeksOfMonth[Math.min(weekIdx, weeksOfMonth.length - 1)]
   const cronogramaData = filteredEmps.map(emp => {
     const cache: Record<string, DayResult[]> = {}
     const days = weekDates.map(date => {
@@ -421,18 +435,24 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
       {/* ── Cronograma ───────────────────────────────────────────────────── */}
       {view === 'cronograma' && (
         <>
-          {/* Navegação semanal */}
-          <div className="flex items-center justify-between mb-4 p-3 rounded-xl border"
-            style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-            <button onClick={() => setWeekOffset(w => w - 1)}
-              className="px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-              style={{ color: 'var(--color-text-secondary)' }}>← Anterior</button>
-            <span className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
-              {formatWeekRange(weekDates)}
-            </span>
-            <button onClick={() => setWeekOffset(w => w + 1)}
-              className="px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-              style={{ color: 'var(--color-text-secondary)' }}>Próxima →</button>
+          {/* Tabs de semana */}
+          <div className="flex gap-1.5 flex-wrap mb-4">
+            {weeksOfMonth.map((week, i) => {
+              const label  = weekTabLabel(week, mes)
+              const active = i === weekIdx
+              return (
+                <button key={i} onClick={() => setWeekIdx(i)}
+                  style={{
+                    padding: '0.3rem 0.75rem', borderRadius: '0.5rem', border: '1px solid',
+                    fontSize: '0.75rem', fontWeight: active ? 600 : 400, cursor: 'pointer',
+                    borderColor: active ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)',
+                    backgroundColor: active ? 'var(--color-primary)' : 'white',
+                    color: active ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
+                  }}>
+                  {label}
+                </button>
+              )
+            })}
           </div>
 
           {/* Grade semanal */}
@@ -566,63 +586,6 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
             <span>✱ = exceção manual</span>
           </div>
 
-          {/* Regras — gerenciamento */}
-          <div style={{ marginTop: '1.5rem' }}>
-            <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
-              Regras de escala
-            </p>
-            <div className="rounded-xl border overflow-x-auto"
-              style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-              <table className="w-full min-w-[700px] text-sm">
-                <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                  <tr>
-                    {['Funcionário','Início','Fim','Horário','Folgas fixas',''].map((h, i) => (
-                      <th key={i} className={`${i < 5 ? 'text-left' : ''} px-4 py-3 font-medium`}
-                        style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRules.length === 0 && (
-                    <tr><td colSpan={6} className="text-center py-8" style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
-                      Nenhuma regra cadastrada.
-                    </td></tr>
-                  )}
-                  {filteredRules.map((rule, idx) => {
-                    const emp = employees.find(e => e.id === rule.employee_id)
-                    const DIAS_L = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-                    const folgasLabel = rule.dias_folga.length > 0
-                      ? rule.dias_folga.map(d => DIAS_L[d]).join(', ')
-                      : 'Sem folga fixa'
-                    const fmtDate = (s: string) => { const [y, m, d] = s.split('-'); return `${d}/${m}/${y}` }
-                    return (
-                      <tr key={rule.id} className="border-t"
-                        style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: idx % 2 === 0 ? 'white' : '#FAFAFA' }}>
-                        <td className="px-4 py-2 text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>{emp?.nome ?? '—'}</td>
-                        <td className="px-4 py-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{fmtDate(rule.data_inicio)}</td>
-                        <td className="px-4 py-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                          {rule.data_fim ? fmtDate(rule.data_fim) : <span style={{ color: 'var(--color-text-muted)' }}>Indefinido</span>}
-                        </td>
-                        <td className="px-4 py-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                          {formatTime(rule.hora_entrada)}–{formatTime(rule.hora_saida)}
-                        </td>
-                        <td className="px-4 py-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{folgasLabel}</td>
-                        <td className="px-4 py-2">
-                          <div className="flex justify-end">
-                            <ThreeDotMenu
-                              onEdit={() => { setEditingRule(rule); setModalRegra(true) }}
-                              onDelete={() => handleDeleteRule(rule.id)}
-                              loading={deletingId === rule.id}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </>
       )}
 
