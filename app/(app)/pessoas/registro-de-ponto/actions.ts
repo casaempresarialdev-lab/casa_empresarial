@@ -19,7 +19,8 @@ function parsePontoFields(formData: FormData) {
   const ts = (h: string | null) => {
     if (!h) return null
     const [hh = '00', mm = '00', ss = '00'] = h.split(':')
-    return `${data}T${hh}:${mm}:${ss}`
+    // offset explícito: sem ele, o Postgres assume UTC e desloca o horário em -3h na exibição
+    return `${data}T${hh}:${mm}:${ss}-03:00`
   }
 
   return {
