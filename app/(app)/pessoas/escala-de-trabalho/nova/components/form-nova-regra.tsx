@@ -341,10 +341,7 @@ export function FormNovaRegra({ companyId, employees }: Props) {
         {/* Seção 5 — Folgas adicionais (apenas semanal) */}
         {tipoEscala === 'semanal' && (
           <div style={sec}>
-            <p style={secTitle}>Folgas adicionais</p>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-              Repetição de folga além dos dias fixos. Selecione um tipo.
-            </p>
+            <p style={secTitle}>Repetição</p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {([
