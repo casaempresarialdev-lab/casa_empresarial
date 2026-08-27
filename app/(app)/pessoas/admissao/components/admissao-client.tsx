@@ -5,20 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { updateEmployeeStatusAction, updateAdmissionStageAction } from '../actions'
 import { generateOnboardingTokenAction } from '../../funcionarios/actions'
+import { ModalGerenciarColunas } from './modal-gerenciar-colunas'
 import type { Employee } from '../../funcionarios/queries'
-import type { OnboardingTokenInfo } from '../queries'
+import type { OnboardingTokenInfo, AdmissionStage } from '../queries'
 
-const STAGES = [
-  { key: 'entrevista',               label: 'Entrevista',               color: '#818cf8' },
-  { key: 'enviar_formulario',        label: 'Enviar Formulário',        color: '#fbbf24' },
-  { key: 'aguardando_preenchimento', label: 'Aguard. Preenchimento',    color: '#f97316' },
-  { key: 'agendar_exame',            label: 'Agendar Exame',            color: '#38bdf8' },
-  { key: 'aguardando_contabilidade', label: 'Aguard. Contabilidade',    color: '#a78bfa' },
-  { key: 'assinatura',               label: 'Assinatura',               color: '#34d399' },
-  { key: 'finalizado',               label: 'Finalizado',               color: '#22c55e' },
-] as const
-
-type StageKey = typeof STAGES[number]['key']
+type StageKey = string
 
 function formatDate(d: string | null) {
   if (!d) return '—'
@@ -32,8 +23,8 @@ function tokenStatus(t: OnboardingTokenInfo | undefined): 'none' | 'pending' | '
   return 'pending'
 }
 
-function getStage(emp: Employee): StageKey {
-  return (emp.admission_stage as StageKey) ?? 'entrevista'
+function getStage(emp: Employee, stages: AdmissionStage[]): StageKey {
+  return emp.admission_stage ?? stages[0]?.key ?? ''
 }
 
 // ── Card Detail Modal ────────────────────────────────────────────────────────
@@ -194,27 +185,31 @@ interface Props {
   tokens: Record<string, OnboardingTokenInfo>
   companyId: string
   photoUrls: Record<string, string>
+  stages: AdmissionStage[]
 }
 
-export function AdmissaoClient({ employees, tokens, photoUrls }: Props) {
+export function AdmissaoClient({ employees, tokens, photoUrls, companyId, stages }: Props) {
   const router = useRouter()
 
   const [stageMap, setStageMap] = useState<Record<string, StageKey>>(() => {
     const map: Record<string, StageKey> = {}
-    for (const emp of employees) map[emp.id] = getStage(emp)
+    for (const emp of employees) map[emp.id] = getStage(emp, stages)
     return map
   })
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverStage, setDragOverStage] = useState<StageKey | null>(null)
   const [movingId, setMovingId] = useState<string | null>(null)
   const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null)
+  const [manageOpen, setManageOpen] = useState(false)
+
+  const defaultStageKey = stages[0]?.key ?? ''
 
   function getEmployeesInStage(stageKey: StageKey) {
-    return employees.filter(e => (stageMap[e.id] ?? 'entrevista') === stageKey)
+    return employees.filter(e => (stageMap[e.id] ?? defaultStageKey) === stageKey)
   }
 
   async function moveToStage(empId: string, newStage: StageKey) {
-    const prevStage = stageMap[empId] ?? 'entrevista'
+    const prevStage = stageMap[empId] ?? defaultStageKey
     if (prevStage === newStage) return
     setMovingId(empId)
     setStageMap(prev => ({ ...prev, [empId]: newStage }))
@@ -252,9 +247,9 @@ export function AdmissaoClient({ employees, tokens, photoUrls }: Props) {
   }
 
   function adjacentStage(current: StageKey, dir: 'prev' | 'next'): StageKey | null {
-    const idx = STAGES.findIndex(s => s.key === current)
-    if (dir === 'prev') return idx > 0 ? STAGES[idx - 1].key : null
-    return idx < STAGES.length - 1 ? STAGES[idx + 1].key : null
+    const idx = stages.findIndex(s => s.key === current)
+    if (dir === 'prev') return idx > 0 ? stages[idx - 1].key : null
+    return idx < stages.length - 1 ? stages[idx + 1].key : null
   }
 
   return (
@@ -269,13 +264,16 @@ export function AdmissaoClient({ employees, tokens, photoUrls }: Props) {
             Arraste os cards entre as etapas ou use as setas ← →
           </p>
         </div>
-        <Button onClick={() => router.push('/pessoas/admissao/novo')}>+ Adicionar</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={() => setManageOpen(true)}>⚙ Gerenciar colunas</Button>
+          <Button onClick={() => router.push('/pessoas/admissao/novo')}>+ Adicionar</Button>
+        </div>
       </div>
 
       {/* Kanban */}
       <div className="overflow-x-auto pb-4 -mx-1 px-1">
-        <div className="flex gap-3" style={{ minWidth: `${STAGES.length * 268}px` }}>
-          {STAGES.map((stage, stageIdx) => {
+        <div className="flex gap-3" style={{ minWidth: `${stages.length * 268}px` }}>
+          {stages.map((stage, stageIdx) => {
             const colEmps = getEmployeesInStage(stage.key)
             const isOver = dragOverStage === stage.key
 
@@ -319,7 +317,7 @@ export function AdmissaoClient({ employees, tokens, photoUrls }: Props) {
                     const tStatus = tokenStatus(tok)
                     const isDragging = draggingId === emp.id
                     const isMoving = movingId === emp.id
-                    const cur = stageMap[emp.id] ?? 'entrevista'
+                    const cur = stageMap[emp.id] ?? defaultStageKey
                     const prev = adjacentStage(cur, 'prev')
                     const next = adjacentStage(cur, 'next')
 
@@ -396,19 +394,19 @@ export function AdmissaoClient({ employees, tokens, photoUrls }: Props) {
                             disabled={!prev || isMoving}
                             className="w-6 h-6 flex items-center justify-center rounded text-sm hover:bg-gray-100 disabled:opacity-25 transition-colors"
                             style={{ color: 'var(--color-text-muted)' }}
-                            title={prev ? STAGES.find(s => s.key === prev)?.label : undefined}
+                            title={prev ? stages.find(s => s.key === prev)?.label : undefined}
                           >
                             ←
                           </button>
                           <span className="text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-                            {stageIdx + 1}/{STAGES.length}
+                            {stageIdx + 1}/{stages.length}
                           </span>
                           <button
                             onClick={() => next && moveToStage(emp.id, next)}
                             disabled={!next || isMoving}
                             className="w-6 h-6 flex items-center justify-center rounded text-sm hover:bg-gray-100 disabled:opacity-25 transition-colors"
                             style={{ color: 'var(--color-text-muted)' }}
-                            title={next ? STAGES.find(s => s.key === next)?.label : undefined}
+                            title={next ? stages.find(s => s.key === next)?.label : undefined}
                           >
                             →
                           </button>
@@ -463,6 +461,13 @@ export function AdmissaoClient({ employees, tokens, photoUrls }: Props) {
           onRefresh={() => router.refresh()}
         />
       )}
+
+      <ModalGerenciarColunas
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        companyId={companyId}
+        stages={stages}
+      />
     </>
   )
 }

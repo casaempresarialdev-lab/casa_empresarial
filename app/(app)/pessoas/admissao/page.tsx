@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { getAdmissaoEmployees, getOnboardingTokens, type OnboardingTokenInfo } from './queries'
+import { getAdmissaoEmployees, getOnboardingTokens, getAdmissionStages, type OnboardingTokenInfo } from './queries'
 import { AdmissaoClient } from './components/admissao-client'
 
 export const dynamic = 'force-dynamic'
@@ -15,9 +15,10 @@ export default async function AdmissaoPage() {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const [employees, tokensArr] = await Promise.all([
+  const [employees, tokensArr, stages] = await Promise.all([
     getAdmissaoEmployees(companyId),
     getOnboardingTokens(companyId),
+    getAdmissionStages(companyId),
   ])
 
   // Mantém apenas o token mais recente por funcionário
@@ -41,6 +42,6 @@ export default async function AdmissaoPage() {
   )
 
   return (
-    <AdmissaoClient employees={employees} tokens={tokens} companyId={companyId} photoUrls={photoUrls} />
+    <AdmissaoClient employees={employees} tokens={tokens} companyId={companyId} photoUrls={photoUrls} stages={stages} />
   )
 }

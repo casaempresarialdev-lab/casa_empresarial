@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getEmployees } from './queries'
+import { getFinalStageKey } from '../admissao/queries'
 import { FuncionariosClient } from './components/funcionarios-client'
 
 export const dynamic = 'force-dynamic'
@@ -15,13 +16,17 @@ export default async function FuncionariosPage() {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const employees = await getEmployees(companyId)
+  const [employees, finalStageKey] = await Promise.all([
+    getEmployees(companyId),
+    getFinalStageKey(companyId),
+  ])
 
   return (
     <div className="max-w-7xl mx-auto">
       <FuncionariosClient
         employees={employees}
         companyId={companyId}
+        finalStageKey={finalStageKey}
       />
     </div>
   )

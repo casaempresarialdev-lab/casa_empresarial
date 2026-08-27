@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
+import { getFinalStageKey } from '../admissao/queries'
 
 async function getAppUrl() {
   const hdrs = await headers()
@@ -83,7 +84,7 @@ function dec(fd: FormData, key: string): number | null {
   return isNaN(n) ? null : n
 }
 
-function parseEmployeeFields(formData: FormData) {
+async function parseEmployeeFields(formData: FormData, companyId: string) {
   const dataAdmissao = (formData.get('data_admissao') as string) || null
 
   const fimExp1Raw = (formData.get('fim_experiencia_1') as string) || null
@@ -106,6 +107,7 @@ function parseEmployeeFields(formData: FormData) {
   const depRaw = parseInt((formData.get('dependentes') as string) || '0')
 
   const status = (formData.get('status') as string) || 'admissao'
+  const finalStageKey = status !== 'admissao' ? await getFinalStageKey(companyId) : null
 
   return {
     nome: (formData.get('nome') as string)?.toUpperCase() || '',
@@ -120,9 +122,9 @@ function parseEmployeeFields(formData: FormData) {
     salario: dec(formData, 'salario'),
     plano_saude: formData.get('plano_saude') === 'true',
     status,
-    // Quando o funcionário sai do fluxo de admissão, marca admission_stage como finalizado
-    // para que apareça na aba Ativos da Equipe.
-    ...(status !== 'admissao' && { admission_stage: 'finalizado' }),
+    // Quando o funcionário sai do fluxo de admissão, marca admission_stage como a coluna
+    // final configurada pela empresa, para que apareça na aba Ativos da Equipe.
+    ...(finalStageKey && { admission_stage: finalStageKey }),
     data_admissao: dataAdmissao,
     fim_experiencia_1,
     fim_experiencia_2,
@@ -171,7 +173,7 @@ export async function createEmployeeAction(companyId: string, formData: FormData
   const viewerC = await getViewerContext(companyId)
   if (viewerC?.isColaborador) return { error: 'Sem permissão para esta ação.' }
 
-  const fields = parseEmployeeFields(formData)
+  const fields = await parseEmployeeFields(formData, companyId)
   if (!fields.nome) return { error: 'Nome é obrigatório.' }
 
   const admin = createAdminClient()
@@ -200,9 +202,6 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
-  const fields = parseEmployeeFields(formData)
-  if (!fields.nome) return { error: 'Nome é obrigatório.' }
-
   const admin = createAdminClient()
   const { data: current } = await admin
     .from('employees')
@@ -213,6 +212,9 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
   if (!current) return { error: 'Funcionário não encontrado.' }
   const viewerU = await getViewerContext(current.company_id)
   if (viewerU?.isColaborador) return { error: 'Sem permissão para esta ação. Use "Meus Dados" para editar suas informações de contato.' }
+
+  const fields = await parseEmployeeFields(formData, current.company_id)
+  if (!fields.nome) return { error: 'Nome é obrigatório.' }
 
   const existingDocs: Partial<Record<DocKey, string | null>> = {
     foto: current.foto_path,

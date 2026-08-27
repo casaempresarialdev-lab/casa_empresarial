@@ -149,9 +149,10 @@ function ThreeDotMenu({ onView, onEdit, onDelete, loading }: {
 interface Props {
   employees: Employee[]
   companyId: string
+  finalStageKey: string
 }
 
-export function FuncionariosClient({ employees }: Props) {
+export function FuncionariosClient({ employees, finalStageKey }: Props) {
   const router = useRouter()
   const [tab, setTab]               = useState<'ativos' | 'inativos'>('ativos')
   const [tipoFiltro, setTipoFiltro] = useState<string>('todos')
@@ -159,7 +160,7 @@ export function FuncionariosClient({ employees }: Props) {
 
   const ativos   = employees.filter(e =>
     ['admissao', 'experiencia', 'ativo', 'ferias', 'afastado'].includes(e.status) &&
-    e.admission_stage === 'finalizado'
+    e.admission_stage === finalStageKey
   )
   const inativos = employees.filter(e => ['inativo', 'demitido'].includes(e.status))
   const byTab    = tab === 'ativos' ? ativos : inativos
