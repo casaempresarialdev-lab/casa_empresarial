@@ -22,17 +22,20 @@ export default async function FuncionarioViewPage({ params }: Props) {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const [employee, companyBenefits] = await Promise.all([
+  const admin = createAdminClient()
+  const [employee, companyBenefits, { data: membership }] = await Promise.all([
     getEmployeeById(id, companyId),
     getActiveCompanyBenefits(companyId),
+    admin.from('company_members').select('role').eq('company_id', companyId).eq('profile_id', user.id).eq('status', 'active').single(),
   ])
 
   if (!employee) notFound()
 
+  const viewerRole = membership?.role ?? 'member'
+
   // Signed URL para foto (bucket privado)
   let fotoUrl: string | null = null
   if (employee.foto_path) {
-    const admin = createAdminClient()
     const { data } = await admin.storage
       .from('documentos')
       .createSignedUrl(employee.foto_path, 3600)
@@ -46,6 +49,7 @@ export default async function FuncionarioViewPage({ params }: Props) {
         companyId={companyId}
         companyBenefits={companyBenefits}
         fotoUrl={fotoUrl}
+        viewerRole={viewerRole}
       />
     </div>
   )

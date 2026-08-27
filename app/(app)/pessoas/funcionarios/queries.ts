@@ -38,6 +38,7 @@ export type Employee = {
   pin: string | null
   pin_ativo: boolean
   admission_stage: string | null
+  profile_id: string | null
   foto_path: string | null
   doc_rg_cnh_frente_path: string | null
   doc_rg_verso_path: string | null

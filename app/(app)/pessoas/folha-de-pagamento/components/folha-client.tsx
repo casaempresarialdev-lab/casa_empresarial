@@ -136,9 +136,10 @@ interface Props {
   company: Company | null
   companyId: string
   entries: Record<string, PayrollEntryVariable>
+  readOnly?: boolean
 }
 
-export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, company, companyId, entries }: Props) {
+export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, company, companyId, entries, readOnly = false }: Props) {
   const router = useRouter()
   const [mes, setMes] = useState(mesAno.split('-')[1])
   const [ano, setAno] = useState(mesAno.split('-')[0])
@@ -364,24 +365,26 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
                     ) : '—'}
                   </td>
                   <td style={{ ...TD, textAlign: 'center' }}>
-                    <button
-                      onClick={() => openModal(r.emp)}
-                      title="Lançar dados variáveis do mês"
-                      style={{
-                        padding: '4px 10px',
-                        fontSize: '0.68rem',
-                        fontWeight: 600,
-                        borderRadius: 6,
-                        border: '1px solid',
-                        cursor: 'pointer',
-                        borderColor: hasEntry ? '#2471A3' : '#D1D5DB',
-                        backgroundColor: hasEntry ? '#EBF5FB' : 'transparent',
-                        color: hasEntry ? '#2471A3' : muted,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {hasEntry ? '✏️' : '+'} Lançar
-                    </button>
+                    {!readOnly && (
+                      <button
+                        onClick={() => openModal(r.emp)}
+                        title="Lançar dados variáveis do mês"
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '0.68rem',
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          border: '1px solid',
+                          cursor: 'pointer',
+                          borderColor: hasEntry ? '#2471A3' : '#D1D5DB',
+                          backgroundColor: hasEntry ? '#EBF5FB' : 'transparent',
+                          color: hasEntry ? '#2471A3' : muted,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {hasEntry ? '✏️' : '+'} Lançar
+                      </button>
+                    )}
                   </td>
                 </tr>
               )

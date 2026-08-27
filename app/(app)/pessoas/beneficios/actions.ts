@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getViewerContext } from '@/lib/auth/viewer'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -9,9 +10,16 @@ async function getAuthUser() {
   return user
 }
 
+async function assertCanManage(companyId: string) {
+  const viewer = await getViewerContext(companyId)
+  return viewer?.isColaborador ? { error: 'Sem permissão para esta ação.' } : null
+}
+
 export async function createBenefitAction(companyId: string, formData: FormData) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const guard = await assertCanManage(companyId)
+  if (guard) return guard
 
   const nome = (formData.get('nome') as string)?.trim()
   if (!nome) return { error: 'Nome é obrigatório.' }
@@ -36,6 +44,12 @@ export async function updateBenefitAction(benefitId: string, formData: FormData)
   if (!user) return { error: 'Não autenticado' }
 
   const admin = createAdminClient()
+
+  const { data: current } = await admin.from('company_benefits').select('company_id').eq('id', benefitId).single()
+  if (!current) return { error: 'Benefício não encontrado.' }
+  const guard = await assertCanManage(current.company_id)
+  if (guard) return guard
+
   const { error } = await admin.from('company_benefits').update({
     nome: (formData.get('nome') as string)?.trim(),
     valor: parseFloat((formData.get('valor') as string)?.replace(',', '.') || '0') || 0,
@@ -55,6 +69,12 @@ export async function deleteBenefitAction(benefitId: string) {
   if (!user) return { error: 'Não autenticado' }
 
   const admin = createAdminClient()
+
+  const { data: current } = await admin.from('company_benefits').select('company_id').eq('id', benefitId).single()
+  if (!current) return { error: 'Benefício não encontrado.' }
+  const guard = await assertCanManage(current.company_id)
+  if (guard) return guard
+
   const { error } = await admin.from('company_benefits').delete().eq('id', benefitId)
 
   if (error) return { error: error.message }
@@ -70,6 +90,8 @@ export async function toggleEmployeeBenefitAction(
 ) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const guard = await assertCanManage(companyId)
+  if (guard) return guard
 
   const admin = createAdminClient()
 

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
+import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getViewerContext } from '@/lib/auth/viewer'
 import { getScheduleRules, getScheduleExceptions, getActiveEmployees } from './queries'
 import { EscalaClient } from './components/escala-client'
 
@@ -24,11 +25,19 @@ export default async function EscalaDeTrabalhoPage({
   const mes = parseInt(params.mes ?? String(now.getMonth() + 1))
   const ano = parseInt(params.ano ?? String(now.getFullYear()))
 
-  const [rules, exceptions, employees] = await Promise.all([
+  const viewer = await getViewerContext(companyId)
+  if (viewer?.isColaborador && !viewer.myEmployeeId) notFound()
+
+  const [rulesAll, exceptionsAll, employeesAll] = await Promise.all([
     getScheduleRules(companyId),
     getScheduleExceptions(companyId, mes, ano),
     getActiveEmployees(companyId),
   ])
+
+  const myId       = viewer?.myEmployeeId
+  const rules      = viewer?.isColaborador ? rulesAll.filter(r => r.employee_id === myId) : rulesAll
+  const exceptions = viewer?.isColaborador ? exceptionsAll.filter(e => e.employee_id === myId) : exceptionsAll
+  const employees  = viewer?.isColaborador ? employeesAll.filter(e => e.id === myId) : employeesAll
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -39,6 +48,7 @@ export default async function EscalaDeTrabalhoPage({
         companyId={companyId}
         mes={mes}
         ano={ano}
+        readOnly={viewer?.isColaborador ?? false}
       />
     </div>
   )

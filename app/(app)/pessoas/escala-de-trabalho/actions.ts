@@ -2,12 +2,18 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getViewerContext } from '@/lib/auth/viewer'
 import type { FolgaPattern } from '@/lib/escala/generate'
 
 async function getAuthUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   return user
+}
+
+async function assertCanManage(companyId: string) {
+  const viewer = await getViewerContext(companyId)
+  return viewer?.isColaborador ? { error: 'Sem permissão para esta ação.' } : null
 }
 
 const REVALIDATE = () => revalidatePath('/pessoas/escala-de-trabalho')
@@ -33,6 +39,8 @@ export type RulePayload = {
 export async function createRuleAction(companyId: string, payload: RulePayload) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const guard = await assertCanManage(companyId)
+  if (guard) return guard
 
   if (!payload.employee_id) return { error: 'Selecione um funcionário.' }
   if (!payload.data_inicio)  return { error: 'Data de início é obrigatória.' }
@@ -54,6 +62,8 @@ export async function createRuleAction(companyId: string, payload: RulePayload) 
 export async function updateRuleAction(ruleId: string, companyId: string, payload: Partial<RulePayload>) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const guard = await assertCanManage(companyId)
+  if (guard) return guard
 
   const admin = createAdminClient()
   const { error } = await admin
@@ -70,6 +80,8 @@ export async function updateRuleAction(ruleId: string, companyId: string, payloa
 export async function deleteRuleAction(ruleId: string, companyId: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const guard = await assertCanManage(companyId)
+  if (guard) return guard
 
   const admin = createAdminClient()
   const { error } = await admin
@@ -94,6 +106,8 @@ export async function upsertExceptionAction(
 ) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const guard = await assertCanManage(companyId)
+  if (guard) return guard
 
   const admin = createAdminClient()
   const { error } = await admin
@@ -111,6 +125,8 @@ export async function upsertExceptionAction(
 export async function deleteExceptionAction(exceptionId: string, companyId: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const guard = await assertCanManage(companyId)
+  if (guard) return guard
 
   const admin = createAdminClient()
   const { error } = await admin

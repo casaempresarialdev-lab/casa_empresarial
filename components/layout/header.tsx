@@ -38,6 +38,8 @@ export function Header({ companies = [], userName, userAvatar }: HeaderProps) {
     const supabase = createClient()
     setActiveCompany(null)
     document.cookie = 'active_company_id=; path=/; max-age=0; SameSite=Lax'
+    document.cookie = 'active_company_role=; path=/; max-age=0; SameSite=Lax'
+    document.cookie = 'my_employee_id=; path=/; max-age=0; SameSite=Lax'
     await supabase.auth.signOut()
     router.push('/login')
   }

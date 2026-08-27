@@ -80,14 +80,37 @@ const NAV_ITEMS: NavItem[] = [
 
 interface SidebarProps {
   logoUrl?: string | null
+  role?: string | null
+  myEmployeeId?: string | null
 }
 
-export function Sidebar({ logoUrl }: SidebarProps) {
+const COLABORADOR_NAV_ITEMS: NavItem[] = [
+  {
+    label: 'Pessoas',
+    icon: '👥',
+    children: [
+      { label: 'Registro de Ponto',    href: '/pessoas/registro-de-ponto' },
+      { label: 'Escala de Trabalho',   href: '/pessoas/escala-de-trabalho' },
+      { label: 'Folha de Pagamento',   href: '/pessoas/folha-de-pagamento' },
+      { label: 'Benefícios',           href: '/pessoas/beneficios' },
+    ],
+  },
+]
+
+export function Sidebar({ logoUrl, role, myEmployeeId }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const mobileSidebarOpen = useAppStore((s) => s.mobileSidebarOpen)
   const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen)
   const pathname = usePathname()
+
+  const isColaborador = role === 'colaborador'
+  const navItems: NavItem[] = isColaborador
+    ? [
+        ...COLABORADOR_NAV_ITEMS,
+        ...(myEmployeeId ? [{ label: 'Meus Dados', href: `/pessoas/funcionarios/${myEmployeeId}`, icon: '🙋' } as NavLeaf] : []),
+      ]
+    : NAV_ITEMS
 
   function closeMobile() {
     setMobileSidebarOpen(false)
@@ -156,7 +179,7 @@ export function Sidebar({ logoUrl }: SidebarProps) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             if (!item.children) {
               const active = pathname === item.href
               return (

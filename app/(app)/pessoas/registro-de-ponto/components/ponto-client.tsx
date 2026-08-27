@@ -17,6 +17,7 @@ interface Props {
   companyId: string
   mes: number
   ano: number
+  readOnly?: boolean
 }
 
 const MESES       = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
@@ -380,7 +381,7 @@ function ModalDetalhar({ entry, onClose }: { entry: DayEntry; onClose: () => voi
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function PontoClient({ records, employees, rules, exceptions, companyId, mes, ano }: Props) {
+export function PontoClient({ records, employees, rules, exceptions, companyId, mes, ano, readOnly = false }: Props) {
   const router = useRouter()
 
   const [tolerancia,     setTolerancia]    = useState(10)
@@ -638,14 +639,16 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
       </div>
 
       {/* Filtro */}
-      <div className="mb-4">
-        <select value={filterEmployee} onChange={e => setFilter(e.target.value)}
-          className="w-full px-4 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}>
-          <option value="">Todos os funcionários</option>
-          {employees.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-        </select>
-      </div>
+      {!readOnly && (
+        <div className="mb-4">
+          <select value={filterEmployee} onChange={e => setFilter(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg border text-sm"
+            style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}>
+            <option value="">Todos os funcionários</option>
+            {employees.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+          </select>
+        </div>
+      )}
 
       {deleteError && (
         <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{deleteError}</p>
@@ -666,7 +669,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Saída</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Horas</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Situação</th>
-              <th className="w-10 px-2 py-3" />
+              {!readOnly && <th className="w-10 px-2 py-3" />}
             </tr>
           </thead>
           <tbody>
@@ -743,18 +746,20 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
                     </span>
                   </td>
 
-                  <td className="px-2 py-2.5">
-                    <RowMenu
-                      entry={entry}
-                      onEdit={() => {
-                        if (entry.record) openEdit(entry.record)
-                        else openFromCalendar(entry.date, entry.empId)
-                      }}
-                      onDetail={() => setDetailEntry(entry)}
-                      onDelete={() => handleDelete(entry)}
-                      deletingId={deletingId}
-                    />
-                  </td>
+                  {!readOnly && (
+                    <td className="px-2 py-2.5">
+                      <RowMenu
+                        entry={entry}
+                        onEdit={() => {
+                          if (entry.record) openEdit(entry.record)
+                          else openFromCalendar(entry.date, entry.empId)
+                        }}
+                        onDetail={() => setDetailEntry(entry)}
+                        onDelete={() => handleDelete(entry)}
+                        deletingId={deletingId}
+                      />
+                    </td>
+                  )}
                 </tr>
               )
             })}

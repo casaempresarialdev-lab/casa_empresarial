@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getViewerContext } from '@/lib/auth/viewer'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -39,6 +40,9 @@ export async function createTimeRecordAction(companyId: string, formData: FormDa
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
+  const viewer = await getViewerContext(companyId)
+  if (viewer?.isColaborador) return { error: 'Sem permissão para esta ação.' }
+
   const fields = parsePontoFields(formData)
   if (!fields.employee_id) return { error: 'Selecione um funcionário.' }
   if (!fields.data) return { error: 'Data é obrigatória.' }
@@ -55,9 +59,15 @@ export async function updateTimeRecordAction(recordId: string, formData: FormDat
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
+  const admin = createAdminClient()
+
+  const { data: current } = await admin.from('time_records').select('company_id').eq('id', recordId).single()
+  if (!current) return { error: 'Registro não encontrado.' }
+  const viewer = await getViewerContext(current.company_id)
+  if (viewer?.isColaborador) return { error: 'Sem permissão para esta ação.' }
+
   const fields = parsePontoFields(formData)
 
-  const admin = createAdminClient()
   const { error } = await admin.from('time_records').update(fields).eq('id', recordId)
 
   if (error) return { error: error.message }
@@ -70,6 +80,12 @@ export async function deleteTimeRecordAction(recordId: string) {
   if (!user) return { error: 'Não autenticado' }
 
   const admin = createAdminClient()
+
+  const { data: current } = await admin.from('time_records').select('company_id').eq('id', recordId).single()
+  if (!current) return { error: 'Registro não encontrado.' }
+  const viewer = await getViewerContext(current.company_id)
+  if (viewer?.isColaborador) return { error: 'Sem permissão para esta ação.' }
+
   const { error } = await admin.from('time_records').delete().eq('id', recordId)
 
   if (error) return { error: error.message }

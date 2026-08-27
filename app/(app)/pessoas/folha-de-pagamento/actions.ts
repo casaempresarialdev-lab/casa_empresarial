@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getViewerContext } from '@/lib/auth/viewer'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -331,6 +332,8 @@ export async function upsertPayrollVariableAction(
 ) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const viewer = await getViewerContext(companyId)
+  if (viewer?.isColaborador) return { error: 'Sem permissão para esta ação.' }
 
   const admin = createAdminClient()
 

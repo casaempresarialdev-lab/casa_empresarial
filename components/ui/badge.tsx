@@ -5,6 +5,7 @@ const roleConfig: Record<string, { label: string; className: string }> = {
   admin:      { label: 'Administrador', className: 'bg-blue-100 text-blue-800' },
   member:     { label: 'Membro',        className: 'bg-gray-100 text-gray-700' },
   accountant: { label: 'Contador',      className: 'bg-purple-100 text-purple-800' },
+  colaborador: { label: 'Colaborador',  className: 'bg-teal-100 text-teal-800' },
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {

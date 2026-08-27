@@ -13,6 +13,16 @@ const PUBLIC_ROUTES = ['/cadastro/passo-1', '/auth/callback', '/registrar-ponto'
 // Rotas PDV — autenticação dupla com cookie pdv_session
 const PDV_ROUTES = ['/operacional/frente-de-caixa']
 
+// Rotas liberadas para o role "colaborador" (acesso restrito aos próprios dados) —
+// não inclui '/pessoas/funcionarios' pois esse é o grid com todos os funcionários;
+// a checagem abaixo libera apenas '/pessoas/funcionarios/[o-proprio-id]'
+const COLABORADOR_ROUTES = [
+  '/pessoas/registro-de-ponto',
+  '/pessoas/escala-de-trabalho',
+  '/pessoas/folha-de-pagamento',
+  '/pessoas/beneficios',
+]
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -68,6 +78,18 @@ export async function middleware(request: NextRequest) {
 
   // Todas as outras rotas: requer autenticação
   if (!user) return NextResponse.redirect(new URL('/login', request.url))
+
+  // Colaborador: acesso restrito às rotas liberadas + à própria página em /pessoas/funcionarios
+  const role = request.cookies.get('active_company_role')?.value
+  if (role === 'colaborador') {
+    const myEmployeeId = request.cookies.get('my_employee_id')?.value
+    const ownFuncionarioRoute = myEmployeeId && (
+      pathname === `/pessoas/funcionarios/${myEmployeeId}` ||
+      pathname.startsWith(`/pessoas/funcionarios/${myEmployeeId}/`)
+    )
+    const allowed = COLABORADOR_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/')) || ownFuncionarioRoute
+    if (!allowed) return NextResponse.redirect(new URL('/pessoas/registro-de-ponto', request.url))
+  }
 
   return response
 }

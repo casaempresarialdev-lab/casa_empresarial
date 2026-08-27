@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalFuncionario } from '../../components/modal-funcionario'
+import { MeusDadosForm } from './meus-dados-form'
+import { grantSystemAccessAction } from '../../actions'
 import type { Employee } from '../../queries'
 import type { CompanyBenefit } from '../../../beneficios/queries'
 
@@ -102,11 +104,17 @@ interface Props {
   companyId: string
   companyBenefits: CompanyBenefit[]
   fotoUrl: string | null
+  viewerRole: string
 }
 
-export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits, fotoUrl }: Props) {
+export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits, fotoUrl, viewerRole }: Props) {
   const router = useRouter()
   const [editOpen, setEditOpen] = useState(false)
+  const [selfEditOpen, setSelfEditOpen] = useState(false)
+  const [granting, setGranting] = useState(false)
+  const [grantMsg, setGrantMsg] = useState('')
+
+  const isColaboradorSelf = viewerRole === 'colaborador'
 
   const tipoCfg     = emp.tipo_contrato   ? TIPO_CFG[emp.tipo_contrato]        : null
   const contratoCfg = emp.status_contrato ? CONTRATO_CFG[emp.status_contrato]  : null
@@ -117,6 +125,16 @@ export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits,
 
   const initials = emp.nome.split(' ').slice(0, 2).map(n => n[0] ?? '').join('').toUpperCase()
 
+  async function handleGrantAccess() {
+    setGranting(true)
+    setGrantMsg('')
+    const result = await grantSystemAccessAction(emp.id, companyId)
+    setGranting(false)
+    if ('error' in result && result.error) setGrantMsg(result.error)
+    else if ('warning' in result && result.warning) setGrantMsg(result.warning)
+    else { setGrantMsg('Convite enviado!'); router.refresh() }
+  }
+
   return (
     <>
       <div className="space-y-4">
@@ -125,14 +143,23 @@ export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits,
         <div className="flex items-center justify-between">
           <button
             type="button"
-            onClick={() => router.push('/pessoas/funcionarios')}
+            onClick={() => router.push(isColaboradorSelf ? '/pessoas/registro-de-ponto' : '/pessoas/funcionarios')}
             className="flex items-center gap-1.5 text-sm"
             style={{ color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
-            ← Equipe
+            {isColaboradorSelf ? '← Voltar' : '← Equipe'}
           </button>
-          <Button onClick={() => setEditOpen(true)}>Editar</Button>
+          <div className="flex items-center gap-2">
+            {!isColaboradorSelf && !emp.profile_id && emp.email && (
+              <Button variant="ghost" onClick={handleGrantAccess} loading={granting}>Conceder acesso ao sistema</Button>
+            )}
+            <Button onClick={() => isColaboradorSelf ? setSelfEditOpen(true) : setEditOpen(true)}>Editar</Button>
+          </div>
         </div>
+
+        {grantMsg && (
+          <p className="text-sm p-3 rounded-lg bg-blue-50" style={{ color: '#1A5276' }}>{grantMsg}</p>
+        )}
 
         {/* Header — foto + nome + badges */}
         <div style={card}>
@@ -270,6 +297,12 @@ export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits,
         companyId={companyId}
         employee={emp}
         companyBenefits={companyBenefits}
+      />
+
+      <MeusDadosForm
+        open={selfEditOpen}
+        onClose={() => setSelfEditOpen(false)}
+        employee={emp}
       />
     </>
   )

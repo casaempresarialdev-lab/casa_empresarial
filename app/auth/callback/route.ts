@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     const { data: pendingInvites } = await admin
       .from('invitations')
-      .select('id, company_id, role, avatar_url')
+      .select('id, company_id, role, avatar_url, employee_id')
       .eq('email', userEmail.toLowerCase())
       .eq('status', 'pending')
 
@@ -67,6 +67,14 @@ export async function GET(request: NextRequest) {
             .eq('id', session.user.id)
         }
 
+        // Convite de colaborador: vincula o cadastro do funcionário a esta conta
+        if (inv.employee_id) {
+          await admin
+            .from('employees')
+            .update({ profile_id: session.user.id })
+            .eq('id', inv.employee_id)
+        }
+
         // Marca convite como aceito
         await admin
           .from('invitations')
@@ -76,7 +84,8 @@ export async function GET(request: NextRequest) {
 
       // Define a empresa do convite como ativa
       const firstInvite = pendingInvites[0]
-      const response = NextResponse.redirect(new URL('/dashboard', origin))
+      const destino = firstInvite.role === 'colaborador' ? '/pessoas/registro-de-ponto' : '/dashboard'
+      const response = NextResponse.redirect(new URL(destino, origin))
       response.cookies.set('active_company_id', firstInvite.company_id, {
         path: '/',
         httpOnly: false,

@@ -1,7 +1,16 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getViewerContext } from '@/lib/auth/viewer'
+
+async function getAppUrl() {
+  const hdrs = await headers()
+  const host = hdrs.get('host') ?? 'localhost:3000'
+  const proto = hdrs.get('x-forwarded-proto') ?? 'http'
+  return `${proto}://${host}`
+}
 
 const BUCKET = 'documentos'
 const MAX_DOC_SIZE = 20 * 1024 * 1024
@@ -159,6 +168,8 @@ async function syncEmployeeBenefits(
 export async function createEmployeeAction(companyId: string, formData: FormData) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  const viewerC = await getViewerContext(companyId)
+  if (viewerC?.isColaborador) return { error: 'Sem permissão para esta ação.' }
 
   const fields = parseEmployeeFields(formData)
   if (!fields.nome) return { error: 'Nome é obrigatório.' }
@@ -200,6 +211,8 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
     .single()
 
   if (!current) return { error: 'Funcionário não encontrado.' }
+  const viewerU = await getViewerContext(current.company_id)
+  if (viewerU?.isColaborador) return { error: 'Sem permissão para esta ação. Use "Meus Dados" para editar suas informações de contato.' }
 
   const existingDocs: Partial<Record<DocKey, string | null>> = {
     foto: current.foto_path,
@@ -260,11 +273,105 @@ export async function getEmployeeDocUrlAction(storagePath: string): Promise<{ ur
   return { url: data.signedUrl }
 }
 
+export async function grantSystemAccessAction(employeeId: string, companyId: string) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+  const viewerG = await getViewerContext(companyId)
+  if (viewerG?.isColaborador) return { error: 'Sem permissão para esta ação.' }
+
+  const admin = createAdminClient()
+
+  const { data: employee } = await admin
+    .from('employees')
+    .select('nome, email, profile_id, company_id')
+    .eq('id', employeeId)
+    .eq('company_id', companyId)
+    .single()
+
+  if (!employee) return { error: 'Funcionário não encontrado.' }
+  if (!employee.email) return { error: 'Cadastre um e-mail para o funcionário antes de conceder acesso.' }
+  if (employee.profile_id) return { error: 'Este funcionário já tem acesso ao sistema.' }
+
+  const normalizedEmail = employee.email.trim().toLowerCase()
+
+  const { data: existingInvite } = await admin
+    .from('invitations')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('email', normalizedEmail)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  if (existingInvite) return { error: 'Já existe um convite pendente para este e-mail.' }
+
+  const { data: inv, error: dbErr } = await admin.from('invitations').insert({
+    company_id: companyId,
+    email: normalizedEmail,
+    role: 'colaborador',
+    invited_by: user.id,
+    status: 'pending',
+    employee_id: employeeId,
+  }).select('id').single()
+
+  if (dbErr || !inv) return { error: dbErr?.message ?? 'Erro ao criar convite.' }
+
+  const appUrl = await getAppUrl()
+  const { error: emailErr } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
+    redirectTo: `${appUrl}/auth/callback`,
+    data: { company_id: companyId, role: 'colaborador' },
+  })
+
+  if (emailErr) {
+    return { warning: `Convite registrado, mas o e-mail não pôde ser enviado: ${emailErr.message}` }
+  }
+
+  revalidatePath(`/pessoas/funcionarios/${employeeId}`)
+  return { success: true }
+}
+
+// Auto-edição do colaborador — só os campos de dados pessoais/contato.
+// Nunca aceitar aqui campos administrativos (salário, status, contrato, datas, PIN etc.)
+export async function updateOwnEmployeeDataAction(employeeId: string, formData: FormData) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+
+  const { data: employee } = await admin
+    .from('employees')
+    .select('profile_id, company_id')
+    .eq('id', employeeId)
+    .single()
+
+  if (!employee || employee.profile_id !== user.id) {
+    return { error: 'Você não tem permissão para editar este cadastro.' }
+  }
+
+  const updates = {
+    telefone:        (formData.get('telefone') as string) || null,
+    email:            (formData.get('email') as string) || null,
+    dados_bancarios: (formData.get('dados_bancarios') as string) || null,
+  }
+
+  const { error } = await admin.from('employees').update(updates).eq('id', employeeId)
+  if (error) return { error: error.message }
+
+  revalidatePath(`/pessoas/funcionarios/${employeeId}`)
+  return { success: true }
+}
+
 export async function deleteEmployeeAction(employeeId: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
   const admin = createAdminClient()
+
+  const { data: target } = await admin.from('employees').select('company_id').eq('id', employeeId).single()
+  if (target) {
+    const viewerD = await getViewerContext(target.company_id)
+    if (viewerD?.isColaborador) return { error: 'Sem permissão para esta ação.' }
+  }
+
   const { error } = await admin.from('employees').delete().eq('id', employeeId)
 
   if (error) return { error: error.message }

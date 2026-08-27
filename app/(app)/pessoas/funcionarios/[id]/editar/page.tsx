@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getViewerContext } from '@/lib/auth/viewer'
 import { getEmployeeById } from '../../queries'
 import { getActiveCompanyBenefits } from '../../../beneficios/queries'
 import { EditFuncionarioPage } from './components/edit-funcionario-page'
@@ -21,6 +22,9 @@ export default async function FuncionarioEditPage({ params }: Props) {
   const cookieStore = await cookies()
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
+
+  const viewer = await getViewerContext(companyId)
+  if (viewer?.isColaborador) notFound()
 
   const [employee, companyBenefits] = await Promise.all([
     getEmployeeById(id, companyId),

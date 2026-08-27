@@ -17,6 +17,7 @@ interface Props {
   companyId: string
   mes: number
   ano: number
+  readOnly?: boolean
 }
 
 const MESES       = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
@@ -173,7 +174,7 @@ function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void
 
 type ListRow = { emp: { id: string; nome: string; cargo: string | null }; day: DayResult }
 
-export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano }: Props) {
+export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano, readOnly = false }: Props) {
   const router = useRouter()
 
   const [view,           setView]        = useState<'calendario' | 'cronograma'>('calendario')
@@ -249,6 +250,7 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
   }
 
   function openExcecao(dateStr: string, empId: string) {
+    if (readOnly) return
     setExcDate(dateStr); setExcEmpId(empId); setExcOpen(true)
   }
 
@@ -302,7 +304,9 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
               </button>
             ))}
           </div>
-          <Button variant="ghost" onClick={() => router.push('/pessoas/escala-de-trabalho/nova')}>Adicionar</Button>
+          {!readOnly && (
+            <Button variant="ghost" onClick={() => router.push('/pessoas/escala-de-trabalho/nova')}>Adicionar</Button>
+          )}
         </div>
       </div>
 
