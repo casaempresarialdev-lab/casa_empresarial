@@ -30,7 +30,7 @@ type Status =
   | 'saida_antecipada'
   | 'incompleto'
   | 'em_andamento'
-  | 'aguardando'
+  | 'pendente'
   | 'ausente'
   | 'folga'
   | 'folga_extra'
@@ -79,7 +79,7 @@ function getSituacao(
 
   if (!record || !record.entrada) {
     if (isFuture) return { label: 'Previsto',   color: '#2471A3', bg: '#EBF5FB', status: 'previsto'   }
-    if (isToday)  return { label: 'Aguardando', color: '#7F8C8D', bg: '#F2F3F4', status: 'aguardando' }
+    if (isToday)  return { label: 'Pendente', color: '#7F8C8D', bg: '#F2F3F4', status: 'pendente' }
     return { label: 'Ausente', color: '#C0392B', bg: '#FDEDEC', status: 'ausente' }
   }
 
@@ -145,7 +145,7 @@ function getPrevistoLabel(dayResult: DayResult | null): string {
   return `${h}–${s}`
 }
 
-const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'aguardando'])
+const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'pendente'])
 
 // ─── ExportMenu ───────────────────────────────────────────────────────────────
 
@@ -689,15 +689,17 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
                 ? '#FAFBFF'
                 : idx % 2 === 0 ? 'white' : '#FAFAFA'
 
-              const entradaColor = sit.status === 'atraso' ? '#D35400' : 'var(--color-text-primary)'
-              const saidaColor   = sit.status === 'saida_antecipada' ? '#D35400' : 'var(--color-text-primary)'
+              const isPending = sit.status === 'pendente'
+              const entradaColor = isPending ? 'var(--color-text-muted)' : sit.status === 'atraso' ? '#D35400' : 'var(--color-text-primary)'
+              const saidaColor   = isPending ? 'var(--color-text-muted)' : sit.status === 'saida_antecipada' ? '#D35400' : 'var(--color-text-primary)'
+              const secColor     = isPending ? 'var(--color-text-muted)' : 'var(--color-text-secondary)'
 
               return (
                 <tr key={`${entry.empId}|${entry.date}`} className="border-t"
                   style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
 
                   {!filterEmployee && (
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: isPending ? 'var(--color-text-muted)' : 'var(--color-text-primary)' }}>
                       <div className="font-medium">{entry.empNome}</div>
                       {entry.empCargo && (
                         <div style={{ color: 'var(--color-text-muted)' }}>{entry.empCargo}</div>
@@ -705,12 +707,12 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
                     </td>
                   )}
 
-                  <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  <td className="px-4 py-2.5 text-xs" style={{ color: secColor }}>
                     <div className="font-medium">{formatDate(entry.date)}</div>
                     <div className="capitalize" style={{ color: 'var(--color-text-muted)' }}>{formatWeekday(entry.date)}</div>
                   </td>
 
-                  <td className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                  <td className="px-4 py-2.5 text-xs font-medium" style={{ color: secColor }}>
                     {previsto}
                   </td>
 
@@ -719,7 +721,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
                     {record?.entrada ? formatTime(record.entrada) : (isAbsent ? 'Ausente' : '—')}
                   </td>
 
-                  <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  <td className="px-4 py-2.5 text-xs" style={{ color: secColor }}>
                     {record?.saida_almoco
                       ? `${formatTime(record.saida_almoco)}–${formatTime(record.retorno_almoco)}`
                       : '—'}
@@ -730,7 +732,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
                     {record?.saida ? formatTime(record.saida) : '—'}
                   </td>
 
-                  <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  <td className="px-4 py-2.5 text-xs" style={{ color: secColor }}>
                     {formatInterval(record?.horas_trabalhadas ?? null)}
                   </td>
 
