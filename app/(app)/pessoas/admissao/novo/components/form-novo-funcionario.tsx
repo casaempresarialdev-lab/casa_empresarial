@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { createEmployeeAction, generateOnboardingTokenAction } from '../../../funcionarios/actions'
+import { createEmployeeAction, generateOnboardingTokenAction, grantSystemAccessAction } from '../../../funcionarios/actions'
 import type { CompanyBenefit } from '../../../beneficios/queries'
 
 const DOC_SLOTS = [
@@ -124,6 +124,9 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
   const [pin, setPin]           = useState('')
   const [pinAtivo, setPinAtivo] = useState(false)
 
+  // 9 — Acesso ao sistema
+  const [permitirAcesso, setPermitirAcesso] = useState(false)
+
   // Foto de perfil
   const [fotoFile, setFotoFile]       = useState<File | null>(null)
   const [fotoPreview, setFotoPreview] = useState<string | null>(null)
@@ -133,7 +136,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
-  const [success, setSuccess] = useState<{ employeeId: string; link: string | null; copied: boolean } | null>(null)
+  const [success, setSuccess] = useState<{ employeeId: string; link: string | null; copied: boolean; acessoMsg: string | null } | null>(null)
 
   function onAdmissaoChange(val: string) {
     setDataAdmissao(val)
@@ -198,11 +201,21 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
 
     // Gera link de auto-cadastro
     const tokenResult = await generateOnboardingTokenAction(result.employeeId)
+
+    // Permitir acesso ao sistema (opcional)
+    let acessoMsg: string | null = null
+    if (permitirAcesso) {
+      const acessoResult = await grantSystemAccessAction(result.employeeId, companyId)
+      if ('error' in acessoResult) acessoMsg = acessoResult.error ?? null
+      else if ('warning' in acessoResult) acessoMsg = acessoResult.warning ?? null
+    }
+
     setLoading(false)
     setSuccess({
       employeeId: result.employeeId,
       link: tokenResult.url ?? null,
       copied: false,
+      acessoMsg,
     })
   }
 
@@ -235,6 +248,12 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
           {nome.split(' ')[0]} foi adicionado ao sistema.
           {success.link ? ' Envie o link abaixo para que ele preencha seus dados pessoais.' : ''}
         </p>
+
+        {permitirAcesso && (
+          <p className="text-xs mb-4" style={{ color: success.acessoMsg ? 'var(--color-error)' : '#1E8449' }}>
+            {success.acessoMsg ?? '✓ Convite de acesso ao sistema enviado.'}
+          </p>
+        )}
 
         {success.link && (
           <div className="rounded-xl border p-4 mb-6 text-left" style={{ borderColor: '#AED6F1', backgroundColor: '#EBF5FB' }}>
@@ -271,7 +290,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
             setDataAdmissao(''); setFimExp1(''); setFimExp2(''); setVctoFerias(''); setExame('')
             setStatusContrato(''); setDataDemissao(''); setPisPasep(''); setMatricula('')
             setSerieCtps(''); setCertReservista(''); setDependentes('0'); setDadosBancarios('')
-            setSelectedBenefitIds([]); setPin(''); setPinAtivo(false); setDocFiles({})
+            setSelectedBenefitIds([]); setPin(''); setPinAtivo(false); setPermitirAcesso(false); setDocFiles({})
           }}
             className="text-sm py-2 rounded-lg"
             style={{ color: 'var(--color-text-muted)' }}>
@@ -752,6 +771,12 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
             </div>
           </div>
           )}
+
+          {/* 9 — Acesso ao sistema */}
+          <div style={card}>
+            <p style={sec}>9. ACESSO AO SISTEMA</p>
+            <Toggle value={permitirAcesso} onChange={setPermitirAcesso} label="Permitir o acesso ao sistema" />
+          </div>
 
         </div>
 

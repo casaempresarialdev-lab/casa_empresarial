@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalFuncionario } from '../../components/modal-funcionario'
 import { MeusDadosForm } from './meus-dados-form'
-import { grantSystemAccessAction } from '../../actions'
 import type { Employee } from '../../queries'
 import type { CompanyBenefit } from '../../../beneficios/queries'
 
@@ -111,8 +110,6 @@ export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits,
   const router = useRouter()
   const [editOpen, setEditOpen] = useState(false)
   const [selfEditOpen, setSelfEditOpen] = useState(false)
-  const [granting, setGranting] = useState(false)
-  const [grantMsg, setGrantMsg] = useState('')
 
   const isColaboradorSelf = viewerRole === 'colaborador'
 
@@ -124,16 +121,6 @@ export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits,
   const activeBenefits = companyBenefits.filter(b => empBenefitIds.has(b.id))
 
   const initials = emp.nome.split(' ').slice(0, 2).map(n => n[0] ?? '').join('').toUpperCase()
-
-  async function handleGrantAccess() {
-    setGranting(true)
-    setGrantMsg('')
-    const result = await grantSystemAccessAction(emp.id, companyId)
-    setGranting(false)
-    if ('error' in result && result.error) setGrantMsg(result.error)
-    else if ('warning' in result && result.warning) setGrantMsg(result.warning)
-    else { setGrantMsg('Convite enviado!'); router.refresh() }
-  }
 
   return (
     <>
@@ -150,16 +137,9 @@ export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits,
             {isColaboradorSelf ? '← Voltar' : '← Equipe'}
           </button>
           <div className="flex items-center gap-2">
-            {!isColaboradorSelf && !emp.profile_id && emp.email && (
-              <Button variant="ghost" onClick={handleGrantAccess} loading={granting}>Conceder acesso ao sistema</Button>
-            )}
             <Button onClick={() => isColaboradorSelf ? setSelfEditOpen(true) : setEditOpen(true)}>Editar</Button>
           </div>
         </div>
-
-        {grantMsg && (
-          <p className="text-sm p-3 rounded-lg bg-blue-50" style={{ color: '#1A5276' }}>{grantMsg}</p>
-        )}
 
         {/* Header — foto + nome + badges */}
         <div style={card}>
