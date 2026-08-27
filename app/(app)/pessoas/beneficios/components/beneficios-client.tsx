@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalBeneficio } from './modal-beneficio'
-import { deleteBenefitAction, toggleEmployeeBenefitAction } from '../actions'
+import { deleteBenefitAction } from '../actions'
 import type { CompanyBenefit, EmployeeWithBenefits } from '../queries'
 
 interface Props {
@@ -15,6 +15,17 @@ interface Props {
 
 function fmtCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+const DIAS_UTEIS = 22
+
+function calcTotalBeneficios(emp: EmployeeWithBenefits, benefits: CompanyBenefit[]): number {
+  return emp.employee_benefits.reduce((sum, eb) => {
+    const benefit = benefits.find(b => b.id === eb.benefit_id)
+    if (!benefit) return sum
+    const valor = eb.valor_override ?? benefit.valor
+    return sum + (benefit.por_dia_trabalhado ? valor * DIAS_UTEIS : valor)
+  }, 0)
 }
 
 function ThreeDotMenu({ onEdit, onDelete, loading }: {
@@ -104,11 +115,10 @@ const TAB_STYLE = (active: boolean) => ({
 
 export function BeneficiosClient({ companyId, benefits, employees }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'catalogo' | 'funcionarios'>('catalogo')
+  const [tab, setTab] = useState<'catalogo' | 'funcionarios'>('funcionarios')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<CompanyBenefit | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [togglingId, setTogglingId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
   const activeBenefits = benefits.filter(b => b.ativo)
@@ -120,14 +130,6 @@ export function BeneficiosClient({ companyId, benefits, employees }: Props) {
     setDeletingId(null)
     if ('error' in result) alert(result.error)
     else startTransition(() => router.refresh())
-  }
-
-  async function handleToggle(empId: string, benefitId: string, currentlyActive: boolean) {
-    const key = `${empId}-${benefitId}`
-    setTogglingId(key)
-    await toggleEmployeeBenefitAction(companyId, empId, benefitId, !currentlyActive)
-    setTogglingId(null)
-    startTransition(() => router.refresh())
   }
 
   return (
@@ -148,11 +150,11 @@ export function BeneficiosClient({ companyId, benefits, employees }: Props) {
 
       {/* Tabs */}
       <div className="flex border-b mb-6" style={{ borderColor: 'var(--color-bg-surface)' }}>
-        <button style={TAB_STYLE(tab === 'catalogo')} onClick={() => setTab('catalogo')}>
-          Catálogo
-        </button>
         <button style={TAB_STYLE(tab === 'funcionarios')} onClick={() => setTab('funcionarios')}>
           Por funcionário
+        </button>
+        <button style={TAB_STYLE(tab === 'catalogo')} onClick={() => setTab('catalogo')}>
+          Catálogo
         </button>
       </div>
 
@@ -241,55 +243,26 @@ export function BeneficiosClient({ companyId, benefits, employees }: Props) {
               <table className="w-full text-sm">
                 <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium sticky left-0 z-10" style={{ color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)', minWidth: 180 }}>
+                    <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
                       Funcionário
                     </th>
-                    {activeBenefits.map(b => (
-                      <th key={b.id} className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)', minWidth: 120 }}>
-                        <div>{b.nome}</div>
-                        <div className="text-xs font-normal mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                          {fmtCurrency(b.valor)}{b.por_dia_trabalhado ? '/dia' : '/mês'}
-                        </div>
-                      </th>
-                    ))}
+                    <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                      Total de Benefício
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map(emp => {
-                    const activeBenefitIds = new Set(emp.employee_benefits.map(eb => eb.benefit_id))
-                    return (
-                      <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                        <td className="px-4 py-3 sticky left-0 z-10" style={{ backgroundColor: 'white' }}>
-                          <div className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</div>
-                          {emp.cargo && <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{emp.cargo}</div>}
-                        </td>
-                        {activeBenefits.map(b => {
-                          const isActive = activeBenefitIds.has(b.id)
-                          const key = `${emp.id}-${b.id}`
-                          const isToggling = togglingId === key
-                          return (
-                            <td key={b.id} className="px-4 py-3 text-center">
-                              <button
-                                onClick={() => handleToggle(emp.id, b.id, isActive)}
-                                disabled={isToggling}
-                                className="w-8 h-5 rounded-full transition-colors relative inline-flex"
-                                style={{
-                                  backgroundColor: isActive ? 'var(--color-primary-darker)' : 'var(--color-bg-surface)',
-                                  opacity: isToggling ? 0.5 : 1,
-                                  cursor: isToggling ? 'not-allowed' : 'pointer',
-                                }}
-                              >
-                                <span
-                                  className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                                  style={{ transform: isActive ? 'translateX(14px)' : 'translateX(2px)' }}
-                                />
-                              </button>
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    )
-                  })}
+                  {employees.map(emp => (
+                    <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
+                      <td className="px-4 py-3">
+                        <div className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</div>
+                        {emp.cargo && <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{emp.cargo}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                        {fmtCurrency(calcTotalBeneficios(emp, activeBenefits))}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
