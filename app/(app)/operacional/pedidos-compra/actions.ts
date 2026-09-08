@@ -62,11 +62,11 @@ export async function updatePurchaseOrderStatusAction(orderId: string, status: s
 
   const admin = createAdminClient()
 
-  // Ao marcar como recebido → gera lançamento de pagamento no fluxo de caixa
+  // Ao marcar como recebido → gera lançamento de pagamento no fluxo de caixa + dá entrada no estoque
   if (status === 'recebido') {
     const { data: order } = await admin
       .from('purchase_orders')
-      .select('numero, valor_total, fornecedor_id, data, data_entrega, company_id')
+      .select('numero, valor_total, fornecedor_id, data, data_entrega, company_id, itens')
       .eq('id', orderId)
       .single()
 
@@ -85,6 +85,27 @@ export async function updatePurchaseOrderStatusAction(orderId: string, status: s
         contact_id:      order.fornecedor_id,
         recorrente:      'false',
       })
+    }
+
+    // Entrada de estoque — só itens vinculados a um produto do catálogo
+    const itens = (order?.itens ?? []) as PedidoItem[]
+    const comProduto = itens.filter(i => i.product_id)
+    if (comProduto.length > 0) {
+      const { data: produtos } = await admin
+        .from('products')
+        .select('id, estoque_atual')
+        .in('id', comProduto.map(i => i.product_id as string))
+
+      const estoqueMap = new Map((produtos ?? []).map(p => [p.id, p.estoque_atual]))
+      for (const item of comProduto) {
+        const atual = estoqueMap.get(item.product_id as string)
+        if (atual === undefined) continue
+        await admin
+          .from('products')
+          .update({ estoque_atual: atual + item.qtd })
+          .eq('id', item.product_id as string)
+      }
+      revalidatePath('/operacional/produtos')
     }
   }
 

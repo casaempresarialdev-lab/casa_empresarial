@@ -46,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Produtos', href: '/operacional/produtos' },
       { label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
       { label: 'Pedidos de Venda', href: '/operacional/pedidos-venda' },
+      { label: 'Ordens de Serviço', href: '/operacional/ordens-de-servico' },
       { label: 'Frente de Caixa', href: '/operacional/frente-de-caixa' },
     ],
   },

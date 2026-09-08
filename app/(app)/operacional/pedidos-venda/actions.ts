@@ -65,13 +65,32 @@ export async function updateSaleOrderStatusAction(orderId: string, status: strin
 
   const admin = createAdminClient()
 
-  // Ao marcar como entregue → gera lançamento de recebimento no fluxo de caixa
+  // Ao marcar como entregue → gera lançamento de recebimento no fluxo de caixa + baixa o estoque
   if (status === 'entregue') {
     const { data: order } = await admin
       .from('sale_orders')
-      .select('numero, valor_total, cliente_id, data, data_entrega, company_id')
+      .select('numero, valor_total, cliente_id, data, data_entrega, company_id, itens')
       .eq('id', orderId)
       .single()
+
+    // Baixa de estoque — só itens vinculados a um produto do catálogo. Bloqueia se faltar estoque.
+    const itens = (order?.itens ?? []) as PedidoVendaItem[]
+    const comProduto = itens.filter(i => i.product_id)
+    const estoqueMap = new Map<string, number>()
+    if (comProduto.length > 0) {
+      const { data: produtos } = await admin
+        .from('products')
+        .select('id, nome, estoque_atual')
+        .in('id', comProduto.map(i => i.product_id as string))
+
+      for (const p of produtos ?? []) {
+        estoqueMap.set(p.id, p.estoque_atual)
+        const item = comProduto.find(i => i.product_id === p.id)
+        if (item && item.qtd > p.estoque_atual) {
+          return { error: `Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque_atual}).` }
+        }
+      }
+    }
 
     if (order && order.valor_total > 0) {
       const dataComp = order.data
@@ -89,6 +108,16 @@ export async function updateSaleOrderStatusAction(orderId: string, status: strin
         recorrente:       'false',
       })
     }
+
+    for (const item of comProduto) {
+      const atual = estoqueMap.get(item.product_id as string)
+      if (atual === undefined) continue
+      await admin
+        .from('products')
+        .update({ estoque_atual: atual - item.qtd })
+        .eq('id', item.product_id as string)
+    }
+    if (comProduto.length > 0) revalidatePath('/operacional/produtos')
   }
 
   const { error } = await admin.from('sale_orders').update({ status }).eq('id', orderId)
