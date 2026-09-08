@@ -40,6 +40,7 @@ export function PDVClient({ companyId, cashSession, products }: Props) {
 
   function addToCart(p: PdvProduct) {
     if (p.preco_venda === null) return
+    const precoVenda = p.preco_venda
     setCarrinho(prev => {
       const existing = prev.find(i => i.product_id === p.id)
       if (existing) {
@@ -52,8 +53,8 @@ export function PDVClient({ companyId, cashSession, products }: Props) {
         product_id: p.id,
         nome: p.nome,
         qtd: 1,
-        preco_unitario: p.preco_venda,
-        subtotal: p.preco_venda,
+        preco_unitario: precoVenda,
+        subtotal: precoVenda,
         tipo: p.tipo,
       }]
     })
