@@ -39,11 +39,28 @@ export async function createProductAction(companyId: string, formData: FormData)
   if (!fields.nome) return { error: 'Nome é obrigatório.' }
 
   const admin = createAdminClient()
-  const { error } = await admin
+  const { data: inserted, error } = await admin
     .from('products')
     .insert({ company_id: companyId, ativo: true, ...fields })
+    .select('id')
+    .single()
 
   if (error) return { error: error.message }
+
+  const fotoFile = formData.get('foto_file') as File
+  if (fotoFile && fotoFile.size > 0) {
+    const ext = fotoFile.name.split('.').pop() || 'jpg'
+    const path = `${companyId}/${inserted.id}.${ext}`
+    const bytes = await fotoFile.arrayBuffer()
+    const { error: uploadErr } = await admin.storage
+      .from('produtos')
+      .upload(path, bytes, { contentType: fotoFile.type, upsert: true })
+    if (!uploadErr) {
+      const { data: urlData } = admin.storage.from('produtos').getPublicUrl(path)
+      await admin.from('products').update({ foto_url: urlData.publicUrl }).eq('id', inserted.id)
+    }
+  }
+
   revalidatePath('/operacional/produtos')
   return { success: true }
 }

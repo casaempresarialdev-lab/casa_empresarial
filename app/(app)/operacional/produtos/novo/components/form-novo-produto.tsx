@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -14,8 +14,10 @@ interface Props {
 
 export function FormNovoProduto({ companyId }: Props) {
   const router = useRouter()
+  const fotoInputRef = useRef<HTMLInputElement>(null)
 
   const [tipo, setTipo] = useState<'produto' | 'servico'>('produto')
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
   const [nome, setNome] = useState('')
   const [descricao, setDescricao] = useState('')
   const [sku, setSku] = useState('')
@@ -44,6 +46,8 @@ export function FormNovoProduto({ companyId }: Props) {
     setError('')
 
     const fd = new FormData()
+    const fotoFile = fotoInputRef.current?.files?.[0]
+    if (fotoFile) fd.set('foto_file', fotoFile)
     fd.set('nome', nome)
     fd.set('tipo', tipo)
     fd.set('descricao', descricao)
@@ -144,6 +148,63 @@ export function FormNovoProduto({ companyId }: Props) {
                 required
               />
             </div>
+            {/* Foto — apenas para produtos */}
+            {tipo === 'produto' && (
+              <div>
+                <label style={labelStyle}>Foto do Produto</label>
+                <div className="flex items-center gap-4">
+                  {fotoPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={fotoPreview}
+                      alt="Preview"
+                      className="w-16 h-16 rounded-xl object-cover border flex-shrink-0"
+                      style={{ borderColor: 'var(--color-bg-surface)' }}
+                    />
+                  ) : (
+                    <div
+                      className="w-16 h-16 rounded-xl border flex items-center justify-center text-2xl flex-shrink-0"
+                      style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}
+                    >
+                      📦
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <label
+                      className="cursor-pointer text-sm px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50"
+                      style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
+                    >
+                      {fotoPreview ? 'Trocar foto' : 'Selecionar foto'}
+                      <input
+                        ref={fotoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => {
+                          const f = e.target.files?.[0]
+                          if (f) setFotoPreview(URL.createObjectURL(f))
+                        }}
+                      />
+                    </label>
+                    {fotoPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFotoPreview(null)
+                          if (fotoInputRef.current) fotoInputRef.current.value = ''
+                        }}
+                        className="text-sm hover:underline"
+                        style={{ color: 'var(--color-text-muted)' }}
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>PNG, JPG ou WEBP — máx. 5 MB</p>
+              </div>
+            )}
+
             <div>
               <label style={labelStyle}>Descrição</label>
               <textarea
@@ -155,16 +216,18 @@ export function FormNovoProduto({ companyId }: Props) {
                 style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={labelStyle}>SKU / Código Interno</label>
-                <Input value={sku} onChange={e => setSku(e.target.value)} placeholder="Ex: PROD-001" />
+            {tipo === 'produto' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={labelStyle}>SKU / Código Interno</label>
+                  <Input value={sku} onChange={e => setSku(e.target.value)} placeholder="Ex: PROD-001" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Código de Barras</label>
+                  <Input value={codigoBarras} onChange={e => setCodigoBarras(e.target.value)} placeholder="EAN-13..." />
+                </div>
               </div>
-              <div>
-                <label style={labelStyle}>Código de Barras</label>
-                <Input value={codigoBarras} onChange={e => setCodigoBarras(e.target.value)} placeholder="EAN-13..." />
-              </div>
-            </div>
+            )}
             <div>
               <label style={labelStyle}>Categoria</label>
               <Input value={categoria} onChange={e => setCategoria(e.target.value)} placeholder="Ex: Eletrônicos, Alimentos..." />
