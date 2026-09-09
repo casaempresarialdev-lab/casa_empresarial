@@ -40,9 +40,25 @@ function formatDate(d: string | null) {
   return `${day}/${m}/${y}`
 }
 
-interface Props { order: SaleOrder }
+function formatCpfCnpj(doc: string | null | undefined) {
+  if (!doc) return '—'
+  const digits = doc.replace(/\D/g, '')
+  if (digits.length === 14) {
+    return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+  }
+  if (digits.length === 11) {
+    return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+  }
+  return doc
+}
 
-export function ViewPedidoVenda({ order }: Props) {
+interface Props {
+  order: SaleOrder
+  companyName: string
+  companyCnpj: string
+}
+
+export function ViewPedidoVenda({ order, companyName, companyCnpj }: Props) {
   const router = useRouter()
   const colors = STATUS_COLORS[order.status] ?? { bg: '#F2F3F4', text: '#717D7E' }
 
@@ -73,6 +89,141 @@ export function ViewPedidoVenda({ order }: Props) {
     fontWeight: 500,
   }
 
+  function handleDownloadPDF() {
+    const win = window.open('', '_blank')
+    if (!win) return
+
+    const numPedido = `#${String(order.numero).padStart(3, '0')}`
+    const clienteNome = order.cliente?.nome ?? '—'
+    const clienteDoc = formatCpfCnpj(order.cliente?.cpf_cnpj)
+    const clienteTipo = order.cliente?.tipo === 'PJ' ? 'Razão Social' : 'Nome'
+    const clienteDocLabel = order.cliente?.tipo === 'PJ' ? 'CNPJ' : 'CPF'
+
+    const itensRows = order.itens.map(item => `
+      <tr>
+        <td>${item.nome}</td>
+        <td style="text-align:center">${item.qtd}</td>
+        <td style="text-align:right">${formatBRL(item.preco_unitario)}</td>
+        <td style="text-align:right">${formatBRL(item.subtotal)}</td>
+      </tr>`).join('')
+
+    const descontoRow = order.desconto > 0
+      ? `<tr><td colspan="3" style="text-align:right;color:#c0392b">Desconto</td><td style="text-align:right;color:#c0392b">-${formatBRL(order.desconto)}</td></tr>`
+      : ''
+
+    win.document.write(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Pedido de Venda ${numPedido}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #222; padding: 32px; max-width: 800px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 2px solid #222; padding-bottom: 16px; }
+    .company-name { font-size: 16px; font-weight: 700; }
+    .company-cnpj { font-size: 11px; color: #555; margin-top: 2px; }
+    .doc-title { text-align: right; }
+    .doc-label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+    .doc-num { font-size: 22px; font-weight: 700; color: #1a3a6b; }
+    .doc-status { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background: #e8f4fd; color: #1a3a6b; margin-top: 4px; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #888; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 10px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+    .field-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #888; margin-bottom: 2px; }
+    .field-value { font-size: 12px; color: #222; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f5f5f5; text-align: left; padding: 6px 8px; font-size: 11px; font-weight: 600; border-bottom: 1px solid #ddd; }
+    td { padding: 6px 8px; border-bottom: 1px solid #eee; font-size: 12px; }
+    .total-row { font-weight: 700; font-size: 13px; border-top: 2px solid #222; }
+    .total-row td { padding-top: 8px; border-bottom: none; }
+    .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 10px; color: #aaa; text-align: center; }
+    @media print { body { padding: 16px; } button { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="company-name">${companyName || 'Empresa'}</div>
+      ${companyCnpj ? `<div class="company-cnpj">CNPJ: ${formatCpfCnpj(companyCnpj)}</div>` : ''}
+    </div>
+    <div class="doc-title">
+      <div class="doc-label">Pedido de Venda</div>
+      <div class="doc-num">${numPedido}</div>
+      <div class="doc-status">${STATUS_LABELS[order.status]}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Cliente</div>
+    <div class="grid">
+      <div>
+        <div class="field-label">${clienteTipo}</div>
+        <div class="field-value">${clienteNome}</div>
+      </div>
+      <div>
+        <div class="field-label">${clienteDocLabel}</div>
+        <div class="field-value">${clienteDoc}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Dados do Pedido</div>
+    <div class="grid">
+      <div>
+        <div class="field-label">Data do Pedido</div>
+        <div class="field-value">${formatDate(order.data)}</div>
+      </div>
+      <div>
+        <div class="field-label">Previsão de Entrega</div>
+        <div class="field-value">${formatDate(order.data_entrega)}</div>
+      </div>
+      <div>
+        <div class="field-label">Forma de Pagamento</div>
+        <div class="field-value">${order.forma_pagamento ? (FORMA_LABELS[order.forma_pagamento] ?? order.forma_pagamento) : '—'}</div>
+      </div>
+      ${order.numero_nota ? `
+      <div>
+        <div class="field-label">Nº da Nota Fiscal</div>
+        <div class="field-value">${order.numero_nota}</div>
+      </div>` : ''}
+      ${order.observacao ? `
+      <div style="grid-column:1/-1">
+        <div class="field-label">Observação</div>
+        <div class="field-value">${order.observacao}</div>
+      </div>` : ''}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Itens do Pedido</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th style="text-align:center">Qtd</th>
+          <th style="text-align:right">Preço Unit.</th>
+          <th style="text-align:right">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>${itensRows}</tbody>
+      <tfoot>
+        ${descontoRow}
+        <tr class="total-row">
+          <td colspan="3" style="text-align:right">Total</td>
+          <td style="text-align:right">${formatBRL(order.valor_total)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="footer">Documento gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+  <script>window.onload = function() { window.print(); }</script>
+</body>
+</html>`)
+    win.document.close()
+  }
+
   return (
     <div>
       {/* Cabeçalho */}
@@ -100,20 +251,46 @@ export function ViewPedidoVenda({ order }: Props) {
           </div>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Pedido de Venda</p>
         </div>
+        <button
+          onClick={handleDownloadPDF}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          style={{ backgroundColor: 'var(--color-primary-darker)', color: 'white' }}
+        >
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7.5 10V2M4 7l3.5 3.5L11 7" />
+            <path d="M1 12h13" />
+          </svg>
+          Baixar PDF
+        </button>
       </div>
 
       <div className="space-y-4">
+        {/* Cliente */}
+        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p style={sectionTitle}>Cliente</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <span style={fieldLabel}>{order.cliente?.tipo === 'PJ' ? 'Razão Social' : 'Nome'}</span>
+              <span style={fieldValue}>{order.cliente?.nome ?? '—'}</span>
+            </div>
+            <div>
+              <span style={fieldLabel}>{order.cliente?.tipo === 'PJ' ? 'CNPJ' : 'CPF'}</span>
+              <span style={fieldValue}>{formatCpfCnpj(order.cliente?.cpf_cnpj)}</span>
+            </div>
+          </div>
+        </div>
+
         {/* Dados */}
         <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
           <p style={sectionTitle}>Dados do Pedido</p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4">
             <div>
-              <span style={fieldLabel}>Cliente</span>
-              <span style={fieldValue}>{order.cliente?.nome ?? '—'}</span>
-            </div>
-            <div>
               <span style={fieldLabel}>Status</span>
               <span style={fieldValue}>{STATUS_LABELS[order.status]}</span>
+            </div>
+            <div>
+              <span style={fieldLabel}>Nº da Nota Fiscal</span>
+              <span style={fieldValue}>{order.numero_nota ?? '—'}</span>
             </div>
             <div>
               <span style={fieldLabel}>Data do Pedido</span>
@@ -128,10 +305,6 @@ export function ViewPedidoVenda({ order }: Props) {
               <span style={fieldValue}>
                 {order.forma_pagamento ? (FORMA_LABELS[order.forma_pagamento] ?? order.forma_pagamento) : '—'}
               </span>
-            </div>
-            <div>
-              <span style={fieldLabel}>Desconto</span>
-              <span style={fieldValue}>{order.desconto > 0 ? formatBRL(order.desconto) : '—'}</span>
             </div>
             {order.observacao && (
               <div className="col-span-2">

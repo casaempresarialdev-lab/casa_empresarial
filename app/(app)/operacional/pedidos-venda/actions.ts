@@ -28,6 +28,7 @@ function parsePedidoFields(formData: FormData) {
     valor_total: valorTotal,
     forma_pagamento: (formData.get('forma_pagamento') as string) || null,
     observacao: (formData.get('observacao') as string) || null,
+    numero_nota: (formData.get('numero_nota') as string) || null,
   }
 }
 

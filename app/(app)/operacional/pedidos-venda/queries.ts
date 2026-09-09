@@ -21,16 +21,17 @@ export type SaleOrder = {
   valor_total: number
   forma_pagamento: string | null
   observacao: string | null
+  numero_nota: string | null
   created_at: string
   updated_at: string
-  cliente?: { nome: string } | null
+  cliente?: { nome: string; cpf_cnpj: string | null; tipo: string } | null
 }
 
 export async function getSaleOrders(companyId: string): Promise<SaleOrder[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('sale_orders')
-    .select('*, cliente:contacts(nome)')
+    .select('*, cliente:contacts(nome, cpf_cnpj, tipo)')
     .eq('company_id', companyId)
     .order('numero', { ascending: false })
 
@@ -42,7 +43,7 @@ export async function getSaleOrderById(id: string, companyId: string): Promise<S
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('sale_orders')
-    .select('*, cliente:contacts(nome)')
+    .select('*, cliente:contacts(nome, cpf_cnpj, tipo)')
     .eq('id', id)
     .eq('company_id', companyId)
     .single()
