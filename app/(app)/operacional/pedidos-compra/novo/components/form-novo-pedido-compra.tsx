@@ -56,7 +56,7 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
   }
 
   function addItem() {
-    if (!itemNome.trim()) return
+    if (!itemProductId || !itemNome.trim()) return
     const qtd = parseFloat(itemQtd) || 1
     const preco = parseFloat(itemPreco.replace(',', '.')) || 0
     const subtotal = parseFloat((qtd * preco).toFixed(2))
@@ -255,14 +255,9 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
                   className="w-full px-3 py-2 rounded-lg border text-sm bg-white"
                   style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
                 >
-                  <option value="">Selecionar do catálogo (opcional)...</option>
+                  <option value="">Selecionar produto do catálogo...</option>
                   {products.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                 </select>
-                <Input
-                  value={itemNome}
-                  onChange={e => setItemNome(e.target.value)}
-                  placeholder="Ou digite o nome do item *"
-                />
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label style={{ ...labelStyle, marginBottom: 2 }}>Qtd</label>
