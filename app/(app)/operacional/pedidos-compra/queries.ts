@@ -19,16 +19,17 @@ export type PurchaseOrder = {
   itens: PedidoItem[]
   valor_total: number
   observacao: string | null
+  numero_nota: string | null
   created_at: string
   updated_at: string
-  fornecedor?: { nome: string } | null
+  fornecedor?: { nome: string; cpf_cnpj: string | null; tipo: string } | null
 }
 
 export async function getPurchaseOrders(companyId: string): Promise<PurchaseOrder[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('purchase_orders')
-    .select('*, fornecedor:contacts(nome)')
+    .select('*, fornecedor:contacts(nome, cpf_cnpj, tipo)')
     .eq('company_id', companyId)
     .order('numero', { ascending: false })
 
@@ -52,7 +53,7 @@ export async function getPurchaseOrderById(id: string, companyId: string): Promi
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('purchase_orders')
-    .select('*, fornecedor:contacts(nome)')
+    .select('*, fornecedor:contacts(nome, cpf_cnpj, tipo)')
     .eq('id', id)
     .eq('company_id', companyId)
     .single()

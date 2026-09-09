@@ -23,6 +23,7 @@ function parsePedidoFields(formData: FormData) {
     itens,
     valor_total: valorTotal,
     observacao: (formData.get('observacao') as string) || null,
+    numero_nota: (formData.get('numero_nota') as string) || null,
   }
 }
 

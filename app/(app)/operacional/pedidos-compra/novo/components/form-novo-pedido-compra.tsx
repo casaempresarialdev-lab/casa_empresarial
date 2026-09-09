@@ -25,6 +25,7 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
   const [dataEntrega, setDataEntrega] = useState('')
   const [status, setStatus] = useState('rascunho')
   const [observacao, setObservacao] = useState('')
+  const [numeroNota, setNumeroNota] = useState('')
   const [itens, setItens] = useState<PedidoItem[]>([])
 
   const [itemProductId, setItemProductId] = useState('')
@@ -91,6 +92,7 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
     fd.set('data_entrega', dataEntrega)
     fd.set('status', status)
     fd.set('observacao', observacao)
+    fd.set('numero_nota', numeroNota)
     fd.set('itens', JSON.stringify(itens))
     const result = await createPurchaseOrderAction(companyId, fd)
     setLoading(false)
@@ -155,6 +157,12 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
                 <option value="recebido">Recebido</option>
                 <option value="cancelado">Cancelado</option>
               </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={labelStyle}>Nº da Nota Fiscal</label>
+                <Input value={numeroNota} onChange={e => setNumeroNota(e.target.value)} placeholder="000000" />
+              </div>
             </div>
             <div>
               <label style={labelStyle}>Observação</label>

@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getPurchaseOrderById } from '../queries'
 import { ViewPedidoCompra } from './view-pedido-compra'
 
@@ -21,12 +21,21 @@ export default async function PedidoCompraViewPage({ params }: Props) {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const order = await getPurchaseOrderById(id, companyId)
+  const admin = createAdminClient()
+  const [order, companyRes] = await Promise.all([
+    getPurchaseOrderById(id, companyId),
+    admin.from('companies').select('nome_fantasia, razao_social, cnpj').eq('id', companyId).single(),
+  ])
+
   if (!order) notFound()
+
+  const company = companyRes.data
+  const companyName = company?.nome_fantasia || company?.razao_social || ''
+  const companyCnpj = company?.cnpj || ''
 
   return (
     <div className="max-w-3xl mx-auto">
-      <ViewPedidoCompra order={order} />
+      <ViewPedidoCompra order={order} companyName={companyName} companyCnpj={companyCnpj} />
     </div>
   )
 }
