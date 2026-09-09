@@ -20,11 +20,13 @@ function docMask(doc: string | null, tipo: 'PF' | 'PJ') {
 
 function RowMenu({
   contact,
+  onView,
   onEdit,
   onDelete,
   deletingId,
 }: {
   contact: Contact
+  onView: () => void
   onEdit: () => void
   onDelete: () => void
   deletingId: string | null
@@ -83,6 +85,13 @@ function RowMenu({
             padding: '4px 0',
           }}
         >
+          <button
+            onClick={() => { setOpen(false); onView() }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            Visualizar
+          </button>
           <button
             onClick={() => { setOpen(false); onEdit() }}
             className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
@@ -230,6 +239,7 @@ export function ContatosClient({ contacts, companyId }: Props) {
                 <td className="px-4 py-3 text-right">
                   <RowMenu
                     contact={c}
+                    onView={() => router.push(`/financeiro/contatos/${c.id}`)}
                     onEdit={() => openEdit(c)}
                     onDelete={() => handleDelete(c)}
                     deletingId={deletingId}

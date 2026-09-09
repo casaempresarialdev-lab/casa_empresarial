@@ -15,6 +15,19 @@ export type Contact = {
   updated_at: string
 }
 
+export async function getContactById(id: string, companyId: string): Promise<Contact | null> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('contacts')
+    .select('*')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .single()
+
+  if (error) return null
+  return data as Contact
+}
+
 export async function getContacts(companyId: string): Promise<Contact[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
