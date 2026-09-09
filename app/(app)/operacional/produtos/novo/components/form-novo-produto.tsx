@@ -28,6 +28,10 @@ export function FormNovoProduto({ companyId }: Props) {
   const [estoqueAtual, setEstoqueAtual] = useState('0')
   const [estoqueMinimo, setEstoqueMinimo] = useState('0')
   const [unidadeMedida, setUnidadeMedida] = useState('un')
+  const [tipoFiscal, setTipoFiscal] = useState('')
+  const [ncm, setNcm] = useState('')
+  const [origem, setOrigem] = useState('')
+  const [cest, setCest] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -59,6 +63,10 @@ export function FormNovoProduto({ companyId }: Props) {
     fd.set('estoque_atual', estoqueAtual)
     fd.set('estoque_minimo', estoqueMinimo)
     fd.set('unidade_medida', unidadeMedida)
+    fd.set('tipo_fiscal', tipoFiscal)
+    fd.set('ncm', ncm)
+    fd.set('origem', origem)
+    fd.set('cest', cest)
 
     const result = await createProductAction(companyId, fd)
     setLoading(false)
@@ -301,6 +309,65 @@ export function FormNovoProduto({ companyId }: Props) {
             </div>
           </div>
         )}
+
+        {/* Fiscal */}
+        <div>
+          <p style={sectionTitle}>Fiscal</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={labelStyle}>Tipo Fiscal</label>
+                <select
+                  value={tipoFiscal}
+                  onChange={e => setTipoFiscal(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                >
+                  <option value="">Selecione...</option>
+                  <option value="mercadoria">Mercadoria</option>
+                  <option value="servico">Serviço</option>
+                  <option value="materia_prima">Matéria Prima</option>
+                  <option value="produto_acabado">Produto Acabado</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Origem</label>
+                <select
+                  value={origem}
+                  onChange={e => setOrigem(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                >
+                  <option value="">Selecione...</option>
+                  <option value="nacional">Nacional</option>
+                  <option value="importado">Importado</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={labelStyle}>NCM — Nomenclatura Comum do Mercosul</label>
+                <Input
+                  value={ncm}
+                  onChange={e => setNcm(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  placeholder="00000000"
+                  inputMode="numeric"
+                  maxLength={8}
+                />
+                <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>8 dígitos</p>
+              </div>
+              <div>
+                <label style={labelStyle}>CEST — Cód. Especificador da Substituição Tributária</label>
+                <Input
+                  value={cest}
+                  onChange={e => setCest(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Somente números"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
 
         {error && (
           <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{error}</p>

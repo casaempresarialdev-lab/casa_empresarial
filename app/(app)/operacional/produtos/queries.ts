@@ -16,6 +16,10 @@ export type Product = {
   estoque_minimo: number
   unidade_medida: string
   foto_url: string | null
+  tipo_fiscal: 'mercadoria' | 'servico' | 'materia_prima' | 'produto_acabado' | null
+  ncm: string | null
+  origem: 'nacional' | 'importado' | null
+  cest: string | null
   ativo: boolean
   created_at: string
   updated_at: string

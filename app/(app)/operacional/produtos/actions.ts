@@ -28,6 +28,10 @@ function parseProductFields(formData: FormData) {
     estoque_minimo: estoqueMinimoRaw ? parseInt(estoqueMinimoRaw) : 0,
     unidade_medida: (formData.get('unidade_medida') as string) || 'un',
     // margem é GENERATED ALWAYS — nunca enviar
+    tipo_fiscal: (formData.get('tipo_fiscal') as string) || null,
+    ncm: (formData.get('ncm') as string) || null,
+    origem: (formData.get('origem') as string) || null,
+    cest: (formData.get('cest') as string) || null,
   }
 }
 
