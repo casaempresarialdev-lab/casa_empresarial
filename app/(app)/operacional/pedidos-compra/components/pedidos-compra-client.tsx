@@ -57,6 +57,7 @@ function RowMenu({
   onEdit,
   onAdvance,
   onDelete,
+  onView,
   advancingId,
   deletingId,
 }: {
@@ -64,6 +65,7 @@ function RowMenu({
   onEdit: () => void
   onAdvance: () => void
   onDelete: () => void
+  onView: () => void
   advancingId: string | null
   deletingId: string | null
 }) {
@@ -122,6 +124,13 @@ function RowMenu({
             padding: '4px 0',
           }}
         >
+          <button
+            onClick={() => { setOpen(false); onView() }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            Visualizar
+          </button>
           {nextStatus && (
             <button
               onClick={() => { setOpen(false); onAdvance() }}
@@ -278,6 +287,7 @@ export function PedidosCompraClient({ orders, contacts, products, companyId }: P
                   <td className="px-4 py-3 text-right">
                     <RowMenu
                       order={o}
+                      onView={() => router.push(`/operacional/pedidos-compra/${o.id}`)}
                       onEdit={() => openEdit(o)}
                       onAdvance={() => handleAdvanceStatus(o)}
                       onDelete={() => handleDelete(o)}

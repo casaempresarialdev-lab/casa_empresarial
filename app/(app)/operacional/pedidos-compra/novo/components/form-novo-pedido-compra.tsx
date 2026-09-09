@@ -20,7 +20,6 @@ function formatBRL(val: number) {
 export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
   const router = useRouter()
 
-  const [tab, setTab] = useState<'dados' | 'itens'>('dados')
   const [fornecedorId, setFornecedorId] = useState('')
   const [data, setData] = useState(new Date().toISOString().slice(0, 10))
   const [dataEntrega, setDataEntrega] = useState('')
@@ -60,13 +59,7 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
     const qtd = parseFloat(itemQtd) || 1
     const preco = parseFloat(itemPreco.replace(',', '.')) || 0
     const subtotal = parseFloat((qtd * preco).toFixed(2))
-    setItens(prev => [...prev, {
-      product_id: itemProductId || null,
-      nome: itemNome.trim(),
-      qtd,
-      preco_unitario: preco,
-      subtotal,
-    }])
+    setItens(prev => [...prev, { product_id: itemProductId, nome: itemNome.trim(), qtd, preco_unitario: preco, subtotal }])
     resetItemForm()
   }
 
@@ -92,7 +85,6 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
     e.preventDefault()
     setLoading(true)
     setError('')
-
     const fd = new FormData()
     fd.set('fornecedor_id', fornecedorId)
     fd.set('data', data)
@@ -100,262 +92,143 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
     fd.set('status', status)
     fd.set('observacao', observacao)
     fd.set('itens', JSON.stringify(itens))
-
     const result = await createPurchaseOrderAction(companyId, fd)
     setLoading(false)
-
     if ('error' in result) { setError(result.error ?? 'Erro ao salvar.'); return }
     router.push('/operacional/pedidos-compra')
   }
 
-  const labelStyle: React.CSSProperties = {
-    color: 'var(--color-text-secondary)',
-    fontSize: '0.75rem',
-    fontWeight: 500,
-    marginBottom: 4,
-    display: 'block',
-  }
-
-  const sectionTitle: React.CSSProperties = {
-    color: 'var(--color-primary-darker)',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    marginBottom: 12,
-    paddingBottom: 6,
-    borderBottom: '1px solid var(--color-bg-surface)',
-  }
-
-  const tabStyle = (active: boolean): React.CSSProperties => ({
-    padding: '6px 16px',
-    borderRadius: 8,
-    fontSize: '0.8rem',
-    fontWeight: 500,
-    backgroundColor: active ? 'var(--color-primary)' : 'transparent',
-    color: active ? 'var(--color-primary-darker)' : 'var(--color-text-muted)',
-    cursor: 'pointer',
-    border: 'none',
-  })
+  const labelStyle: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }
+  const sectionTitle: React.CSSProperties = { color: 'var(--color-primary-darker)', fontSize: '0.8rem', fontWeight: 600, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--color-bg-surface)' }
 
   return (
     <form onSubmit={handleSubmit}>
       {/* Cabeçalho */}
       <div className="flex items-center gap-3 mb-6">
-        <button
-          type="button"
-          onClick={() => router.push('/operacional/pedidos-compra')}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
+        <button type="button" onClick={() => router.push('/operacional/pedidos-compra')}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors" style={{ color: 'var(--color-text-muted)' }}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M11 14L6 9l5-5" />
           </svg>
         </button>
         <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Novo Pedido de Compra
-          </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            Registrar compra e reposição de estoque
-          </p>
+          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>Novo Pedido de Compra</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Registrar compra e reposição de estoque</p>
         </div>
       </div>
 
-      <div
-        className="rounded-xl border p-6 space-y-5"
-        style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}
-      >
-        {/* Tabs */}
-        <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-          <button type="button" style={tabStyle(tab === 'dados')} onClick={() => setTab('dados')}>
-            Dados do Pedido
-          </button>
-          <button type="button" style={tabStyle(tab === 'itens')} onClick={() => setTab('itens')}>
-            Itens {itens.length > 0 && `(${itens.length})`}
-          </button>
+      <div className="space-y-4">
+        {/* Dados do Pedido */}
+        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p style={sectionTitle}>Dados do Pedido</p>
+          <div className="space-y-3">
+            <div>
+              <label style={labelStyle}>Fornecedor</label>
+              <select value={fornecedorId} onChange={e => setFornecedorId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border text-sm"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                <option value="">Sem fornecedor</option>
+                {contacts.map(c => <option key={c.id} value={c.id}>{c.nome} ({c.tipo})</option>)}
+              </select>
+              {contacts.length === 0 && (
+                <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Nenhum contato cadastrado. Cadastre em Financeiro → Contatos.</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={labelStyle}>Data do Pedido</label>
+                <Input type="date" value={data} onChange={e => setData(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Previsão de Entrega</label>
+                <Input type="date" value={dataEntrega} onChange={e => setDataEntrega(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>Status</label>
+              <select value={status} onChange={e => setStatus(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border text-sm"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                <option value="rascunho">Rascunho</option>
+                <option value="enviado">Enviado</option>
+                <option value="confirmado">Confirmado</option>
+                <option value="recebido">Recebido</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Observação</label>
+              <textarea value={observacao} onChange={e => setObservacao(e.target.value)} rows={3}
+                placeholder="Condições, prazo de pagamento, instruções..."
+                className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }} />
+            </div>
+          </div>
         </div>
 
-        {/* Tab: Dados */}
-        {tab === 'dados' && (
-          <div className="space-y-4">
-            <div>
-              <p style={sectionTitle}>Dados do Pedido</p>
-              <div className="space-y-3">
+        {/* Itens do Pedido */}
+        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <p style={sectionTitle}>Itens do Pedido</p>
+
+          {/* Adicionar item */}
+          <div className="p-3 rounded-lg mb-3" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+            <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Adicionar item</p>
+            <div className="space-y-2">
+              <select value={itemProductId} onChange={e => handleProductSelect(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border text-sm bg-white"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                <option value="">Selecionar produto do catálogo...</option>
+                {products.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+              <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label style={labelStyle}>Fornecedor</label>
-                  <select
-                    value={fornecedorId}
-                    onChange={e => setFornecedorId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border text-sm"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                  >
-                    <option value="">Sem fornecedor</option>
-                    {contacts.map(c => (
-                      <option key={c.id} value={c.id}>{c.nome} ({c.tipo})</option>
-                    ))}
-                  </select>
-                  {contacts.length === 0 && (
-                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                      Nenhum contato cadastrado. Cadastre em Financeiro → Contatos.
-                    </p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label style={labelStyle}>Data do Pedido</label>
-                    <Input type="date" value={data} onChange={e => setData(e.target.value)} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Previsão de Entrega</label>
-                    <Input type="date" value={dataEntrega} onChange={e => setDataEntrega(e.target.value)} />
-                  </div>
+                  <label style={{ ...labelStyle, marginBottom: 2 }}>Qtd</label>
+                  <Input type="number" min="0.01" step="any" value={itemQtd} onChange={e => setItemQtd(e.target.value)} />
                 </div>
                 <div>
-                  <label style={labelStyle}>Status</label>
-                  <select
-                    value={status}
-                    onChange={e => setStatus(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border text-sm"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                  >
-                    <option value="rascunho">Rascunho</option>
-                    <option value="enviado">Enviado</option>
-                    <option value="confirmado">Confirmado</option>
-                    <option value="recebido">Recebido</option>
-                    <option value="cancelado">Cancelado</option>
-                  </select>
+                  <label style={{ ...labelStyle, marginBottom: 2 }}>Preço unit. (R$)</label>
+                  <Input value={itemPreco} onChange={e => setItemPreco(e.target.value)} placeholder="0,00" inputMode="decimal" />
                 </div>
-                <div>
-                  <label style={labelStyle}>Observação</label>
-                  <textarea
-                    value={observacao}
-                    onChange={e => setObservacao(e.target.value)}
-                    rows={3}
-                    placeholder="Condições, prazo de pagamento, instruções..."
-                    className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                  />
+                <div className="flex items-end">
+                  <Button type="button" onClick={addItem} className="w-full">+ Adicionar</Button>
                 </div>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Tab: Itens */}
-        {tab === 'itens' && (
-          <div className="space-y-3">
-            <p style={sectionTitle}>Itens do Pedido</p>
-
-            {/* Linha de adição */}
-            <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Adicionar item</p>
-              <div className="space-y-2">
-                <select
-                  value={itemProductId}
-                  onChange={e => handleProductSelect(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border text-sm bg-white"
-                  style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                >
-                  <option value="">Selecionar produto do catálogo...</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label style={{ ...labelStyle, marginBottom: 2 }}>Qtd</label>
-                    <Input
-                      type="number"
-                      min="0.01"
-                      step="any"
-                      value={itemQtd}
-                      onChange={e => setItemQtd(e.target.value)}
-                    />
+          {/* Lista */}
+          {itens.length === 0 ? (
+            <p className="text-sm text-center py-4" style={{ color: 'var(--color-text-muted)' }}>Nenhum item adicionado.</p>
+          ) : (
+            <div className="space-y-2">
+              {itens.map((item, idx) => (
+                <div key={idx} className="flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--color-bg-surface)' }}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{item.nome}</p>
                   </div>
-                  <div>
-                    <label style={{ ...labelStyle, marginBottom: 2 }}>Preço unit. (R$)</label>
-                    <Input
-                      value={itemPreco}
-                      onChange={e => setItemPreco(e.target.value)}
-                      placeholder="0,00"
-                      inputMode="decimal"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button type="button" onClick={addItem} className="w-full">+ Adicionar</Button>
-                  </div>
+                  <input type="number" min="0.01" step="any" value={item.qtd} onChange={e => updateItemQtd(idx, e.target.value)}
+                    className="w-16 px-2 py-1 rounded border text-sm text-center" style={{ borderColor: 'var(--color-bg-surface)' }} />
+                  <input type="text" value={item.preco_unitario} onChange={e => updateItemPreco(idx, e.target.value)}
+                    className="w-24 px-2 py-1 rounded border text-sm text-right" style={{ borderColor: 'var(--color-bg-surface)' }} />
+                  <span className="w-24 text-right text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{formatBRL(item.subtotal)}</span>
+                  <button type="button" onClick={() => removeItem(idx)}
+                    className="text-sm hover:text-red-500 transition-colors flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>✕</button>
                 </div>
+              ))}
+              <div className="flex justify-end pt-1 border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
+                <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Total: {formatBRL(valorTotal)}</span>
               </div>
             </div>
+          )}
+        </div>
 
-            {/* Lista de itens */}
-            {itens.length === 0 ? (
-              <p className="text-sm text-center py-4" style={{ color: 'var(--color-text-muted)' }}>
-                Nenhum item adicionado.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {itens.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border"
-                    style={{ borderColor: 'var(--color-bg-surface)' }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
-                        {item.nome}
-                      </p>
-                    </div>
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="any"
-                      value={item.qtd}
-                      onChange={e => updateItemQtd(idx, e.target.value)}
-                      className="w-16 px-2 py-1 rounded border text-sm text-center"
-                      style={{ borderColor: 'var(--color-bg-surface)' }}
-                    />
-                    <input
-                      type="text"
-                      value={item.preco_unitario}
-                      onChange={e => updateItemPreco(idx, e.target.value)}
-                      className="w-24 px-2 py-1 rounded border text-sm text-right"
-                      style={{ borderColor: 'var(--color-bg-surface)' }}
-                    />
-                    <span className="w-24 text-right text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                      {formatBRL(item.subtotal)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(idx)}
-                      className="text-sm hover:text-red-500 transition-colors flex-shrink-0"
-                      style={{ color: 'var(--color-text-muted)' }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-
-                <div className="flex justify-end pt-1 border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                  <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    Total: {formatBRL(valorTotal)}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {error && (
-          <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{error}</p>
-        )}
+        {error && <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{error}</p>}
       </div>
 
       {/* Rodapé */}
       <div className="flex gap-3 justify-end mt-4">
-        <Button type="button" variant="ghost" onClick={() => router.push('/operacional/pedidos-compra')}>
-          Cancelar
-        </Button>
-        <Button type="submit" loading={loading}>
-          Criar Pedido
-        </Button>
+        <Button type="button" variant="ghost" onClick={() => router.push('/operacional/pedidos-compra')}>Cancelar</Button>
+        <Button type="submit" loading={loading}>Criar Pedido</Button>
       </div>
     </form>
   )

@@ -48,6 +48,19 @@ export async function getContacts(companyId: string) {
   return (data ?? []) as { id: string; nome: string; tipo: string }[]
 }
 
+export async function getPurchaseOrderById(id: string, companyId: string): Promise<PurchaseOrder | null> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('purchase_orders')
+    .select('*, fornecedor:contacts(nome)')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .single()
+
+  if (error) return null
+  return data as PurchaseOrder
+}
+
 export async function getActiveProducts(companyId: string) {
   const admin = createAdminClient()
   const { data, error } = await admin

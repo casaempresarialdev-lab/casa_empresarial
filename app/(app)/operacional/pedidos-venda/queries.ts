@@ -38,6 +38,19 @@ export async function getSaleOrders(companyId: string): Promise<SaleOrder[]> {
   return (data ?? []) as SaleOrder[]
 }
 
+export async function getSaleOrderById(id: string, companyId: string): Promise<SaleOrder | null> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('sale_orders')
+    .select('*, cliente:contacts(nome)')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .single()
+
+  if (error) return null
+  return data as SaleOrder
+}
+
 export async function getContacts(companyId: string) {
   const admin = createAdminClient()
   const { data, error } = await admin
