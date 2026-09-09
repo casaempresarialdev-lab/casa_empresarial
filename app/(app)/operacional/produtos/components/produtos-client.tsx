@@ -138,7 +138,6 @@ export function ProdutosClient({ products, companyId }: Props) {
   const totalServicos = products.filter(p => p.tipo === 'servico').length
   const estoqueBaixo = products.filter(p => p.tipo === 'produto' && p.estoque_atual <= p.estoque_minimo && p.ativo).length
 
-  function openAdd() { setEditingProduct(null); setModalOpen(true) }
   function openEdit(p: Product) { setEditingProduct(p); setModalOpen(true) }
 
   async function handleToggleAtivo(p: Product) {
@@ -168,7 +167,7 @@ export function ProdutosClient({ products, companyId }: Props) {
             Catálogo de itens para venda
           </p>
         </div>
-        <Button onClick={openAdd}>Adicionar</Button>
+        <Button onClick={() => router.push('/operacional/produtos/novo')}>Adicionar</Button>
       </div>
 
       {/* Métricas */}

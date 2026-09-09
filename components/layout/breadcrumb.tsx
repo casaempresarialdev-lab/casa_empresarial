@@ -22,6 +22,7 @@ const ROUTE_LABELS: Record<string, string> = {
   faturas: 'Faturas',
   operacional: 'Operacional',
   produtos: 'Produtos e Serviços',
+  novo: 'Novo',
   'pedidos-compra': 'Pedidos de Compra',
   'pedidos-venda': 'Pedidos de Venda',
   'frente-de-caixa': 'Frente de Caixa',
