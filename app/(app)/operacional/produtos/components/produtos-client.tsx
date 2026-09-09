@@ -17,10 +17,6 @@ function formatBRL(val: number | null) {
   return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function formatMargem(val: number | null) {
-  if (val === null) return '—'
-  return `${val.toFixed(1)}%`
-}
 
 function RowMenu({
   product,
@@ -234,7 +230,6 @@ export function ProdutosClient({ products, companyId }: Props) {
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>SKU</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Tipo</th>
               <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Preço Venda</th>
-              <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Margem</th>
               <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Estoque</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
               <th className="px-4 py-3" />
@@ -243,7 +238,7 @@ export function ProdutosClient({ products, companyId }: Props) {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
+                <td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
                   {search || filterTipo !== 'todos' || filterAtivo !== 'todos'
                     ? 'Nenhum resultado encontrado.'
                     : 'Nenhum produto ou serviço cadastrado.'}
@@ -274,9 +269,6 @@ export function ProdutosClient({ products, companyId }: Props) {
                   </td>
                   <td className="px-4 py-3 text-right" style={{ color: 'var(--color-text-primary)' }}>
                     {formatBRL(p.preco_venda)}
-                  </td>
-                  <td className="px-4 py-3 text-right" style={{ color: p.margem !== null && p.margem >= 0 ? '#1E8449' : '#C0392B' }}>
-                    {formatMargem(p.margem)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {p.tipo === 'produto' ? (

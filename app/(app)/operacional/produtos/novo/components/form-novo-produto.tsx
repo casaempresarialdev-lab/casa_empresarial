@@ -35,14 +35,6 @@ export function FormNovoProduto({ companyId }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const margem = (() => {
-    const pv = parseFloat(precoVenda.replace(',', '.'))
-    const pc = parseFloat(precoCusto.replace(',', '.'))
-    if (!isNaN(pv) && !isNaN(pc) && pc > 0) {
-      return (((pv - pc) / pc) * 100).toFixed(1)
-    }
-    return null
-  })()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -267,18 +259,6 @@ export function FormNovoProduto({ companyId }: Props) {
                 />
               </div>
             </div>
-            {margem !== null && (
-              <div
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
-                style={{
-                  backgroundColor: parseFloat(margem) >= 0 ? '#E9F7EF' : '#FDEDEC',
-                  color: parseFloat(margem) >= 0 ? '#1E8449' : '#C0392B',
-                }}
-              >
-                <span>Margem calculada:</span>
-                <span className="font-bold">{margem}%</span>
-              </div>
-            )}
           </div>
         </div>
 
