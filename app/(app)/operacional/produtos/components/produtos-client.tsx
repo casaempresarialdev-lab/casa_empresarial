@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalProduto } from './modal-produto'
@@ -20,6 +20,92 @@ function formatBRL(val: number | null) {
 function formatMargem(val: number | null) {
   if (val === null) return '—'
   return `${val.toFixed(1)}%`
+}
+
+function RowMenu({
+  product,
+  onEdit,
+  onDelete,
+  deletingId,
+}: {
+  product: Product
+  onEdit: () => void
+  onDelete: () => void
+  deletingId: string | null
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      const t = e.target as Node
+      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right })
+    }
+    setOpen(v => !v)
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        title="Opções"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="8" cy="3" r="1.5" />
+          <circle cx="8" cy="8" r="1.5" />
+          <circle cx="8" cy="13" r="1.5" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            right: pos.right,
+            zIndex: 9999,
+            backgroundColor: 'white',
+            border: '1px solid var(--color-bg-surface)',
+            borderRadius: '8px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            minWidth: '140px',
+            padding: '4px 0',
+          }}
+        >
+          <button
+            onClick={() => { setOpen(false); onEdit() }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            Editar
+          </button>
+          <button
+            onClick={() => { setOpen(false); onDelete() }}
+            disabled={deletingId === product.id}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: '#C0392B' }}
+          >
+            {deletingId === product.id ? 'Excluindo...' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </>
+  )
 }
 
 export function ProdutosClient({ products, companyId }: Props) {
@@ -221,13 +307,13 @@ export function ProdutosClient({ products, companyId }: Props) {
                       />
                     </button>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>Editar</Button>
-                      <Button variant="danger" size="sm" loading={deletingId === p.id} onClick={() => handleDelete(p)}>
-                        Excluir
-                      </Button>
-                    </div>
+                  <td className="px-4 py-3 text-right">
+                    <RowMenu
+                      product={p}
+                      onEdit={() => openEdit(p)}
+                      onDelete={() => handleDelete(p)}
+                      deletingId={deletingId}
+                    />
                   </td>
                 </tr>
               )

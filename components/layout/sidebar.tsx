@@ -43,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Operacional',
     icon: '📦',
     children: [
-      { label: 'Produtos', href: '/operacional/produtos' },
+      { label: 'Produtos e Serviços', href: '/operacional/produtos' },
       { label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
       { label: 'Pedidos de Venda', href: '/operacional/pedidos-venda' },
       { label: 'Ordens de Serviço', href: '/operacional/ordens-de-servico' },

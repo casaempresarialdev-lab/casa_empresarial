@@ -21,7 +21,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'fluxo-de-caixa': 'Fluxo de Caixa',
   faturas: 'Faturas',
   operacional: 'Operacional',
-  produtos: 'Produtos',
+  produtos: 'Produtos e Serviços',
   'pedidos-compra': 'Pedidos de Compra',
   'pedidos-venda': 'Pedidos de Venda',
   'frente-de-caixa': 'Frente de Caixa',
