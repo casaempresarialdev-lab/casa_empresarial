@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalContato } from './modal-contato'
@@ -16,6 +16,92 @@ function docMask(doc: string | null, tipo: 'PF' | 'PJ') {
   }
   if (d.length !== 14) return doc
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
+}
+
+function RowMenu({
+  contact,
+  onEdit,
+  onDelete,
+  deletingId,
+}: {
+  contact: Contact
+  onEdit: () => void
+  onDelete: () => void
+  deletingId: string | null
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      const t = e.target as Node
+      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right })
+    }
+    setOpen(v => !v)
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        title="Opções"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="8" cy="3" r="1.5" />
+          <circle cx="8" cy="8" r="1.5" />
+          <circle cx="8" cy="13" r="1.5" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            right: pos.right,
+            zIndex: 9999,
+            backgroundColor: 'white',
+            border: '1px solid var(--color-bg-surface)',
+            borderRadius: '8px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            minWidth: '140px',
+            padding: '4px 0',
+          }}
+        >
+          <button
+            onClick={() => { setOpen(false); onEdit() }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            Editar
+          </button>
+          <button
+            onClick={() => { setOpen(false); onDelete() }}
+            disabled={deletingId === contact.id}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: '#C0392B' }}
+          >
+            {deletingId === contact.id ? 'Excluindo...' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </>
+  )
 }
 
 interface Props {
@@ -43,7 +129,6 @@ export function ContatosClient({ contacts, companyId }: Props) {
     return matchTipo && matchSearch
   })
 
-  function openAdd() { setEditing(null); setModalOpen(true) }
   function openEdit(c: Contact) { setEditing(c); setModalOpen(true) }
 
   async function handleDelete(c: Contact) {
@@ -67,7 +152,7 @@ export function ContatosClient({ contacts, companyId }: Props) {
             Clientes e fornecedores
           </p>
         </div>
-        <Button onClick={openAdd}>Adicionar</Button>
+        <Button onClick={() => router.push('/financeiro/contatos/novo')}>Adicionar</Button>
       </div>
 
       <div className="flex gap-3 mb-4">
@@ -142,11 +227,13 @@ export function ContatosClient({ contacts, companyId }: Props) {
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{docMask(c.cpf_cnpj, c.tipo)}</td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{c.email ?? '—'}</td>
                 <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{c.telefone ?? '—'}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(c)}>Editar</Button>
-                    <Button variant="danger" size="sm" loading={deletingId === c.id} onClick={() => handleDelete(c)}>Excluir</Button>
-                  </div>
+                <td className="px-4 py-3 text-right">
+                  <RowMenu
+                    contact={c}
+                    onEdit={() => openEdit(c)}
+                    onDelete={() => handleDelete(c)}
+                    deletingId={deletingId}
+                  />
                 </td>
               </tr>
             ))}
