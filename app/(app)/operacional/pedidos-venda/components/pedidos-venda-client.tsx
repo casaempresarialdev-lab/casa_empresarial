@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ModalPedidoVenda } from './modal-pedido-venda'
@@ -65,6 +65,107 @@ function formatDate(d: string | null) {
   return `${day}/${m}/${y}`
 }
 
+function RowMenu({
+  order,
+  onEdit,
+  onAdvance,
+  onDelete,
+  advancingId,
+  deletingId,
+}: {
+  order: SaleOrder
+  onEdit: () => void
+  onAdvance: () => void
+  onDelete: () => void
+  advancingId: string | null
+  deletingId: string | null
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const nextStatus = STATUS_FLOW[order.status]
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      const t = e.target as Node
+      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right })
+    }
+    setOpen(v => !v)
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+        style={{ color: 'var(--color-text-muted)' }}
+        title="Opções"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="8" cy="3" r="1.5" />
+          <circle cx="8" cy="8" r="1.5" />
+          <circle cx="8" cy="13" r="1.5" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            right: pos.right,
+            zIndex: 9999,
+            backgroundColor: 'white',
+            border: '1px solid var(--color-bg-surface)',
+            borderRadius: '8px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            minWidth: '160px',
+            padding: '4px 0',
+          }}
+        >
+          {nextStatus && (
+            <button
+              onClick={() => { setOpen(false); onAdvance() }}
+              disabled={advancingId === order.id}
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: 'var(--color-primary-darker)' }}
+            >
+              {advancingId === order.id ? 'Aguarde...' : STATUS_NEXT_LABEL[order.status]}
+            </button>
+          )}
+          <button
+            onClick={() => { setOpen(false); onEdit() }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            Editar
+          </button>
+          <button
+            onClick={() => { setOpen(false); onDelete() }}
+            disabled={deletingId === order.id}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
+            style={{ color: '#C0392B' }}
+          >
+            {deletingId === order.id ? 'Excluindo...' : 'Excluir'}
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
 export function PedidosVendaClient({ orders, contacts, products, companyId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
@@ -84,7 +185,6 @@ export function PedidosVendaClient({ orders, contacts, products, companyId }: Pr
     .filter(o => o.status !== 'cancelado')
     .reduce((sum, o) => sum + o.valor_total, 0)
 
-  function openAdd() { setEditingOrder(null); setModalOpen(true) }
   function openEdit(o: SaleOrder) { setEditingOrder(o); setModalOpen(true) }
 
   async function handleAdvanceStatus(o: SaleOrder) {
@@ -116,7 +216,7 @@ export function PedidosVendaClient({ orders, contacts, products, companyId }: Pr
             Total em pedidos ativos: <span className="font-semibold" style={{ color: 'var(--color-primary-darker)' }}>{formatBRL(totalMes)}</span>
           </p>
         </div>
-        <Button onClick={openAdd}>Adicionar</Button>
+        <Button onClick={() => router.push('/operacional/pedidos-venda/novo')}>Adicionar</Button>
       </div>
 
       {/* Cards de status */}
@@ -167,7 +267,6 @@ export function PedidosVendaClient({ orders, contacts, products, companyId }: Pr
             )}
             {filtered.map(o => {
               const colors = STATUS_COLORS[o.status]
-              const nextStatus = STATUS_FLOW[o.status]
               return (
                 <tr key={o.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
                   <td className="px-4 py-3 font-mono font-medium" style={{ color: 'var(--color-text-primary)' }}>
@@ -197,18 +296,15 @@ export function PedidosVendaClient({ orders, contacts, products, companyId }: Pr
                       {STATUS_LABELS[o.status]}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5 justify-end">
-                      {nextStatus && (
-                        <Button variant="ghost" size="sm" loading={advancingId === o.id} onClick={() => handleAdvanceStatus(o)}>
-                          {STATUS_NEXT_LABEL[o.status]}
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(o)}>Editar</Button>
-                      <Button variant="danger" size="sm" loading={deletingId === o.id} onClick={() => handleDelete(o)}>
-                        Excluir
-                      </Button>
-                    </div>
+                  <td className="px-4 py-3 text-right">
+                    <RowMenu
+                      order={o}
+                      onEdit={() => openEdit(o)}
+                      onAdvance={() => handleAdvanceStatus(o)}
+                      onDelete={() => handleDelete(o)}
+                      advancingId={advancingId}
+                      deletingId={deletingId}
+                    />
                   </td>
                 </tr>
               )
