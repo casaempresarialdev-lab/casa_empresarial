@@ -1,21 +1,22 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { parseAreaPermissions, FULL_AREA_PERMISSIONS, type AreaKey, type AreaPermissions } from '@/lib/auth/area-permissions'
+import { ModalGerenciarMenu } from './modal-gerenciar-menu'
+import type { MenuArea } from '@/lib/menu/queries'
 
 type NavLeaf  = { label: string; href: string; icon: string; children?: never; areaKey?: never }
 type NavGroup = { label: string; href?: never; icon: string; areaKey?: AreaKey; children: { label: string; href: string }[] }
 type NavItem  = NavLeaf | NavGroup
 
+const DASHBOARD_ITEM: NavLeaf = { label: 'Dashboard', href: '/dashboard', icon: '⊞' }
+
 const NAV_ITEMS: NavItem[] = [
-  {
-    label: 'Dashboard',
-    href: '/dashboard',
-    icon: '⊞',
-  },
+  DASHBOARD_ITEM,
   {
     label: 'Administrativo',
     icon: '🏢',
@@ -90,6 +91,14 @@ interface SidebarProps {
   role?: string | null
   myEmployeeId?: string | null
   areaPermissions?: AreaPermissions | Record<string, string> | null
+  companyId?: string | null
+  menuTree?: MenuArea[]
+}
+
+function hrefForSubItem(sub: MenuArea['children'][number]): string {
+  if (sub.href) return sub.href
+  if (sub.tipo === 'pasta') return `/menu/pasta/${sub.id}`
+  return `/menu/em-breve/${sub.id}`
 }
 
 const COLABORADOR_NAV_ITEMS: NavItem[] = [
@@ -105,24 +114,37 @@ const COLABORADOR_NAV_ITEMS: NavItem[] = [
   },
 ]
 
-export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions }: SidebarProps) {
+export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyId, menuTree }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const mobileSidebarOpen = useAppStore((s) => s.mobileSidebarOpen)
   const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen)
   const pathname = usePathname()
+  const [menuModalOpen, setMenuModalOpen] = useState(false)
 
   const isColaborador = role === 'colaborador'
   const isOwner = role === 'owner'
   // Owner sempre vê tudo; os demais são filtrados pela permissão por área —
   // grupo com "Sem acesso" nem aparece no menu (o servidor também recusa a rota direta).
+  // Áreas personalizadas (areaKey null) não têm permissão própria ainda — visíveis a todos.
   const resolvedPermissions = isOwner ? FULL_AREA_PERMISSIONS : parseAreaPermissions(areaPermissions)
+  const tree = menuTree ?? []
+  const dynamicNavItems: NavGroup[] = tree
+    .filter(area => !area.areaKey || resolvedPermissions[area.areaKey] !== 'nenhum')
+    .map(area => ({
+      label: area.displayLabel,
+      icon: area.icon,
+      areaKey: area.areaKey ?? undefined,
+      children: area.children.map(sub => ({ label: sub.displayLabel, href: hrefForSubItem(sub) })),
+    }))
   const navItems: NavItem[] = isColaborador
     ? [
         ...COLABORADOR_NAV_ITEMS,
         ...(myEmployeeId ? [{ label: 'Meus Dados', href: `/pessoas/funcionarios/${myEmployeeId}`, icon: '🙋' } as NavLeaf] : []),
       ]
-    : NAV_ITEMS.filter(item => !item.areaKey || resolvedPermissions[item.areaKey] !== 'nenhum')
+    : (tree.length > 0
+        ? [DASHBOARD_ITEM, ...dynamicNavItems]
+        : NAV_ITEMS.filter(item => !item.areaKey || resolvedPermissions[item.areaKey] !== 'nenhum'))
 
   function closeMobile() {
     setMobileSidebarOpen(false)
@@ -257,6 +279,20 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions }: Sideba
               </div>
             )
           })}
+
+          {/* Gerenciar menu — cria áreas/itens personalizados, renomeia, reordena, troca ícone */}
+          {!isColaborador && companyId && (
+            <button
+              type="button"
+              onClick={() => setMenuModalOpen(true)}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg mb-1 text-sm transition-colors hover:bg-gray-50"
+              style={{ color: 'var(--color-text-muted)' }}
+              title={!expanded ? 'Gerenciar menu' : undefined}
+            >
+              <span className="text-base shrink-0">⚙</span>
+              <span className={cn('truncate', !expanded && 'md:hidden')}>Gerenciar menu</span>
+            </button>
+          )}
         </nav>
 
         {/* Toggle — desktop apenas */}
@@ -279,6 +315,15 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions }: Sideba
           ✕ Fechar
         </button>
       </aside>
+
+      {!isColaborador && companyId && (
+        <ModalGerenciarMenu
+          open={menuModalOpen}
+          onClose={() => setMenuModalOpen(false)}
+          companyId={companyId}
+          tree={tree}
+        />
+      )}
     </>
   )
 }

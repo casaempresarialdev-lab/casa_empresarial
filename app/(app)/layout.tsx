@@ -9,6 +9,7 @@ import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { ThemeSync } from '@/components/layout/theme-sync'
 import { deriveThemeColors } from '@/lib/theme'
 import { parseAreaPermissions, FULL_AREA_PERMISSIONS } from '@/lib/auth/area-permissions'
+import { getMenuTree } from '@/lib/menu/queries'
 
 export default async function AppLayout({
   children,
@@ -60,6 +61,11 @@ export default async function AppLayout({
     ? FULL_AREA_PERMISSIONS
     : parseAreaPermissions(activeCompany?.permissions)
 
+  // Colaborador usa a navegação própria (restrita), não a árvore de menu da empresa.
+  const menuTree = (activeCompany?.id && activeRole !== 'colaborador')
+    ? await getMenuTree(activeCompany.id)
+    : []
+
   // Tema: cores derivadas da empresa ativa (server-side → sem flash)
   const { primary, dark, darker } = deriveThemeColors(activeCompany?.cor_primaria ?? null)
   const themeCSS = `body{--color-primary:${primary};--color-primary-dark:${dark};--color-primary-darker:${darker}}`
@@ -71,7 +77,14 @@ export default async function AppLayout({
       <style dangerouslySetInnerHTML={{ __html: themeCSS }} />
       <AppStoreInitializer companies={companies} firstCompanyId={firstCompanyId}>
         <ThemeSync companies={companyThemes} />
-        <Sidebar logoUrl={logoUrl} role={activeRole} myEmployeeId={myEmployeeId} areaPermissions={areaPermissions} />
+        <Sidebar
+          logoUrl={logoUrl}
+          role={activeRole}
+          myEmployeeId={myEmployeeId}
+          areaPermissions={areaPermissions}
+          companyId={activeCompany?.id ?? null}
+          menuTree={menuTree}
+        />
         <AppShell>
           <Header
             companies={companies}

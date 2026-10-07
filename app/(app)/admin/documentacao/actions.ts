@@ -12,6 +12,7 @@ async function getAuthUser() {
 export async function uploadDocumentAction(
   companyId: string,
   formData: FormData,
+  menuItemId?: string,
 ): Promise<{ error?: string }> {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
@@ -44,6 +45,7 @@ export async function uploadDocumentAction(
     descricao: descricao || null,
     vencimento: vencimento || null,
     observacao: observacao || null,
+    menu_item_id: menuItemId || null,
   })
 
   if (dbErr) {
@@ -52,6 +54,7 @@ export async function uploadDocumentAction(
   }
 
   revalidatePath('/admin/documentacao')
+  if (menuItemId) revalidatePath(`/menu/pasta/${menuItemId}`)
   return {}
 }
 
@@ -94,7 +97,7 @@ export async function deleteDocumentAction(
 
   const { data: doc } = await admin
     .from('documents')
-    .select('storage_path')
+    .select('storage_path, menu_item_id')
     .eq('id', id)
     .eq('company_id', companyId)
     .single()
@@ -112,6 +115,7 @@ export async function deleteDocumentAction(
   await admin.storage.from('documentos').remove([doc.storage_path])
 
   revalidatePath('/admin/documentacao')
+  if (doc.menu_item_id) revalidatePath(`/menu/pasta/${doc.menu_item_id}`)
   return {}
 }
 
