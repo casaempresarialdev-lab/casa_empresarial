@@ -8,6 +8,7 @@ import { AppShell } from '@/components/layout/app-shell'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { ThemeSync } from '@/components/layout/theme-sync'
 import { deriveThemeColors } from '@/lib/theme'
+import { parseAreaPermissions, FULL_AREA_PERMISSIONS } from '@/lib/auth/area-permissions'
 
 export default async function AppLayout({
   children,
@@ -28,17 +29,17 @@ export default async function AppLayout({
     admin.from('profiles').select('name, avatar_url').eq('id', user.id).single(),
     admin
       .from('company_members')
-      .select('company_id, role, companies(id, razao_social, logo_url, cor_primaria)')
+      .select('company_id, role, permissions, companies(id, razao_social, logo_url, cor_primaria)')
       .eq('profile_id', user.id)
       .eq('status', 'active'),
     admin.from('employees').select('id, company_id').eq('profile_id', user.id),
   ])
 
   type Company = { id: string; razao_social: string; logo_url?: string | null; cor_primaria?: string | null }
-  type MembershipRow = { company_id: string; role: string; companies: Company | Company[] | null }
+  type MembershipRow = { company_id: string; role: string; permissions: Record<string, string> | null; companies: Company | Company[] | null }
   const membershipRows = (memberships ?? []) as unknown as MembershipRow[]
   const employeeIdByCompany = new Map((myEmployees ?? []).map(e => [e.company_id, e.id]))
-  const companies: (Company & { role: string; employeeId: string | null })[] = membershipRows
+  const companies: (Company & { role: string; employeeId: string | null; permissions: Record<string, string> | null })[] = membershipRows
     .flatMap((m) => {
       const c = m.companies
       if (!c) return []
@@ -46,6 +47,7 @@ export default async function AppLayout({
         ...company,
         role: m.role,
         employeeId: employeeIdByCompany.get(company.id) ?? null,
+        permissions: m.permissions,
       }))
     })
 
@@ -54,6 +56,9 @@ export default async function AppLayout({
   const logoUrl        = activeCompany?.logo_url ?? null
   const activeRole     = activeCompany?.role ?? null
   const myEmployeeId   = activeCompany?.employeeId ?? null
+  const areaPermissions = activeRole === 'owner'
+    ? FULL_AREA_PERMISSIONS
+    : parseAreaPermissions(activeCompany?.permissions)
 
   // Tema: cores derivadas da empresa ativa (server-side → sem flash)
   const { primary, dark, darker } = deriveThemeColors(activeCompany?.cor_primaria ?? null)
@@ -66,7 +71,7 @@ export default async function AppLayout({
       <style dangerouslySetInnerHTML={{ __html: themeCSS }} />
       <AppStoreInitializer companies={companies} firstCompanyId={firstCompanyId}>
         <ThemeSync companies={companyThemes} />
-        <Sidebar logoUrl={logoUrl} role={activeRole} myEmployeeId={myEmployeeId} />
+        <Sidebar logoUrl={logoUrl} role={activeRole} myEmployeeId={myEmployeeId} areaPermissions={areaPermissions} />
         <AppShell>
           <Header
             companies={companies}

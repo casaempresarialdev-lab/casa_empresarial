@@ -6,8 +6,48 @@ import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { addMemberAction, updateMemberRoleAction, inviteUserAction, updateMemberProfileAction } from '../actions'
+import { addMemberAction, updateMemberRoleAction, inviteUserAction, updateMemberProfileAction, updateMemberPermissionsAction } from '../actions'
 import type { MemberWithProfile } from '../queries'
+import { AREA_KEYS, AREA_LABELS, DEFAULT_NEW_MEMBER_PERMISSIONS, parseAreaPermissions, type AreaPermissions, type AreaPermissionLevel } from '@/lib/auth/area-permissions'
+
+const PERMISSION_LEVELS: { value: AreaPermissionLevel; label: string }[] = [
+  { value: 'nenhum', label: 'Sem acesso' },
+  { value: 'ver', label: 'Ver' },
+  { value: 'editar', label: 'Editar' },
+]
+
+function AreaPermissionGrid({ value, onChange }: { value: AreaPermissions; onChange: (next: AreaPermissions) => void }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--color-text-muted)' }}>
+        Permissão por área
+      </p>
+      <div className="space-y-2">
+        {AREA_KEYS.map((key) => (
+          <div key={key} className="flex items-center justify-between gap-2">
+            <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{AREA_LABELS[key]}</span>
+            <div className="flex rounded-lg p-0.5" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              {PERMISSION_LEVELS.map((lvl) => (
+                <button
+                  key={lvl.value}
+                  type="button"
+                  onClick={() => onChange({ ...value, [key]: lvl.value })}
+                  className="px-2.5 py-1 text-xs rounded-md transition-all font-medium"
+                  style={value[key] === lvl.value
+                    ? { backgroundColor: 'white', color: 'var(--color-text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
+                    : { color: 'var(--color-text-muted)' }
+                  }
+                >
+                  {lvl.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 const ROLE_OPTIONS = [
   { value: 'admin',      label: 'Administrador' },
@@ -49,6 +89,7 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
 
   // ── Modo edição ──
   const [role, setRole] = useState('member')
+  const [permissions, setPermissions] = useState<AreaPermissions>(DEFAULT_NEW_MEMBER_PERMISSIONS)
   const [name, setName] = useState('')
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -75,6 +116,7 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
       setInviteAvatarFile(null)
       setInviteAvatarPreview(null)
       setRole(member?.role ?? 'member')
+      setPermissions(member ? parseAreaPermissions(member.permissions) : DEFAULT_NEW_MEMBER_PERMISSIONS)
       setName(member?.profiles?.name ?? '')
       setAvatarPreview(member?.profiles?.avatar_url ?? null)
       setAvatarFile(null)
@@ -112,13 +154,18 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
           avatarFile,
           cep, uf, cidade, logradouro, bairro, numero, complemento,
         })
+        // Permissão por área é salva à parte — não existe pro próprio proprietário.
+        if (!('error' in result && result.error) && member!.role !== 'owner') {
+          const permResult = await updateMemberPermissionsAction(member!.id, companyId, permissions)
+          if ('error' in permResult && permResult.error) result = permResult
+        }
       } else {
         result = await updateMemberRoleAction(member!.id, role)
       }
     } else if (tab === 'cpf') {
-      result = await addMemberAction(companyId, cpf, role, addAvatarFile)
+      result = await addMemberAction(companyId, cpf, role, addAvatarFile, permissions)
     } else {
-      result = await inviteUserAction(companyId, email, role, inviteAvatarFile)
+      result = await inviteUserAction(companyId, email, role, inviteAvatarFile, permissions)
     }
 
     setLoading(false)
@@ -377,6 +424,11 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
               )}
             </div>
 
+            {/* Permissão por área — proprietário não usa, tem acesso completo */}
+            {isOwner && member?.role !== 'owner' && (
+              <AreaPermissionGrid value={permissions} onChange={setPermissions} />
+            )}
+
             {/* Seção: Endereço */}
             {isOwner && (
               <div>
@@ -405,12 +457,15 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
 
         {/* ── Função no modo adição ── */}
         {!isEditing && (
-          <Select
-            label="Função"
-            options={roleOptions}
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          />
+          <>
+            <Select
+              label="Função"
+              options={roleOptions}
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            />
+            <AreaPermissionGrid value={permissions} onChange={setPermissions} />
+          </>
         )}
 
         {error && (

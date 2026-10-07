@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { areaKeyForPathname, parseAreaPermissions } from '@/lib/auth/area-permissions'
 
 // Redireciona para /dashboard se já estiver logado
 const AUTH_ONLY_ROUTES = ['/login', '/esqueci-senha', '/nova-senha']
@@ -89,6 +90,23 @@ export async function middleware(request: NextRequest) {
     )
     const allowed = COLABORADOR_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/')) || ownFuncionarioRoute
     if (!allowed) return NextResponse.redirect(new URL('/pessoas/registro-de-ponto', request.url))
+    return response
+  }
+
+  // Permissão por área — owner sempre passa (cookie vem vazio pra ele, nunca checado).
+  // Membro secundário (admin/member/accountant) com "Sem acesso" na área da rota é
+  // barrado antes de chegar na tela, mesmo que o menu já esconda o link.
+  if (role && role !== 'owner') {
+    const areaKey = areaKeyForPathname(pathname)
+    if (areaKey) {
+      const rawPermissions = request.cookies.get('active_area_permissions')?.value
+      let parsedRaw: unknown = {}
+      try { parsedRaw = rawPermissions ? JSON.parse(decodeURIComponent(rawPermissions)) : {} } catch { parsedRaw = {} }
+      const permissions = parseAreaPermissions(parsedRaw)
+      if (permissions[areaKey] === 'nenhum') {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
+    }
   }
 
   return response

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { DEFAULT_NEW_MEMBER_PERMISSIONS, parseAreaPermissions, type AreaPermissions } from '@/lib/auth/area-permissions'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -22,12 +23,14 @@ export async function addMemberAction(
   cpf: string,
   role: string,
   avatarFile?: File | null,
+  permissions?: AreaPermissions,
 ) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
   const admin = createAdminClient()
   const normalized = cpf.replace(/\D/g, '')
+  const resolvedPermissions = permissions ?? DEFAULT_NEW_MEMBER_PERMISSIONS
 
   if (normalized.length !== 11) return { error: 'CPF inválido.' }
 
@@ -50,7 +53,7 @@ export async function addMemberAction(
     if (existing.status === 'active') return { error: 'Este usuário já é membro desta empresa.' }
     const { error } = await admin
       .from('company_members')
-      .update({ status: 'active', role })
+      .update({ status: 'active', role, permissions: resolvedPermissions })
       .eq('id', existing.id)
     if (error) return { error: error.message }
   } else {
@@ -59,6 +62,7 @@ export async function addMemberAction(
       profile_id: profile.id,
       role,
       status: 'active',
+      permissions: resolvedPermissions,
     })
     if (error) return { error: error.message }
   }
@@ -85,12 +89,14 @@ export async function inviteUserAction(
   email: string,
   role: string,
   avatarFile?: File | null,
+  permissions?: AreaPermissions,
 ) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
   const normalizedEmail = email.trim().toLowerCase()
   const admin = createAdminClient()
+  const resolvedPermissions = permissions ?? DEFAULT_NEW_MEMBER_PERMISSIONS
 
   // Verifica convite pendente já existente
   const { data: existing } = await admin
@@ -110,6 +116,7 @@ export async function inviteUserAction(
     role,
     invited_by: user.id,
     status: 'pending',
+    permissions: resolvedPermissions,
   }).select('id').single()
 
   if (dbErr || !inv) return { error: dbErr?.message ?? 'Erro ao criar convite.' }
@@ -196,6 +203,45 @@ export async function updateMemberRoleAction(memberId: string, role: string) {
   const { error } = await admin
     .from('company_members')
     .update({ role })
+    .eq('id', memberId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/admin/usuarios')
+  return { success: true }
+}
+
+export async function updateMemberPermissionsAction(memberId: string, companyId: string, permissions: AreaPermissions) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+
+  // Só o proprietário altera a permissão de área de outro membro.
+  const { data: currentMember } = await admin
+    .from('company_members')
+    .select('role')
+    .eq('company_id', companyId)
+    .eq('profile_id', user.id)
+    .eq('status', 'active')
+    .single()
+
+  if (currentMember?.role !== 'owner') {
+    return { error: 'Apenas proprietários podem alterar permissões.' }
+  }
+
+  const { data: target } = await admin
+    .from('company_members')
+    .select('role')
+    .eq('id', memberId)
+    .single()
+
+  if (target?.role === 'owner') {
+    return { error: 'O proprietário tem acesso completo e não usa permissão por área.' }
+  }
+
+  const { error } = await admin
+    .from('company_members')
+    .update({ permissions: parseAreaPermissions(permissions) })
     .eq('id', memberId)
 
   if (error) return { error: error.message }

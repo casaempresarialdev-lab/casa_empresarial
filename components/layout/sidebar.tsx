@@ -4,9 +4,10 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
+import { parseAreaPermissions, FULL_AREA_PERMISSIONS, type AreaKey, type AreaPermissions } from '@/lib/auth/area-permissions'
 
-type NavLeaf  = { label: string; href: string; icon: string; children?: never }
-type NavGroup = { label: string; href?: never; icon: string; children: { label: string; href: string }[] }
+type NavLeaf  = { label: string; href: string; icon: string; children?: never; areaKey?: never }
+type NavGroup = { label: string; href?: never; icon: string; areaKey?: AreaKey; children: { label: string; href: string }[] }
 type NavItem  = NavLeaf | NavGroup
 
 const NAV_ITEMS: NavItem[] = [
@@ -18,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Administrativo',
     icon: '🏢',
+    areaKey: 'administrativo',
     children: [
       { label: 'Minha Empresa', href: '/empresa' },
       { label: 'Quadro Societário', href: '/admin/quadro-societario' },
@@ -28,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Financeiro',
     icon: '💰',
+    areaKey: 'financeiro',
     children: [
       { label: 'Contatos', href: '/financeiro/contatos' },
       { label: 'Centro de Custo', href: '/financeiro/centro-de-custo' },
@@ -42,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Operacional',
     icon: '📦',
+    areaKey: 'operacional',
     children: [
       { label: 'Produtos e Serviços', href: '/operacional/produtos' },
       { label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
@@ -53,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Pessoas',
     icon: '👥',
+    areaKey: 'pessoas',
     children: [
       { label: 'Equipe', href: '/pessoas/funcionarios' },
       { label: 'Admissão', href: '/pessoas/admissao' },
@@ -69,6 +74,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Marketing',
     icon: '📣',
+    areaKey: 'marketing',
     children: [
       { label: 'Calendário', href: '/marketing/calendario' },
       { label: 'Depoimentos', href: '/marketing/depoimentos' },
@@ -83,6 +89,7 @@ interface SidebarProps {
   logoUrl?: string | null
   role?: string | null
   myEmployeeId?: string | null
+  areaPermissions?: AreaPermissions | Record<string, string> | null
 }
 
 const COLABORADOR_NAV_ITEMS: NavItem[] = [
@@ -98,7 +105,7 @@ const COLABORADOR_NAV_ITEMS: NavItem[] = [
   },
 ]
 
-export function Sidebar({ logoUrl, role, myEmployeeId }: SidebarProps) {
+export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const mobileSidebarOpen = useAppStore((s) => s.mobileSidebarOpen)
@@ -106,12 +113,16 @@ export function Sidebar({ logoUrl, role, myEmployeeId }: SidebarProps) {
   const pathname = usePathname()
 
   const isColaborador = role === 'colaborador'
+  const isOwner = role === 'owner'
+  // Owner sempre vê tudo; os demais são filtrados pela permissão por área —
+  // grupo com "Sem acesso" nem aparece no menu (o servidor também recusa a rota direta).
+  const resolvedPermissions = isOwner ? FULL_AREA_PERMISSIONS : parseAreaPermissions(areaPermissions)
   const navItems: NavItem[] = isColaborador
     ? [
         ...COLABORADOR_NAV_ITEMS,
         ...(myEmployeeId ? [{ label: 'Meus Dados', href: `/pessoas/funcionarios/${myEmployeeId}`, icon: '🙋' } as NavLeaf] : []),
       ]
-    : NAV_ITEMS
+    : NAV_ITEMS.filter(item => !item.areaKey || resolvedPermissions[item.areaKey] !== 'nenhum')
 
   function closeMobile() {
     setMobileSidebarOpen(false)

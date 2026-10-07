@@ -42,19 +42,21 @@ export async function GET(request: NextRequest) {
 
     const { data: pendingInvites } = await admin
       .from('invitations')
-      .select('id, company_id, role, avatar_url, employee_id')
+      .select('id, company_id, role, avatar_url, employee_id, permissions')
       .eq('email', userEmail.toLowerCase())
       .eq('status', 'pending')
 
     if (pendingInvites && pendingInvites.length > 0) {
       for (const inv of pendingInvites) {
-        // Adiciona à empresa (upsert para evitar duplicata)
+        // Adiciona à empresa (upsert para evitar duplicata) — a permissão por área
+        // escolhida pelo owner na hora do convite vai junto.
         await admin.from('company_members').upsert(
           {
             company_id: inv.company_id,
             profile_id: session.user.id,
             role: inv.role,
             status: 'active',
+            permissions: inv.permissions ?? {},
           },
           { onConflict: 'company_id,profile_id' },
         )
