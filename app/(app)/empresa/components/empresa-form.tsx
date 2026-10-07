@@ -4,11 +4,13 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { createCompanyAction, updateCompanyAction } from '../actions'
+import { createCompanyAction, createCompanyForClientAction, updateCompanyAction } from '../actions'
 import { companySchema, type CompanyData } from '@/lib/validations/company'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
+import { AreaPermissionGrid } from '@/components/shared/area-permission-grid'
+import { DEFAULT_NEW_MEMBER_PERMISSIONS, type AreaPermissions } from '@/lib/auth/area-permissions'
 import type { Company } from '../queries'
 
 const UF_OPTIONS = [
@@ -76,6 +78,12 @@ export function EmpresaForm({ company }: Props) {
   const [cepLoading, setCepLoading]   = useState(false)
   const [isPending, startTransition]  = useTransition()
 
+  // Só faz sentido no modo de criação — editar é sempre "minha empresa"
+  const [modo, setModo] = useState<'minha' | 'cliente'>('minha')
+  const [masterEmail, setMasterEmail] = useState('')
+  const [apoioPermissions, setApoioPermissions] = useState<AreaPermissions>(DEFAULT_NEW_MEMBER_PERMISSIONS)
+  const [pendingCompanyId, setPendingCompanyId] = useState<string | null>(null)
+
   const certInputRef = useRef<HTMLInputElement>(null)
   const [certName, setCertName] = useState<string | null>(
     company?.certificado_digital_url ? 'Certificado já cadastrado' : null,
@@ -136,6 +144,12 @@ export function EmpresaForm({ company }: Props) {
   async function onSubmit(data: CompanyData) {
     setServerError(null)
     setSuccessMsg(null)
+
+    if (!isEdit && modo === 'cliente' && !masterEmail.trim()) {
+      setServerError('Informe o e-mail do dono (master) da empresa.')
+      return
+    }
+
     const formData = new FormData()
     Object.entries(data).forEach(([k, v]) => {
       if (v !== undefined && v !== '') formData.set(k, String(v))
@@ -148,6 +162,20 @@ export function EmpresaForm({ company }: Props) {
         const result = await updateCompanyAction(company.id, formData)
         if (result?.error) setServerError(result.error)
         else setSuccessMsg('Dados da empresa atualizados com sucesso!')
+      } else if (modo === 'cliente') {
+        formData.set('master_email', masterEmail.trim())
+        formData.set('apoio_permissions', JSON.stringify(apoioPermissions))
+        const result = await createCompanyForClientAction(formData)
+        if (result?.error) {
+          setServerError(result.error)
+        } else if (result?.companyId) {
+          document.cookie = `active_company_id=${result.companyId}; path=/; max-age=31536000; SameSite=Lax`
+          setPendingCompanyId(result.companyId)
+          setSuccessMsg(
+            result.warning
+              ?? `Empresa criada! Um convite foi enviado para ${masterEmail.trim()} assumir como dono (master) — assim que ele aceitar, vira o titular da conta. Você já pode continuar configurando a empresa.`
+          )
+        }
       } else {
         const result = await createCompanyAction(formData)
         if (result?.error) {
@@ -174,7 +202,62 @@ export function EmpresaForm({ company }: Props) {
         </p>
       </div>
 
+      {pendingCompanyId ? (
+        <div className="bg-white rounded-2xl border p-6 flex flex-col gap-4" style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <p className="text-sm p-3 rounded-lg bg-green-50 border border-green-200 text-green-700">{successMsg}</p>
+          <div className="flex justify-end">
+            <Button onClick={() => router.push('/dashboard')} size="lg">Ir para o Dashboard</Button>
+          </div>
+        </div>
+      ) : (
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+
+        {/* Modo de cadastro — só na criação */}
+        {!isEdit && (
+          <Card>
+            <SectionTitle>Para quem é esta empresa?</SectionTitle>
+            <div className="flex rounded-lg p-1" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              {([
+                { value: 'minha' as const, label: 'Esta empresa é minha' },
+                { value: 'cliente' as const, label: 'Estou cadastrando para um cliente' },
+              ]).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setModo(opt.value)}
+                  className="flex-1 py-2 text-sm rounded-md transition-all font-medium"
+                  style={modo === opt.value
+                    ? { backgroundColor: 'white', color: 'var(--color-text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
+                    : { color: 'var(--color-text-muted)' }
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {modo === 'cliente' && (
+              <>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  Você vira um membro secundário dessa empresa (consegue configurar tudo), e o e-mail abaixo recebe
+                  um convite pra ser o dono (master) — só vira titular de verdade quando aceitar.
+                </p>
+                <Input
+                  label={<>E-mail do dono (master) da empresa <Req /></>}
+                  type="email"
+                  placeholder="dono@empresacliente.com.br"
+                  value={masterEmail}
+                  onChange={(e) => setMasterEmail(e.target.value)}
+                />
+                <AreaPermissionGrid
+                  value={apoioPermissions}
+                  onChange={setApoioPermissions}
+                  title="Sua permissão (Apoio Administrativo) nessa empresa"
+                />
+              </>
+            )}
+          </Card>
+        )}
 
         {/* 1 — Dados da empresa + Endereço */}
         <Card>
@@ -351,10 +434,11 @@ export function EmpresaForm({ company }: Props) {
 
         <div className="flex justify-end pb-8">
           <Button type="submit" loading={loading} size="lg">
-            {isEdit ? 'Salvar alterações' : 'Cadastrar empresa'}
+            {isEdit ? 'Salvar alterações' : modo === 'cliente' ? 'Cadastrar e convidar o dono' : 'Cadastrar empresa'}
           </Button>
         </div>
       </form>
+      )}
     </div>
   )
 }
