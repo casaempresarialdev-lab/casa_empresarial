@@ -6,9 +6,10 @@ import Link from 'next/link'
 import { useAppStore } from '@/store'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { CompanySwitcher, type SwitcherCompany } from './company-switcher'
 
 interface HeaderProps {
-  companies?: { id: string; razao_social: string }[]
+  companies?: SwitcherCompany[]
   userName?: string
   userAvatar?: string | null
 }
@@ -45,8 +46,6 @@ export function Header({ companies = [], userName, userAvatar }: HeaderProps) {
     router.push('/login')
   }
 
-  const activeCompany = companies.find((c) => c.id === activeCompanyId)
-
   return (
     <header
       className={cn(
@@ -75,27 +74,7 @@ export function Header({ companies = [], userName, userAvatar }: HeaderProps) {
         </button>
 
         {/* Seletor de empresa */}
-        {companies.length > 1 ? (
-          <select
-            value={activeCompanyId ?? ''}
-            onChange={(e) => setActiveCompany(e.target.value)}
-            className="text-sm rounded-lg border px-3 py-1.5 focus:outline-none max-w-[160px] md:max-w-none"
-            style={{
-              borderColor: 'var(--color-bg-surface)',
-              color: 'var(--color-text-secondary)',
-            }}
-          >
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.razao_social}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="text-sm font-medium truncate max-w-[140px] md:max-w-none" style={{ color: 'var(--color-text-secondary)' }}>
-            {activeCompany?.razao_social ?? ''}
-          </span>
-        )}
+        <CompanySwitcher companies={companies} activeCompanyId={activeCompanyId} onSelect={setActiveCompany} />
       </div>
 
       {/* Avatar com dropdown */}
