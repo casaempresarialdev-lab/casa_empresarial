@@ -68,7 +68,7 @@ export function ModalItemMenu({ mode, onClose, onCreateArea, onAddSubItem, onRen
   }
 
   async function handlePickIcon(icon: string) {
-    if (mode.kind !== 'icone') return
+    if (!mode || mode.kind !== 'icone') return
     setLoading(true)
     try {
       await onChangeIcon(mode.areaId, icon)
