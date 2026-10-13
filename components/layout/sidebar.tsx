@@ -395,13 +395,14 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
                               <Link
                                 href={hrefForSubItem(sub)}
                                 onClick={closeMobile}
-                                className="flex-1 min-w-0 px-3 py-1.5 text-sm truncate rounded-lg hover:bg-gray-50"
+                                className="flex-1 min-w-0 flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg hover:bg-gray-50"
                                 style={active
                                   ? { color: 'var(--color-primary-darker)', fontWeight: 600 }
                                   : { color: 'var(--color-text-secondary)' }
                                 }
                               >
-                                {sub.displayLabel}
+                                {sub.icon && <span className="text-sm shrink-0">{sub.icon}</span>}
+                                <span className="truncate">{sub.displayLabel}</span>
                               </Link>
                               <ThreeDotMenu
                                 items={subMenuItems(sub)}

@@ -68,7 +68,7 @@ export async function getMenuTree(companyId: string): Promise<MenuArea[]> {
         // consultado pra ela.
         subToInsert.push({
           parent_id: parentId, key: sub.key, natureza: 'nativa', tipo: 'area',
-          label: null, icon: '', href: sub.href, ordem: subIdx,
+          label: null, icon: sub.icon, href: sub.href, ordem: subIdx,
         })
       })
     })
