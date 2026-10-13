@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 export type ThreeDotMenuItem = { label: string; onClick: () => void; danger?: boolean }
 
@@ -17,6 +18,11 @@ interface Props {
  * position fixed + getBoundingClientRect, com detecção de colisão vertical
  * (abre pra cima se não couber embaixo). Esta é a primeira versão compartilhada;
  * os módulos antigos continuam com a própria cópia local por enquanto.
+ *
+ * O painel é desenhado via Portal direto em document.body — necessário porque,
+ * dentro do menu lateral, o <aside> tem `transform` (translateX, pro slide no
+ * celular) e isso cria um "containing block" novo pra qualquer filho com
+ * position:fixed, prendendo o painel lá dentro em vez de ancorar na viewport.
  */
 export function ThreeDotMenu({ items, note, label = 'Mais ações', className }: Props) {
   const [open, setOpen] = useState(false)
@@ -61,11 +67,12 @@ export function ThreeDotMenu({ items, note, label = 'Mais ações', className }:
       >
         ⋮
       </button>
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
           ref={menuRef}
           className="fixed w-48 rounded-xl border shadow-lg py-1 z-50"
           style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
+          onClick={e => e.stopPropagation()}
         >
           {items.map((item, i) => (
             <button
@@ -83,7 +90,8 @@ export function ThreeDotMenu({ items, note, label = 'Mais ações', className }:
               {note}
             </p>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

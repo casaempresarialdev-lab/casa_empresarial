@@ -357,19 +357,21 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
                       style={{ color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-text-muted)' }}
                       title={!expanded ? area.displayLabel : undefined}
                     >
-                      <span
-                        className={cn('text-[10px] shrink-0 transition-transform', !expanded && 'md:hidden')}
-                        style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}
-                      >
-                        ▸
-                      </span>
                       <span className="text-base shrink-0">{area.icon}</span>
                       <span className={cn('flex-1 truncate', !expanded && 'md:hidden')}>{area.displayLabel}</span>
                       {expanded && (
-                        <ThreeDotMenu
-                          items={areaMenuItems(area)}
-                          note={area.natureza === 'nativa' ? 'Área fixa do método' : undefined}
-                        />
+                        <>
+                          <ThreeDotMenu
+                            items={areaMenuItems(area)}
+                            note={area.natureza === 'nativa' ? 'Área fixa do método' : undefined}
+                          />
+                          <span
+                            className="text-[10px] shrink-0 transition-transform"
+                            style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}
+                          >
+                            ▸
+                          </span>
+                        </>
                       )}
                     </div>
 
