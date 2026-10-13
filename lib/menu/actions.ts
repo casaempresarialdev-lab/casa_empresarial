@@ -130,6 +130,30 @@ export async function deleteItemAction(itemId: string, companyId: string) {
   return { success: true }
 }
 
+// Reordenação por arrastar-e-soltar — recebe a ordem final de uma lista de irmãos
+// (todos com o mesmo parent_id) e regrava o campo "ordem" de cada um sequencialmente.
+// Mais simples que calcular "trocar com o vizinho" quando o drop pode acontecer em
+// qualquer posição da lista, não só ±1.
+export async function reorderItemsAction(companyId: string, parentId: string | null, orderedIds: string[]) {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const admin = createAdminClient()
+  const results = await Promise.all(
+    orderedIds.map((id, idx) => {
+      let q = admin.from('company_menu_items').update({ ordem: idx }).eq('id', id).eq('company_id', companyId)
+      q = parentId ? q.eq('parent_id', parentId) : q.is('parent_id', null)
+      return q
+    })
+  )
+
+  const failed = results.find(r => r.error)
+  if (failed?.error) return { error: failed.error.message }
+
+  revalidatePath('/', 'layout')
+  return { success: true }
+}
+
 export async function moveItemAction(companyId: string, itemId: string, direction: 'up' | 'down') {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }

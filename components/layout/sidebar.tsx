@@ -1,13 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { parseAreaPermissions, FULL_AREA_PERMISSIONS, type AreaKey, type AreaPermissions } from '@/lib/auth/area-permissions'
-import { ModalGerenciarMenu } from './modal-gerenciar-menu'
-import type { MenuArea } from '@/lib/menu/queries'
+import { ThreeDotMenu, type ThreeDotMenuItem } from '@/components/shared/three-dot-menu'
+import { ModalItemMenu, type ItemMenuMode } from './modal-item-menu'
+import {
+  createAreaAction, addSubItemAction, renameItemAction,
+  changeAreaIconAction, deleteItemAction, reorderItemsAction,
+} from '@/lib/menu/actions'
+import type { MenuArea, MenuSubItem } from '@/lib/menu/queries'
+import type { CustomItemType } from '@/lib/menu/catalog'
 
 type NavLeaf  = { label: string; href: string; icon: string; children?: never; areaKey?: never }
 type NavGroup = { label: string; href?: never; icon: string; areaKey?: AreaKey; children: { label: string; href: string }[] }
@@ -15,6 +21,7 @@ type NavItem  = NavLeaf | NavGroup
 
 const DASHBOARD_ITEM: NavLeaf = { label: 'Dashboard', href: '/dashboard', icon: '⊞' }
 
+// Fallback estático — só usado se a árvore do banco vier vazia (falha de leitura).
 const NAV_ITEMS: NavItem[] = [
   DASHBOARD_ITEM,
   {
@@ -95,7 +102,7 @@ interface SidebarProps {
   menuTree?: MenuArea[]
 }
 
-function hrefForSubItem(sub: MenuArea['children'][number]): string {
+function hrefForSubItem(sub: MenuSubItem): string {
   if (sub.href) return sub.href
   if (sub.tipo === 'pasta') return `/menu/pasta/${sub.id}`
   return `/menu/em-breve/${sub.id}`
@@ -115,39 +122,145 @@ const COLABORADOR_NAV_ITEMS: NavItem[] = [
 ]
 
 export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyId, menuTree }: SidebarProps) {
+  const router = useRouter()
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const mobileSidebarOpen = useAppStore((s) => s.mobileSidebarOpen)
   const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen)
   const pathname = usePathname()
-  const [menuModalOpen, setMenuModalOpen] = useState(false)
+
+  // Árvore local (pra feedback instantâneo ao arrastar) — resincroniza sempre que o
+  // servidor manda uma versão nova (depois de um router.refresh()). Nunca usar
+  // useState(menuTree) sozinho aqui: a prop fica "congelada" na primeira renderização
+  // e não acompanha updates vindos do servidor.
+  const [localTree, setLocalTree] = useState<MenuArea[]>(menuTree ?? [])
+  useEffect(() => { setLocalTree(menuTree ?? []) }, [menuTree])
+
+  // Cada área abre/fecha de forma independente — e começa tudo fechado, igual o
+  // protótipo da Carol (esse estado é só de tela, não é salvo em lugar nenhum).
+  const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({})
+  const [itemMenuMode, setItemMenuMode] = useState<ItemMenuMode | null>(null)
+  const dragRef = useRef<{ id: string; parentId: string | null } | null>(null)
 
   const isColaborador = role === 'colaborador'
   const isOwner = role === 'owner'
-  // Owner sempre vê tudo; os demais são filtrados pela permissão por área —
-  // grupo com "Sem acesso" nem aparece no menu (o servidor também recusa a rota direta).
-  // Áreas personalizadas (areaKey null) não têm permissão própria ainda — visíveis a todos.
   const resolvedPermissions = isOwner ? FULL_AREA_PERMISSIONS : parseAreaPermissions(areaPermissions)
-  const tree = menuTree ?? []
-  const dynamicNavItems: NavGroup[] = tree
-    .filter(area => !area.areaKey || resolvedPermissions[area.areaKey] !== 'nenhum')
-    .map(area => ({
-      label: area.displayLabel,
-      icon: area.icon,
-      areaKey: area.areaKey ?? undefined,
-      children: area.children.map(sub => ({ label: sub.displayLabel, href: hrefForSubItem(sub) })),
-    }))
+  const visibleAreas = localTree.filter(area => !area.areaKey || resolvedPermissions[area.areaKey] !== 'nenhum')
+  const useDynamicTree = !isColaborador && localTree.length > 0
+
   const navItems: NavItem[] = isColaborador
     ? [
         ...COLABORADOR_NAV_ITEMS,
         ...(myEmployeeId ? [{ label: 'Meus Dados', href: `/pessoas/funcionarios/${myEmployeeId}`, icon: '🙋' } as NavLeaf] : []),
       ]
-    : (tree.length > 0
-        ? [DASHBOARD_ITEM, ...dynamicNavItems]
-        : NAV_ITEMS.filter(item => !item.areaKey || resolvedPermissions[item.areaKey] !== 'nenhum'))
+    : NAV_ITEMS.filter(item => !item.areaKey || resolvedPermissions[item.areaKey] !== 'nenhum')
 
   function closeMobile() {
     setMobileSidebarOpen(false)
+  }
+
+  function toggleArea(areaId: string) {
+    setExpandedAreas(prev => ({ ...prev, [areaId]: !prev[areaId] }))
+  }
+
+  async function handleCreateArea(label: string) {
+    if (!companyId) return
+    await createAreaAction(companyId, label)
+    router.refresh()
+  }
+
+  async function handleAddSubItem(areaId: string, tipo: CustomItemType, label: string) {
+    if (!companyId) return
+    await addSubItemAction(companyId, areaId, tipo, label)
+    setExpandedAreas(prev => ({ ...prev, [areaId]: true }))
+    router.refresh()
+  }
+
+  async function handleRename(itemId: string, label: string) {
+    if (!companyId) return
+    await renameItemAction(itemId, companyId, label)
+    router.refresh()
+  }
+
+  async function handleChangeIcon(areaId: string, icon: string) {
+    if (!companyId) return
+    await changeAreaIconAction(areaId, companyId, icon)
+    router.refresh()
+  }
+
+  async function handleDelete(kind: 'área' | 'sub-área', itemId: string, label: string) {
+    if (!companyId) return
+    const msg = kind === 'área'
+      ? `Excluir esta área ("${label}") e todas as suas sub-áreas? Essa ação não pode ser desfeita.`
+      : `Excluir esta sub-área ("${label}")? Essa ação não pode ser desfeita.`
+    if (!confirm(msg)) return
+    await deleteItemAction(itemId, companyId)
+    router.refresh()
+  }
+
+  function areaMenuItems(area: MenuArea): ThreeDotMenuItem[] {
+    const items: ThreeDotMenuItem[] = [
+      { label: 'Alterar ícone', onClick: () => setItemMenuMode({ kind: 'icone', areaId: area.id, currentIcon: area.icon }) },
+      { label: 'Renomear', onClick: () => setItemMenuMode({ kind: 'renomear', itemId: area.id, currentLabel: area.displayLabel }) },
+    ]
+    if (area.natureza === 'personalizada') {
+      items.push({ label: 'Excluir', danger: true, onClick: () => handleDelete('área', area.id, area.displayLabel) })
+    }
+    return items
+  }
+
+  function subMenuItems(sub: MenuSubItem): ThreeDotMenuItem[] {
+    const items: ThreeDotMenuItem[] = [
+      { label: 'Renomear', onClick: () => setItemMenuMode({ kind: 'renomear', itemId: sub.id, currentLabel: sub.displayLabel }) },
+    ]
+    if (sub.natureza === 'personalizada') {
+      items.push({ label: 'Excluir', danger: true, onClick: () => handleDelete('sub-área', sub.id, sub.displayLabel) })
+    }
+    return items
+  }
+
+  // Arrastar-e-soltar — só entre irmãos do mesmo nível (área com área; sub-área só
+  // dentro da própria área). Atualiza a tela na hora e confirma com o servidor depois.
+  async function handleDropOnArea(targetId: string) {
+    const dragged = dragRef.current
+    dragRef.current = null
+    if (!dragged || dragged.parentId !== null || dragged.id === targetId || !companyId) return
+
+    const ids = visibleAreas.map(a => a.id)
+    const from = ids.indexOf(dragged.id)
+    const to = ids.indexOf(targetId)
+    if (from === -1 || to === -1) return
+    ids.splice(to, 0, ids.splice(from, 1)[0])
+
+    setLocalTree(prev => {
+      const byId = new Map(prev.map(a => [a.id, a]))
+      return ids.map(id => byId.get(id)).filter((a): a is MenuArea => !!a)
+        .concat(prev.filter(a => !ids.includes(a.id)))
+    })
+    await reorderItemsAction(companyId, null, ids)
+    router.refresh()
+  }
+
+  async function handleDropOnSub(areaId: string, targetId: string) {
+    const dragged = dragRef.current
+    dragRef.current = null
+    if (!dragged || dragged.parentId !== areaId || dragged.id === targetId || !companyId) return
+
+    const area = localTree.find(a => a.id === areaId)
+    if (!area) return
+    const ids = area.children.map(s => s.id)
+    const from = ids.indexOf(dragged.id)
+    const to = ids.indexOf(targetId)
+    if (from === -1 || to === -1) return
+    ids.splice(to, 0, ids.splice(from, 1)[0])
+
+    setLocalTree(prev => prev.map(a => {
+      if (a.id !== areaId) return a
+      const byId = new Map(a.children.map(s => [s.id, s]))
+      return { ...a, children: ids.map(id => byId.get(id)).filter((s): s is MenuSubItem => !!s) }
+    }))
+    await reorderItemsAction(companyId, areaId, ids)
+    router.refresh()
   }
 
   return (
@@ -163,9 +276,7 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
       <aside
         className={cn(
           'flex flex-col h-screen fixed left-0 top-0 z-40 border-r transition-all duration-200 bg-white',
-          // Mobile: sempre 240px. Desktop: 64px retraído ou 240px expandido.
           expanded ? 'w-60' : 'w-60 md:w-16',
-          // Mobile: oculto por padrão, desliza ao abrir. Desktop: sempre visível.
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
         style={{ borderColor: 'var(--color-bg-surface)' }}
@@ -177,7 +288,6 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
         >
           {logoUrl ? (
             <>
-              {/* Com logo: expandido mostra logo maior, retraído mostra miniatura */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logoUrl}
@@ -213,85 +323,182 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
-          {navItems.map((item) => {
-            if (!item.children) {
-              const active = pathname === item.href
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={closeMobile}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg mb-1 text-sm transition-colors',
-                    active ? 'font-semibold' : 'hover:bg-gray-50'
-                  )}
-                  style={active
-                    ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
-                    : { color: 'var(--color-text-secondary)' }
-                  }
-                  title={!expanded ? item.label : undefined}
-                >
-                  <span className="text-base shrink-0">{item.icon}</span>
-                  <span className={cn('truncate', !expanded && 'md:hidden')}>{item.label}</span>
-                </Link>
-              )
-            }
+          {useDynamicTree ? (
+            <>
+              <Link
+                href={DASHBOARD_ITEM.href}
+                onClick={closeMobile}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-lg mb-1 text-sm transition-colors',
+                  pathname === DASHBOARD_ITEM.href ? 'font-semibold' : 'hover:bg-gray-50'
+                )}
+                style={pathname === DASHBOARD_ITEM.href
+                  ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
+                  : { color: 'var(--color-text-secondary)' }
+                }
+              >
+                <span className="text-base shrink-0">{DASHBOARD_ITEM.icon}</span>
+                <span className={cn('truncate', !expanded && 'md:hidden')}>{DASHBOARD_ITEM.label}</span>
+              </Link>
 
-            const isGroupActive = item.children.some(c => pathname.startsWith(c.href))
+              {visibleAreas.map((area) => {
+                const isOpen = !!expandedAreas[area.id]
+                const isGroupActive = area.children.some(c => pathname.startsWith(hrefForSubItem(c)))
 
-            return (
-              <div key={item.label} className="mb-1">
-                <div
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium"
-                  style={{ color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-text-muted)' }}
-                  title={!expanded ? item.label : undefined}
-                >
-                  <span className="text-base shrink-0">{item.icon}</span>
-                  <span className={cn('truncate', !expanded && 'md:hidden')}>{item.label}</span>
-                </div>
-
-                {/* Sub-items: visíveis no mobile sempre; no desktop só se expandido */}
-                <div
-                  className={cn('ml-4 pl-3 border-l', !expanded && 'md:hidden')}
-                  style={{ borderColor: 'var(--color-bg-surface)' }}
-                >
-                  {item.children.map((child) => {
-                    const active = pathname.startsWith(child.href)
-                    return (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={closeMobile}
-                        className={cn(
-                          'flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors mb-0.5',
-                          active ? 'font-semibold' : 'hover:bg-gray-50'
-                        )}
-                        style={active
-                          ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
-                          : { color: 'var(--color-text-secondary)' }
-                        }
+                return (
+                  <div key={area.id} className="mb-0.5">
+                    <div
+                      draggable={expanded}
+                      onDragStart={() => { dragRef.current = { id: area.id, parentId: null } }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => handleDropOnArea(area.id)}
+                      onClick={() => toggleArea(area.id)}
+                      className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm font-medium cursor-pointer hover:bg-gray-50 transition-colors"
+                      style={{ color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-text-muted)' }}
+                      title={!expanded ? area.displayLabel : undefined}
+                    >
+                      <span
+                        className={cn('text-[10px] shrink-0 transition-transform', !expanded && 'md:hidden')}
+                        style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}
                       >
-                        {child.label}
-                      </Link>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
+                        ▸
+                      </span>
+                      <span className="text-base shrink-0">{area.icon}</span>
+                      <span className={cn('flex-1 truncate', !expanded && 'md:hidden')}>{area.displayLabel}</span>
+                      {expanded && (
+                        <ThreeDotMenu
+                          items={areaMenuItems(area)}
+                          note={area.natureza === 'nativa' ? 'Área fixa do método' : undefined}
+                        />
+                      )}
+                    </div>
 
-          {/* Gerenciar menu — cria áreas/itens personalizados, renomeia, reordena, troca ícone */}
-          {!isColaborador && companyId && (
-            <button
-              type="button"
-              onClick={() => setMenuModalOpen(true)}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg mb-1 text-sm transition-colors hover:bg-gray-50"
-              style={{ color: 'var(--color-text-muted)' }}
-              title={!expanded ? 'Gerenciar menu' : undefined}
-            >
-              <span className="text-base shrink-0">⚙</span>
-              <span className={cn('truncate', !expanded && 'md:hidden')}>Gerenciar menu</span>
-            </button>
+                    {isOpen && (
+                      <div className={cn('ml-4 pl-3 border-l', !expanded && 'md:hidden')} style={{ borderColor: 'var(--color-bg-surface)' }}>
+                        {area.children.map((sub) => {
+                          const active = pathname.startsWith(hrefForSubItem(sub))
+                          return (
+                            <div
+                              key={sub.id}
+                              draggable
+                              onDragStart={(e) => { e.stopPropagation(); dragRef.current = { id: sub.id, parentId: area.id } }}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={(e) => { e.stopPropagation(); handleDropOnSub(area.id, sub.id) }}
+                              className="flex items-center gap-1 rounded-lg mb-0.5 transition-colors"
+                              style={active
+                                ? { backgroundColor: 'var(--color-primary)' }
+                                : undefined
+                              }
+                            >
+                              <Link
+                                href={hrefForSubItem(sub)}
+                                onClick={closeMobile}
+                                className="flex-1 min-w-0 px-3 py-1.5 text-sm truncate rounded-lg hover:bg-gray-50"
+                                style={active
+                                  ? { color: 'var(--color-primary-darker)', fontWeight: 600 }
+                                  : { color: 'var(--color-text-secondary)' }
+                                }
+                              >
+                                {sub.displayLabel}
+                              </Link>
+                              <ThreeDotMenu
+                                items={subMenuItems(sub)}
+                                note={sub.natureza === 'nativa' ? 'Sub-área fixa do método' : undefined}
+                              />
+                            </div>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => setItemMenuMode({ kind: 'adicionar', areaId: area.id, areaLabel: area.displayLabel })}
+                          className="w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors hover:bg-gray-50"
+                          style={{ color: 'var(--color-text-muted)' }}
+                        >
+                          + Adicionar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              <button
+                type="button"
+                onClick={() => setItemMenuMode({ kind: 'nova-area' })}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg mb-1 mt-2 text-sm border border-dashed transition-colors hover:bg-gray-50"
+                style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-bg-surface)' }}
+                title={!expanded ? 'Nova área' : undefined}
+              >
+                <span className="text-base shrink-0">+</span>
+                <span className={cn('truncate', !expanded && 'md:hidden')}>Nova área</span>
+              </button>
+            </>
+          ) : (
+            navItems.map((item) => {
+              if (!item.children) {
+                const active = pathname === item.href
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={closeMobile}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 rounded-lg mb-1 text-sm transition-colors',
+                      active ? 'font-semibold' : 'hover:bg-gray-50'
+                    )}
+                    style={active
+                      ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
+                      : { color: 'var(--color-text-secondary)' }
+                    }
+                    title={!expanded ? item.label : undefined}
+                  >
+                    <span className="text-base shrink-0">{item.icon}</span>
+                    <span className={cn('truncate', !expanded && 'md:hidden')}>{item.label}</span>
+                  </Link>
+                )
+              }
+
+              const isGroupActive = item.children.some(c => pathname.startsWith(c.href))
+
+              return (
+                <div key={item.label} className="mb-1">
+                  <div
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium"
+                    style={{ color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-text-muted)' }}
+                    title={!expanded ? item.label : undefined}
+                  >
+                    <span className="text-base shrink-0">{item.icon}</span>
+                    <span className={cn('truncate', !expanded && 'md:hidden')}>{item.label}</span>
+                  </div>
+
+                  <div
+                    className={cn('ml-4 pl-3 border-l', !expanded && 'md:hidden')}
+                    style={{ borderColor: 'var(--color-bg-surface)' }}
+                  >
+                    {item.children.map((child) => {
+                      const active = pathname.startsWith(child.href)
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={closeMobile}
+                          className={cn(
+                            'flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors mb-0.5',
+                            active ? 'font-semibold' : 'hover:bg-gray-50'
+                          )}
+                          style={active
+                            ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
+                            : { color: 'var(--color-text-secondary)' }
+                          }
+                        >
+                          {child.label}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })
           )}
         </nav>
 
@@ -316,12 +523,14 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
         </button>
       </aside>
 
-      {!isColaborador && companyId && (
-        <ModalGerenciarMenu
-          open={menuModalOpen}
-          onClose={() => setMenuModalOpen(false)}
-          companyId={companyId}
-          tree={tree}
+      {useDynamicTree && (
+        <ModalItemMenu
+          mode={itemMenuMode}
+          onClose={() => setItemMenuMode(null)}
+          onCreateArea={handleCreateArea}
+          onAddSubItem={handleAddSubItem}
+          onRename={handleRename}
+          onChangeIcon={handleChangeIcon}
         />
       )}
     </>
