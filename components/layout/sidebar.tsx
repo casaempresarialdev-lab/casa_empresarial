@@ -138,6 +138,7 @@ export function Sidebar({
   const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen)
   const activeCompanyId = useAppStore((s) => s.activeCompanyId)
   const setActiveCompany = useAppStore((s) => s.setActiveCompany)
+  const activeCompanyName = companies.find(c => c.id === activeCompanyId)?.razao_social
   const pathname = usePathname()
 
   // Árvore local (pra feedback instantâneo ao arrastar) — resincroniza sempre que o
@@ -319,45 +320,54 @@ export function Sidebar({
         )}
         style={{ borderColor: 'var(--color-bg-surface)' }}
       >
-        {/* Logo / nome */}
-        <div
-          className={cn('flex items-center h-16 border-b', expanded ? 'px-4' : 'px-4 md:px-2')}
-          style={{ borderColor: 'var(--color-bg-surface)' }}
-        >
+        {/* Logo / nome — maior e centralizado, igual ao artefato da Carol
+            (sem a barra baixinha com borda que tínhamos antes) */}
+        <div className={cn('flex flex-col items-center justify-center gap-2 pt-5 pb-4', expanded ? 'px-4' : 'px-2')}>
           {logoUrl ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logoUrl}
-                alt="Logo da empresa"
+                alt={activeCompanyName ?? 'Logo da empresa'}
+                title={activeCompanyName}
                 className={cn('object-contain', !expanded && 'md:hidden')}
-                style={{ maxHeight: 48, maxWidth: 200 }}
+                style={{ maxHeight: 56, maxWidth: 200 }}
               />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logoUrl}
-                alt="Logo da empresa"
+                alt={activeCompanyName ?? 'Logo da empresa'}
+                title={activeCompanyName}
                 className={cn('object-contain hidden', !expanded && 'md:block')}
                 style={{ maxHeight: 40, maxWidth: 40 }}
               />
             </>
           ) : (
             <>
-              <span
-                className={cn('font-bold text-base', !expanded && 'md:hidden')}
-                style={{ fontFamily: 'Manrope', color: 'var(--color-primary-darker)' }}
+              <div
+                className={cn('flex items-center gap-2.5', !expanded && 'md:flex-col md:gap-1')}
               >
-                Casa Empresarial
-              </span>
-              <span
-                className={cn('font-bold text-lg hidden', !expanded && 'md:block')}
-                style={{ color: 'var(--color-primary-darker)' }}
-              >
-                CE
-              </span>
+                <div
+                  className="rounded-xl border-2 shrink-0 flex items-center justify-center font-bold"
+                  style={{
+                    width: 36, height: 36,
+                    borderColor: 'var(--color-primary-darker)', color: 'var(--color-primary-darker)',
+                  }}
+                >
+                  {(activeCompanyName ?? 'Casa Empresarial').charAt(0).toUpperCase()}
+                </div>
+                <span
+                  className={cn('font-bold text-xl truncate max-w-[160px]', !expanded && 'md:hidden')}
+                  style={{ fontFamily: 'Manrope', color: 'var(--color-primary-darker)' }}
+                >
+                  {activeCompanyName ?? 'Casa Empresarial'}
+                </span>
+              </div>
             </>
           )}
         </div>
+
+        <div className="border-b" style={{ borderColor: 'var(--color-bg-surface)' }} />
 
         {/* Busca */}
         {useDynamicTree && (
