@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
+import { MascoteSuporteButton } from '@/components/layout/mascote-suporte-button'
 import { AppStoreInitializer } from '@/components/layout/app-store-initializer'
 import { AppShell } from '@/components/layout/app-shell'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
@@ -77,6 +78,7 @@ export default async function AppLayout({
       <style dangerouslySetInnerHTML={{ __html: themeCSS }} />
       <AppStoreInitializer companies={companies} firstCompanyId={firstCompanyId}>
         <ThemeSync companies={companyThemes} />
+        <MascoteSuporteButton companyId={activeCompany?.id ?? null} />
         <Sidebar
           logoUrl={logoUrl}
           role={activeRole}
