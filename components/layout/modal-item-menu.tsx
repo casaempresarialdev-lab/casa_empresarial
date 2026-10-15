@@ -10,7 +10,7 @@ export type ItemMenuMode =
   | { kind: 'nova-area' }
   | { kind: 'adicionar'; areaId: string; areaLabel: string }
   | { kind: 'renomear'; itemId: string; currentLabel: string }
-  | { kind: 'icone'; areaId: string; currentIcon: string }
+  | { kind: 'icone'; itemId: string; currentIcon: string }
 
 interface Props {
   mode: ItemMenuMode | null
@@ -18,7 +18,7 @@ interface Props {
   onCreateArea: (label: string) => Promise<void>
   onAddSubItem: (areaId: string, tipo: CustomItemType, label: string) => Promise<void>
   onRename: (itemId: string, label: string) => Promise<void>
-  onChangeIcon: (areaId: string, icon: string) => Promise<void>
+  onChangeIcon: (itemId: string, icon: string) => Promise<void>
 }
 
 const CUSTOM_TYPES = Object.keys(CUSTOM_TYPE_LABELS) as CustomItemType[]
@@ -71,7 +71,7 @@ export function ModalItemMenu({ mode, onClose, onCreateArea, onAddSubItem, onRen
     if (!mode || mode.kind !== 'icone') return
     setLoading(true)
     try {
-      await onChangeIcon(mode.areaId, icon)
+      await onChangeIcon(mode.itemId, icon)
       onClose()
     } finally {
       setLoading(false)

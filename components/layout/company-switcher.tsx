@@ -18,7 +18,7 @@ interface Props {
   onSelect: (id: string) => void
 }
 
-const ROLE_LABELS: Record<string, string> = {
+export const ROLE_LABELS: Record<string, string> = {
   owner: 'Proprietário',
   admin: 'Administrador',
   member: 'Membro',

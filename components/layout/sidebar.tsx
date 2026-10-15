@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/store'
@@ -8,9 +8,11 @@ import { cn } from '@/lib/utils'
 import { parseAreaPermissions, FULL_AREA_PERMISSIONS, type AreaKey, type AreaPermissions } from '@/lib/auth/area-permissions'
 import { ThreeDotMenu, type ThreeDotMenuItem } from '@/components/shared/three-dot-menu'
 import { ModalItemMenu, type ItemMenuMode } from './modal-item-menu'
+import { SidebarProfileMenu } from './sidebar-profile-menu'
+import type { SwitcherCompany } from './company-switcher'
 import {
   createAreaAction, addSubItemAction, renameItemAction,
-  changeAreaIconAction, deleteItemAction, reorderItemsAction,
+  changeItemIconAction, deleteItemAction, reorderItemsAction,
 } from '@/lib/menu/actions'
 import type { MenuArea, MenuSubItem } from '@/lib/menu/queries'
 import type { CustomItemType } from '@/lib/menu/catalog'
@@ -100,6 +102,10 @@ interface SidebarProps {
   areaPermissions?: AreaPermissions | Record<string, string> | null
   companyId?: string | null
   menuTree?: MenuArea[]
+  companies?: SwitcherCompany[]
+  userName?: string
+  userEmail?: string
+  userAvatar?: string | null
 }
 
 function hrefForSubItem(sub: MenuSubItem): string {
@@ -121,12 +127,17 @@ const COLABORADOR_NAV_ITEMS: NavItem[] = [
   },
 ]
 
-export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyId, menuTree }: SidebarProps) {
+export function Sidebar({
+  logoUrl, role, myEmployeeId, areaPermissions, companyId, menuTree,
+  companies = [], userName, userEmail, userAvatar,
+}: SidebarProps) {
   const router = useRouter()
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const mobileSidebarOpen = useAppStore((s) => s.mobileSidebarOpen)
   const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen)
+  const activeCompanyId = useAppStore((s) => s.activeCompanyId)
+  const setActiveCompany = useAppStore((s) => s.setActiveCompany)
   const pathname = usePathname()
 
   // Árvore local (pra feedback instantâneo ao arrastar) — resincroniza sempre que o
@@ -142,11 +153,37 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
   const [itemMenuMode, setItemMenuMode] = useState<ItemMenuMode | null>(null)
   const dragRef = useRef<{ id: string; parentId: string | null } | null>(null)
 
+  // Busca — igual ao artefato da Carol: campo acima do menu + atalho Ctrl/Cmd+K.
+  const [search, setSearch] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [])
+
   const isColaborador = role === 'colaborador'
   const isOwner = role === 'owner'
   const resolvedPermissions = isOwner ? FULL_AREA_PERMISSIONS : parseAreaPermissions(areaPermissions)
   const visibleAreas = localTree.filter(area => !area.areaKey || resolvedPermissions[area.areaKey] !== 'nenhum')
   const useDynamicTree = !isColaborador && localTree.length > 0
+
+  const searchTerm = search.trim().toLowerCase()
+  const searchedAreas = useMemo(() => {
+    if (!searchTerm) return visibleAreas
+    return visibleAreas
+      .map(area => {
+        const areaMatches = area.displayLabel.toLowerCase().includes(searchTerm)
+        const children = areaMatches ? area.children : area.children.filter(c => c.displayLabel.toLowerCase().includes(searchTerm))
+        return { ...area, children }
+      })
+      .filter(area => area.displayLabel.toLowerCase().includes(searchTerm) || area.children.length > 0)
+  }, [visibleAreas, searchTerm])
 
   const navItems: NavItem[] = isColaborador
     ? [
@@ -182,9 +219,9 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
     router.refresh()
   }
 
-  async function handleChangeIcon(areaId: string, icon: string) {
+  async function handleChangeIcon(itemId: string, icon: string) {
     if (!companyId) return
-    await changeAreaIconAction(areaId, companyId, icon)
+    await changeItemIconAction(itemId, companyId, icon)
     router.refresh()
   }
 
@@ -200,7 +237,7 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
 
   function areaMenuItems(area: MenuArea): ThreeDotMenuItem[] {
     const items: ThreeDotMenuItem[] = [
-      { label: 'Alterar ícone', onClick: () => setItemMenuMode({ kind: 'icone', areaId: area.id, currentIcon: area.icon }) },
+      { label: 'Alterar ícone', onClick: () => setItemMenuMode({ kind: 'icone', itemId: area.id, currentIcon: area.icon }) },
       { label: 'Renomear', onClick: () => setItemMenuMode({ kind: 'renomear', itemId: area.id, currentLabel: area.displayLabel }) },
     ]
     if (area.natureza === 'personalizada') {
@@ -211,6 +248,7 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
 
   function subMenuItems(sub: MenuSubItem): ThreeDotMenuItem[] {
     const items: ThreeDotMenuItem[] = [
+      { label: 'Alterar ícone', onClick: () => setItemMenuMode({ kind: 'icone', itemId: sub.id, currentIcon: sub.icon }) },
       { label: 'Renomear', onClick: () => setItemMenuMode({ kind: 'renomear', itemId: sub.id, currentLabel: sub.displayLabel }) },
     ]
     if (sub.natureza === 'personalizada') {
@@ -321,6 +359,23 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
           )}
         </div>
 
+        {/* Busca */}
+        {useDynamicTree && (
+          <div className={cn('flex items-center gap-2 px-3 py-2.5 border-b', !expanded && 'md:justify-center md:px-2')}
+            style={{ borderColor: 'var(--color-bg-surface)' }}>
+            <span className="text-sm shrink-0" style={{ color: 'var(--color-text-muted)' }}>🔎</span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar"
+              className={cn('flex-1 min-w-0 text-sm bg-transparent focus:outline-none', !expanded && 'md:hidden')}
+              style={{ color: 'var(--color-text-primary)' }}
+            />
+          </div>
+        )}
+
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
           {useDynamicTree ? (
@@ -341,8 +396,8 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
                 <span className={cn('truncate', !expanded && 'md:hidden')}>{DASHBOARD_ITEM.label}</span>
               </Link>
 
-              {visibleAreas.map((area) => {
-                const isOpen = !!expandedAreas[area.id]
+              {searchedAreas.map((area) => {
+                const isOpen = searchTerm ? true : !!expandedAreas[area.id]
                 const isGroupActive = area.children.some(c => pathname.startsWith(hrefForSubItem(c)))
 
                 return (
@@ -353,7 +408,7 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => handleDropOnArea(area.id)}
                       onClick={() => toggleArea(area.id)}
-                      className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm font-medium cursor-pointer hover:bg-gray-50 transition-colors"
+                      className="group flex items-center gap-2 px-2 py-2 rounded-lg text-sm font-medium cursor-pointer hover:bg-gray-50 transition-colors"
                       style={{ color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-text-muted)' }}
                       title={!expanded ? area.displayLabel : undefined}
                     >
@@ -364,13 +419,15 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
                           <ThreeDotMenu
                             items={areaMenuItems(area)}
                             note={area.natureza === 'nativa' ? 'Área fixa do método' : undefined}
+                            hoverOnly
                           />
-                          <span
-                            className="text-[10px] shrink-0 transition-transform"
-                            style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}
+                          <svg
+                            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                            className="shrink-0 transition-transform"
+                            style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
                           >
-                            ▸
-                          </span>
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
                         </>
                       )}
                     </div>
@@ -386,7 +443,7 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
                               onDragStart={(e) => { e.stopPropagation(); dragRef.current = { id: sub.id, parentId: area.id } }}
                               onDragOver={(e) => e.preventDefault()}
                               onDrop={(e) => { e.stopPropagation(); handleDropOnSub(area.id, sub.id) }}
-                              className="flex items-center gap-1 rounded-lg mb-0.5 transition-colors"
+                              className="group flex items-center gap-1 rounded-lg mb-0.5 transition-colors"
                               style={active
                                 ? { backgroundColor: 'var(--color-primary)' }
                                 : undefined
@@ -407,6 +464,7 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
                               <ThreeDotMenu
                                 items={subMenuItems(sub)}
                                 note={sub.natureza === 'nativa' ? 'Sub-área fixa do método' : undefined}
+                                hoverOnly
                               />
                             </div>
                           )
@@ -504,6 +562,21 @@ export function Sidebar({ logoUrl, role, myEmployeeId, areaPermissions, companyI
             })
           )}
         </nav>
+
+        {/* Avatar — igual ao artefato da Carol: rodapé do menu, não mais no header */}
+        {!isColaborador && (
+          <SidebarProfileMenu
+            companies={companies}
+            activeCompanyId={activeCompanyId}
+            onSelectCompany={setActiveCompany}
+            userName={userName}
+            userEmail={userEmail}
+            userAvatar={userAvatar}
+            role={role}
+            myEmployeeId={myEmployeeId}
+            expanded={expanded}
+          />
+        )}
 
         {/* Toggle — desktop apenas */}
         <button

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { cn } from '@/lib/utils'
 
 export type ThreeDotMenuItem = { label: string; onClick: () => void; danger?: boolean }
 
@@ -11,6 +12,8 @@ interface Props {
   note?: string
   label?: string
   className?: string
+  /** Só aparece no hover da linha (a linha precisa ter className="group") — usado no menu lateral, igual ao artefato da Carol. */
+  hoverOnly?: boolean
 }
 
 /**
@@ -24,7 +27,7 @@ interface Props {
  * celular) e isso cria um "containing block" novo pra qualquer filho com
  * position:fixed, prendendo o painel lá dentro em vez de ancorar na viewport.
  */
-export function ThreeDotMenu({ items, note, label = 'Mais ações', className }: Props) {
+export function ThreeDotMenu({ items, note, label = 'Mais ações', className, hoverOnly = false }: Props) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, right: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
@@ -61,7 +64,10 @@ export function ThreeDotMenu({ items, note, label = 'Mais ações', className }:
         ref={btnRef}
         type="button"
         onClick={handleOpen}
-        className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-black/5 transition-colors text-sm shrink-0"
+        className={cn(
+          'w-6 h-6 flex items-center justify-center rounded-md hover:bg-black/5 transition-colors text-sm shrink-0',
+          hoverOnly && !open && 'opacity-0 group-hover:opacity-100',
+        )}
         style={{ color: 'var(--color-text-muted)' }}
         aria-label={label}
       >

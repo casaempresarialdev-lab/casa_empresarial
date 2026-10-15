@@ -84,13 +84,13 @@ export default async function AppLayout({
           areaPermissions={areaPermissions}
           companyId={activeCompany?.id ?? null}
           menuTree={menuTree}
+          companies={companies}
+          userName={profile?.name ?? user.email ?? ''}
+          userEmail={user.email ?? undefined}
+          userAvatar={profile?.avatar_url}
         />
         <AppShell>
-          <Header
-            companies={companies}
-            userName={profile?.name ?? user.email ?? ''}
-            userAvatar={profile?.avatar_url}
-          />
+          <Header />
           <main className="flex-1 pt-16 p-6" style={{ backgroundColor: 'var(--color-bg-default)' }}>
             <div className="mb-4">
               <Breadcrumb />

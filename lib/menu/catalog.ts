@@ -17,9 +17,8 @@ export const NATIVE_CATALOG: NativeArea[] = [
   {
     key: 'administrativo', label: 'Administrativo', icon: '🏢',
     children: [
-      { key: 'minha-empresa', label: 'Minha Empresa', href: '/empresa', icon: '🏠' },
       { key: 'quadro-societario', label: 'Quadro Societário', href: '/admin/quadro-societario', icon: '👥' },
-      { key: 'logins-senhas', label: 'Logins e Senhas', href: '/admin/logins-senhas', icon: '🔑' },
+      { key: 'certificado', label: 'Certificado Digital', href: '/admin/certificado-digital', icon: '🔒' },
       { key: 'documentacao', label: 'Documentação', href: '/admin/documentacao', icon: '📁' },
     ],
   },

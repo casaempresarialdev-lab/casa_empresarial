@@ -1,13 +1,12 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createCompanyAction, createCompanyForClientAction, updateCompanyAction } from '../actions'
 import { companySchema, type CompanyData } from '@/lib/validations/company'
 import { Input } from '@/components/ui/input'
-import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
 import { AreaPermissionGrid } from '@/components/shared/area-permission-grid'
 import { DEFAULT_NEW_MEMBER_PERMISSIONS, type AreaPermissions } from '@/lib/auth/area-permissions'
@@ -84,11 +83,6 @@ export function EmpresaForm({ company }: Props) {
   const [apoioPermissions, setApoioPermissions] = useState<AreaPermissions>(DEFAULT_NEW_MEMBER_PERMISSIONS)
   const [pendingCompanyId, setPendingCompanyId] = useState<string | null>(null)
 
-  const certInputRef = useRef<HTMLInputElement>(null)
-  const [certName, setCertName] = useState<string | null>(
-    company?.certificado_digital_url ? 'Certificado já cadastrado' : null,
-  )
-
   const cnpjDisplay = company ? formatCNPJ(company.cnpj) : ''
   const cepDisplay  = company?.cep ? maskCep(company.cep) : ''
 
@@ -120,10 +114,6 @@ export function EmpresaForm({ company }: Props) {
 
   const loading  = isSubmitting || isPending
 
-  function handleCertChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setCertName(e.target.files?.[0]?.name ?? null)
-  }
-
   async function handleCepBlur(cep: string) {
     const digits = cep.replace(/\D/g, '')
     if (digits.length !== 8) return
@@ -154,8 +144,6 @@ export function EmpresaForm({ company }: Props) {
     Object.entries(data).forEach(([k, v]) => {
       if (v !== undefined && v !== '') formData.set(k, String(v))
     })
-    const certFile = certInputRef.current?.files?.[0]
-    if (certFile) formData.set('certificado_file', certFile)
 
     startTransition(async () => {
       if (isEdit) {
@@ -390,34 +378,14 @@ export function EmpresaForm({ company }: Props) {
           </div>
         </Card>
 
-        {/* 3 — Certificado Digital */}
-        <Card>
-          <SectionTitle>Certificado Digital</SectionTitle>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Arquivo do certificado (.pfx / .p12)
-            </label>
-            <label
-              className="flex items-center gap-3 cursor-pointer h-10 rounded-lg border px-3 text-sm hover:bg-gray-50 transition-colors"
-              style={{ borderColor: 'var(--color-bg-surface)', color: certName ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
-            >
-              <span>📎</span>
-              <span className="truncate">{certName ?? 'Selecionar arquivo...'}</span>
-              <input ref={certInputRef} type="file" accept=".pfx,.p12,application/x-pkcs12"
-                className="hidden" onChange={handleCertChange} />
-            </label>
-          </div>
-
-          <PasswordInput
-            label={isEdit && company.certificado_digital_url
-              ? 'Nova senha do certificado (deixe em branco para manter)'
-              : 'Senha do certificado digital'}
-            placeholder="••••••••"
-            autoComplete="off"
-            {...register('certificado_digital_senha')}
-          />
-        </Card>
+        {isEdit && (
+          <p className="text-sm px-1" style={{ color: 'var(--color-text-muted)' }}>
+            O certificado digital agora tem uma página própria — veja em{' '}
+            <a href="/admin/certificado-digital" className="underline" style={{ color: 'var(--color-primary-darker)' }}>
+              Administrativo → Certificado Digital
+            </a>.
+          </p>
+        )}
 
         {successMsg && (
           <p className="text-sm text-center py-2 px-3 rounded-lg bg-green-50 border border-green-200 text-green-700">

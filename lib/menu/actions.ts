@@ -93,7 +93,10 @@ export async function renameItemAction(itemId: string, companyId: string, newLab
   return { success: true }
 }
 
-export async function changeAreaIconAction(areaId: string, companyId: string, icon: string) {
+// Troca o ícone de qualquer item do menu — área ou sub-área, nativa ou
+// personalizada. A pedido da Carol: sub-áreas também podem trocar de ícone,
+// igual já funcionava pras áreas.
+export async function changeItemIconAction(itemId: string, companyId: string, icon: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -101,7 +104,7 @@ export async function changeAreaIconAction(areaId: string, companyId: string, ic
   const { error } = await admin
     .from('company_menu_items')
     .update({ icon })
-    .eq('id', areaId).eq('company_id', companyId).is('parent_id', null)
+    .eq('id', itemId).eq('company_id', companyId)
 
   if (error) return { error: error.message }
   revalidatePath('/', 'layout')
