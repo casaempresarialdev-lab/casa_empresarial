@@ -21,7 +21,7 @@ type NavLeaf  = { label: string; href: string; icon: string; children?: never; a
 type NavGroup = { label: string; href?: never; icon: string; areaKey?: AreaKey; children: { label: string; href: string }[] }
 type NavItem  = NavLeaf | NavGroup
 
-const DASHBOARD_ITEM: NavLeaf = { label: 'Dashboard', href: '/dashboard', icon: '⊞' }
+const DASHBOARD_ITEM: NavLeaf = { label: 'Visão geral', href: '/dashboard', icon: '⊞' }
 
 // Fallback estático — só usado se a árvore do banco vier vazia (falha de leitura).
 const NAV_ITEMS: NavItem[] = [
@@ -373,6 +373,15 @@ export function Sidebar({
               className={cn('flex-1 min-w-0 text-sm bg-transparent focus:outline-none', !expanded && 'md:hidden')}
               style={{ color: 'var(--color-text-primary)' }}
             />
+          </div>
+        )}
+
+        {/* Rótulo "Sua casa / N áreas" */}
+        {useDynamicTree && (
+          <div className={cn('flex items-center justify-between px-3 pt-2 text-[10px] font-bold uppercase tracking-wider', !expanded && 'md:hidden')}
+            style={{ color: 'var(--color-text-muted)' }}>
+            <span>Sua casa</span>
+            <span>{visibleAreas.length} área{visibleAreas.length === 1 ? '' : 's'}</span>
           </div>
         )}
 

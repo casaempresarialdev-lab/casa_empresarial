@@ -14,8 +14,8 @@ interface Props {
  * qualquer tela do sistema (ver 4.4/4.14 da especificação da Carol). Abre um
  * formulário simples; a mensagem é só registrada no sistema (tabela
  * support_tickets), sem abrir WhatsApp nem e-mail, e sem nenhum assistente
- * de IA por trás. Usa emoji como placeholder — a arte final da mascote
- * ainda não foi enviada pela Carol.
+ * de IA por trás. A imagem (public/mascote-ca.jpg) foi extraída direto do
+ * código-fonte do artefato dela — não é um placeholder.
  */
 export function MascoteSuporteButton({ companyId }: Props) {
   const [open, setOpen] = useState(false)
@@ -51,12 +51,12 @@ export function MascoteSuporteButton({ companyId }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-lg hover:scale-105 transition-transform"
-        style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+        className="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full overflow-hidden shadow-lg hover:scale-105 transition-transform"
         aria-label="Falar com o suporte"
         title="Falar com o suporte"
       >
-        🙋‍♀️
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/mascote-ca.jpg" alt="Cá, assistente da Casa Empresarial" className="w-full h-full object-cover" />
       </button>
 
       <Modal open={open} onClose={handleClose} title="Precisa de ajuda?" description="Conta pra gente o que está acontecendo — a mensagem fica registrada aqui dentro, sem precisar de WhatsApp ou e-mail.">
