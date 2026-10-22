@@ -51,7 +51,6 @@ export default async function AppLayout({
 
   const firstCompanyId = companies[0]?.id ?? null
   const activeCompany  = companies.find(c => c.id === activeCookieId) ?? companies[0]
-  const logoUrl        = activeCompany?.logo_url ?? null
   const activeRole     = activeCompany?.role ?? null
   const myEmployeeId   = activeCompany?.employeeId ?? null
 
@@ -66,13 +65,15 @@ export default async function AppLayout({
       <style dangerouslySetInnerHTML={{ __html: themeCSS }} />
       <AppStoreInitializer companies={companies} firstCompanyId={firstCompanyId}>
         <ThemeSync companies={companyThemes} />
-        <Sidebar logoUrl={logoUrl} role={activeRole} myEmployeeId={myEmployeeId} />
+        <Sidebar
+          role={activeRole}
+          myEmployeeId={myEmployeeId}
+          userName={profile?.name ?? user.email ?? ''}
+          userAvatar={profile?.avatar_url}
+          companyName={activeCompany?.razao_social ?? null}
+        />
         <AppShell>
-          <Header
-            companies={companies}
-            userName={profile?.name ?? user.email ?? ''}
-            userAvatar={profile?.avatar_url}
-          />
+          <Header companies={companies} />
           <main className="flex-1 pt-16 p-6" style={{ backgroundColor: 'var(--color-bg-default)' }}>
             <div className="mb-4">
               <Breadcrumb />

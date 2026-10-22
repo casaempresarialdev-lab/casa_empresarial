@@ -1,23 +1,27 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
+import { UserMenu } from './user-menu'
 
-type NavLeaf  = { label: string; href: string; icon: string; children?: never }
-type NavGroup = { label: string; href?: never; icon: string; children: { label: string; href: string }[] }
+type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user'
+
+type NavLeaf  = { label: string; href: string; icon: IconName; children?: never }
+type NavGroup = { label: string; href?: never; icon: IconName; children: { label: string; href: string }[] }
 type NavItem  = NavLeaf | NavGroup
 
 const NAV_ITEMS: NavItem[] = [
   {
-    label: 'Dashboard',
+    label: 'Visão geral',
     href: '/dashboard',
-    icon: '⊞',
+    icon: 'grid',
   },
   {
     label: 'Administrativo',
-    icon: '🏢',
+    icon: 'file',
     children: [
       { label: 'Minha Empresa', href: '/empresa' },
       { label: 'Quadro Societário', href: '/admin/quadro-societario' },
@@ -27,7 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'Financeiro',
-    icon: '💰',
+    icon: 'dollar',
     children: [
       { label: 'Contatos', href: '/financeiro/contatos' },
       { label: 'Centro de Custo', href: '/financeiro/centro-de-custo' },
@@ -40,19 +44,8 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    label: 'Operacional',
-    icon: '📦',
-    children: [
-      { label: 'Produtos e Serviços', href: '/operacional/produtos' },
-      { label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
-      { label: 'Pedidos de Venda', href: '/operacional/pedidos-venda' },
-      { label: 'Ordens de Serviço', href: '/operacional/ordens-de-servico' },
-      { label: 'Frente de Caixa', href: '/operacional/frente-de-caixa' },
-    ],
-  },
-  {
     label: 'Pessoas',
-    icon: '👥',
+    icon: 'users',
     children: [
       { label: 'Equipe', href: '/pessoas/funcionarios' },
       { label: 'Admissão', href: '/pessoas/admissao' },
@@ -67,8 +60,19 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    label: 'Operacional',
+    icon: 'briefcase',
+    children: [
+      { label: 'Produtos e Serviços', href: '/operacional/produtos' },
+      { label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
+      { label: 'Pedidos de Venda', href: '/operacional/pedidos-venda' },
+      { label: 'Ordens de Serviço', href: '/operacional/ordens-de-servico' },
+      { label: 'Frente de Caixa', href: '/operacional/frente-de-caixa' },
+    ],
+  },
+  {
     label: 'Marketing',
-    icon: '📣',
+    icon: 'megaphone',
     children: [
       { label: 'Calendário', href: '/marketing/calendario' },
       { label: 'Depoimentos', href: '/marketing/depoimentos' },
@@ -79,16 +83,10 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
-interface SidebarProps {
-  logoUrl?: string | null
-  role?: string | null
-  myEmployeeId?: string | null
-}
-
 const COLABORADOR_NAV_ITEMS: NavItem[] = [
   {
     label: 'Pessoas',
-    icon: '👥',
+    icon: 'users',
     children: [
       { label: 'Registro de Ponto',    href: '/pessoas/registro-de-ponto' },
       { label: 'Escala de Trabalho',   href: '/pessoas/escala-de-trabalho' },
@@ -98,24 +96,167 @@ const COLABORADOR_NAV_ITEMS: NavItem[] = [
   },
 ]
 
-export function Sidebar({ logoUrl, role, myEmployeeId }: SidebarProps) {
+// Ícones em linha (estilo Lucide), herdam a cor do texto
+const ICON_PATHS: Record<IconName, React.ReactNode> = {
+  grid: (
+    <>
+      <rect x="3" y="3" width="7" height="9" rx="1" />
+      <rect x="14" y="3" width="7" height="5" rx="1" />
+      <rect x="14" y="12" width="7" height="9" rx="1" />
+      <rect x="3" y="16" width="7" height="5" rx="1" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </>
+  ),
+  dollar: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+      <path d="M12 18V6" />
+    </>
+  ),
+  users: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  briefcase: (
+    <>
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </>
+  ),
+  megaphone: (
+    <>
+      <path d="m3 11 18-5v12L3 14v-3z" />
+      <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+    </>
+  ),
+  user: (
+    <>
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </>
+  ),
+}
+
+function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
+      {ICON_PATHS[name]}
+    </svg>
+  )
+}
+
+function normalize(s: string) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+interface SidebarProps {
+  role?: string | null
+  myEmployeeId?: string | null
+  userName?: string
+  userAvatar?: string | null
+  companyName?: string | null
+}
+
+export function Sidebar({ role, myEmployeeId, userName, userAvatar, companyName }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
+  const setSidebarExpanded = useAppStore((s) => s.setSidebarExpanded)
   const mobileSidebarOpen = useAppStore((s) => s.mobileSidebarOpen)
   const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen)
   const pathname = usePathname()
+  const router = useRouter()
 
   const isColaborador = role === 'colaborador'
   const navItems: NavItem[] = isColaborador
     ? [
         ...COLABORADOR_NAV_ITEMS,
-        ...(myEmployeeId ? [{ label: 'Meus Dados', href: `/pessoas/funcionarios/${myEmployeeId}`, icon: '🙋' } as NavLeaf] : []),
+        ...(myEmployeeId ? [{ label: 'Meus Dados', href: `/pessoas/funcionarios/${myEmployeeId}`, icon: 'user' } as NavLeaf] : []),
       ]
     : NAV_ITEMS
+  const areaCount = navItems.filter((i) => i.children).length
+
+  // Grupos abertos — o grupo da rota atual abre automaticamente
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const active = navItems.find((i) => i.children?.some((c) => pathname.startsWith(c.href)))
+    if (active) setOpenGroups((prev) => (prev.has(active.label) ? prev : new Set(prev).add(active.label)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+
+  function toggleGroup(label: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }
+
+  // Busca — Ctrl/Cmd+K foca o campo
+  const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSidebarExpanded(true)
+        setMobileSidebarOpen(true)
+        setTimeout(() => searchRef.current?.focus(), 0)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [setSidebarExpanded, setMobileSidebarOpen])
+
+  const results = query.trim()
+    ? navItems
+        .flatMap((item) =>
+          item.children
+            ? item.children.map((c) => ({ ...c, group: item.label }))
+            : [{ label: item.label, href: item.href, group: null as string | null }],
+        )
+        .filter((r) => normalize(r.label).includes(normalize(query.trim())))
+    : null
 
   function closeMobile() {
     setMobileSidebarOpen(false)
   }
+
+  function navigateTo(href: string) {
+    setQuery('')
+    closeMobile()
+    router.push(href)
+  }
+
+  // Botão "<": no mobile fecha o menu, no desktop recolhe/expande
+  function handleToggle() {
+    if (window.matchMedia('(min-width: 768px)').matches) toggleSidebar()
+    else closeMobile()
+  }
+
+  const hideWhenCollapsed = !expanded && 'md:hidden'
 
   return (
     <>
@@ -129,144 +270,230 @@ export function Sidebar({ logoUrl, role, myEmployeeId }: SidebarProps) {
 
       <aside
         className={cn(
-          'flex flex-col h-screen fixed left-0 top-0 z-40 border-r transition-all duration-200 bg-white',
+          'flex flex-col fixed left-3 top-3 bottom-3 z-40 rounded-2xl border shadow-sm transition-all duration-200 bg-white',
           // Mobile: sempre 240px. Desktop: 64px retraído ou 240px expandido.
           expanded ? 'w-60' : 'w-60 md:w-16',
           // Mobile: oculto por padrão, desliza ao abrir. Desktop: sempre visível.
-          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-[calc(100%+1rem)] md:translate-x-0',
         )}
-        style={{ borderColor: 'var(--color-bg-surface)' }}
+        style={{ borderColor: 'var(--color-brand)' }}
       >
-        {/* Logo / nome */}
-        <div
-          className={cn('flex items-center h-16 border-b', expanded ? 'px-4' : 'px-4 md:px-2')}
-          style={{ borderColor: 'var(--color-bg-surface)' }}
-        >
-          {logoUrl ? (
-            <>
-              {/* Com logo: expandido mostra logo maior, retraído mostra miniatura */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={logoUrl}
-                alt="Logo da empresa"
-                className={cn('object-contain', !expanded && 'md:hidden')}
-                style={{ maxHeight: 48, maxWidth: 200 }}
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={logoUrl}
-                alt="Logo da empresa"
-                className={cn('object-contain hidden', !expanded && 'md:block')}
-                style={{ maxHeight: 40, maxWidth: 40 }}
-              />
-            </>
-          ) : (
-            <>
-              <span
-                className={cn('font-bold text-base', !expanded && 'md:hidden')}
-                style={{ fontFamily: 'Manrope', color: 'var(--color-primary-darker)' }}
-              >
-                Casa Empresarial
-              </span>
-              <span
-                className={cn('font-bold text-lg hidden', !expanded && 'md:block')}
-                style={{ color: 'var(--color-primary-darker)' }}
-              >
-                CE
-              </span>
-            </>
-          )}
+        {/* Logo + recolher */}
+        <div className={cn('relative flex flex-col items-center pt-8 pb-5', expanded ? 'px-5' : 'px-5 md:px-2 md:pt-12')}>
+          <button
+            onClick={handleToggle}
+            className={cn(
+              'absolute top-3 p-1 rounded-md hover:bg-gray-100 transition-colors',
+              expanded ? 'right-3' : 'right-3 md:right-1/2 md:translate-x-1/2',
+            )}
+            style={{ color: 'var(--color-sidebar-text)' }}
+            aria-label={expanded ? 'Recolher menu' : 'Expandir menu'}
+          >
+            <svg
+              width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+              className={cn('transition-transform', !expanded && 'md:rotate-180')}
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+
+          {/* Expandida: logo completa. Retraída (desktop): só o símbolo */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-casa-empresarial-completa.svg"
+            alt="Casa Empresarial"
+            className={cn('h-auto', hideWhenCollapsed)}
+            style={{ width: 170 }}
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-casa-empresarial-reduzida.svg"
+            alt="Casa Empresarial"
+            className={cn('hidden', !expanded && 'md:block')}
+            style={{ width: 36, height: 36 }}
+          />
+        </div>
+
+        {/* Busca */}
+        <div className={cn('px-3 mb-4', !expanded && 'md:px-2')}>
+          <label
+            className={cn('flex items-center gap-2 h-10 px-3 rounded-xl border cursor-text', !expanded && 'md:hidden')}
+            style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setQuery('')
+                if (e.key === 'Enter' && results?.[0]) navigateTo(results[0].href)
+              }}
+              placeholder="Buscar"
+              className="flex-1 min-w-0 bg-transparent text-sm outline-none"
+              style={{ color: 'var(--color-text-primary)' }}
+            />
+            <kbd
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded border shrink-0"
+              style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-sidebar-text)' }}
+            >
+              Ctrl K
+            </kbd>
+          </label>
+          <button
+            onClick={() => { setSidebarExpanded(true); setTimeout(() => searchRef.current?.focus(), 0) }}
+            className={cn('hidden w-full h-10 items-center justify-center rounded-xl hover:bg-gray-50', !expanded && 'md:flex')}
+            style={{ color: 'var(--color-text-muted)' }}
+            aria-label="Buscar"
+            title="Buscar (Ctrl K)"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 px-2">
-          {navItems.map((item) => {
-            if (!item.children) {
-              const active = pathname === item.href
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={closeMobile}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg mb-1 text-sm transition-colors',
-                    active ? 'font-semibold' : 'hover:bg-gray-50'
-                  )}
-                  style={active
-                    ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
-                    : { color: 'var(--color-text-secondary)' }
-                  }
-                  title={!expanded ? item.label : undefined}
+        <nav className={cn('flex-1 overflow-y-auto px-3', !expanded && 'md:px-2')}>
+          {results ? (
+            results.length === 0 ? (
+              <p className="px-3 py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                Nada encontrado.
+              </p>
+            ) : (
+              results.map((r) => (
+                <button
+                  key={r.href}
+                  onClick={() => navigateTo(r.href)}
+                  className="w-full flex flex-col items-start px-3 py-2 rounded-xl mb-0.5 text-left hover:bg-gray-50 transition-colors"
                 >
-                  <span className="text-base shrink-0">{item.icon}</span>
-                  <span className={cn('truncate', !expanded && 'md:hidden')}>{item.label}</span>
-                </Link>
-              )
-            }
-
-            const isGroupActive = item.children.some(c => pathname.startsWith(c.href))
-
-            return (
-              <div key={item.label} className="mb-1">
-                <div
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium"
-                  style={{ color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-text-muted)' }}
-                  title={!expanded ? item.label : undefined}
-                >
-                  <span className="text-base shrink-0">{item.icon}</span>
-                  <span className={cn('truncate', !expanded && 'md:hidden')}>{item.label}</span>
-                </div>
-
-                {/* Sub-items: visíveis no mobile sempre; no desktop só se expandido */}
-                <div
-                  className={cn('ml-4 pl-3 border-l', !expanded && 'md:hidden')}
-                  style={{ borderColor: 'var(--color-bg-surface)' }}
-                >
-                  {item.children.map((child) => {
-                    const active = pathname.startsWith(child.href)
-                    return (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={closeMobile}
-                        className={cn(
-                          'flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors mb-0.5',
-                          active ? 'font-semibold' : 'hover:bg-gray-50'
-                        )}
-                        style={active
-                          ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
-                          : { color: 'var(--color-text-secondary)' }
-                        }
-                      >
-                        {child.label}
-                      </Link>
-                    )
-                  })}
-                </div>
-              </div>
+                  <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.label}</span>
+                  {r.group && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{r.group}</span>}
+                </button>
+              ))
             )
-          })}
+          ) : (
+            <>
+              <div
+                className={cn('flex items-center justify-between px-1 mb-2 text-[11px] font-semibold tracking-wider', hideWhenCollapsed)}
+                style={{ color: 'var(--color-sidebar-text)' }}
+              >
+                <span>SUA CASA</span>
+                <span>{areaCount} {areaCount === 1 ? 'ÁREA' : 'ÁREAS'}</span>
+              </div>
+
+              {navItems.map((item) => {
+                if (!item.children) {
+                  const active = pathname === item.href
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={closeMobile}
+                      className={cn(
+                        'flex items-center gap-3 px-3 h-11 rounded-xl mb-1 text-[15px] transition-colors',
+                        !expanded && 'md:justify-center md:px-0',
+                        active ? 'font-bold' : 'font-semibold hover:bg-gray-50',
+                      )}
+                      style={{
+                        fontFamily: 'Manrope',
+                        ...(active
+                          ? { backgroundColor: 'var(--color-primary-dark)', color: '#FFFFFF' }
+                          : { color: 'var(--color-sidebar-text)' }),
+                      }}
+                      title={!expanded ? item.label : undefined}
+                    >
+                      <Icon name={item.icon} />
+                      <span className={cn('truncate', hideWhenCollapsed)}>{item.label}</span>
+                    </Link>
+                  )
+                }
+
+                const isGroupActive = item.children.some((c) => pathname.startsWith(c.href))
+                const isOpen = openGroups.has(item.label)
+
+                return (
+                  <div key={item.label} className="mb-1">
+                    <button
+                      onClick={() => {
+                        // Retraído no desktop: expande a sidebar e abre o grupo
+                        if (!expanded && window.matchMedia('(min-width: 768px)').matches) {
+                          setSidebarExpanded(true)
+                          setOpenGroups((prev) => new Set(prev).add(item.label))
+                          return
+                        }
+                        toggleGroup(item.label)
+                      }}
+                      className={cn(
+                        'w-full flex items-center gap-3 px-3 h-11 rounded-xl text-[15px] font-semibold transition-colors hover:bg-gray-50',
+                        !expanded && 'md:justify-center md:px-0',
+                      )}
+                      style={{
+                        fontFamily: 'Manrope',
+                        color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-sidebar-text)',
+                      }}
+                      title={!expanded ? item.label : undefined}
+                      aria-expanded={isOpen}
+                    >
+                      <Icon name={item.icon} />
+                      <span className={cn('flex-1 truncate text-left', hideWhenCollapsed)}>{item.label}</span>
+                      <svg
+                        width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                        className={cn('shrink-0 transition-transform duration-200', isOpen && 'rotate-180', hideWhenCollapsed)}
+                        style={{ color: 'var(--color-text-muted)' }}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+
+                    {isOpen && (
+                      <div
+                        className={cn('ml-[21px] pl-3 border-l mt-0.5 mb-1', hideWhenCollapsed)}
+                        style={{ borderColor: 'var(--color-bg-surface)' }}
+                      >
+                        {item.children.map((child) => {
+                          const active = pathname.startsWith(child.href)
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              onClick={closeMobile}
+                              className={cn(
+                                'flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors mb-0.5',
+                                active ? 'font-semibold' : 'hover:bg-gray-50',
+                              )}
+                              style={active
+                                ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
+                                : { color: 'var(--color-sidebar-text)' }
+                              }
+                            >
+                              {child.label}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </>
+          )}
         </nav>
 
-        {/* Toggle — desktop apenas */}
-        <button
-          onClick={toggleSidebar}
-          className="hidden md:block m-3 p-2 rounded-lg text-sm hover:bg-gray-100 transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-          aria-label={expanded ? 'Recolher menu' : 'Expandir menu'}
-        >
-          {expanded ? '◀' : '▶'}
-        </button>
-
-        {/* Fechar — mobile apenas */}
-        <button
-          onClick={closeMobile}
-          className="md:hidden m-3 p-2 rounded-lg text-sm hover:bg-gray-100 transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-          aria-label="Fechar menu"
-        >
-          ✕ Fechar
-        </button>
+        {/* Usuário */}
+        <div className={cn('mx-3 mb-3 pt-3 border-t', !expanded && 'md:mx-2')} style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <UserMenu
+            userName={userName}
+            userAvatar={userAvatar}
+            companyName={companyName}
+            compact={!expanded}
+            onNavigate={closeMobile}
+          />
+        </div>
       </aside>
     </>
   )

@@ -27,6 +27,7 @@
   /* Sidebar */
   --sidebar-width-collapsed: 64px;
   --sidebar-width-expanded:  240px;
+  --color-sidebar-text:      #6B5D4F;
 
   /* Tabela */
   --table-row-height: 40px;

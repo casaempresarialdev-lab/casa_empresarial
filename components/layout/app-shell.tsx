@@ -11,7 +11,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       className={cn(
         'flex flex-col min-h-screen transition-all duration-200',
         // Mobile: sem margem (sidebar é overlay). Desktop: margem conforme estado da sidebar.
-        expanded ? 'md:ml-60' : 'md:ml-16',
+        // Sidebar flutuante: 12px de margem + largura + 12px de respiro
+        expanded ? 'md:ml-[264px]' : 'md:ml-[88px]',
       )}
     >
       {children}
