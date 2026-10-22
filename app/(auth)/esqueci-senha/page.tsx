@@ -29,7 +29,7 @@ export default function EsqueciSenhaPage() {
 
   if (sent) {
     return (
-      <div className="w-full">
+      <div className="w-full max-w-md mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-primary-darker)' }}>
             Casa Empresarial
@@ -52,7 +52,7 @@ export default function EsqueciSenhaPage() {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full max-w-md mx-auto">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-primary-darker)' }}>
           Casa Empresarial

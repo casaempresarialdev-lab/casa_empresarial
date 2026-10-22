@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
@@ -11,15 +11,29 @@ import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
 
+const REMEMBER_EMAIL_KEY = 'login_email'
+
 export default function LoginPage() {
   const router = useRouter()
   const [serverError, setServerError] = useState<string | null>(null)
+  const [remember, setRemember] = useState(false)
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginData>({ resolver: zodResolver(loginSchema) })
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_EMAIL_KEY)
+      if (saved) {
+        setValue('email', saved)
+        setRemember(true)
+      }
+    } catch {}
+  }, [setValue])
 
   async function onSubmit(data: LoginData) {
     setServerError(null)
@@ -36,25 +50,34 @@ export default function LoginPage() {
       )
       return
     }
+    try {
+      if (remember) localStorage.setItem(REMEMBER_EMAIL_KEY, data.email)
+      else localStorage.removeItem(REMEMBER_EMAIL_KEY)
+    } catch {}
     router.push('/dashboard')
     router.refresh()
   }
 
   return (
-    <div className="w-full">
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-primary-darker)' }}>
-          Casa Empresarial
-        </h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-          Bem-vindo de volta
-        </p>
+    <div
+      className="w-full max-w-5xl mx-auto flex flex-col md:flex-row bg-white rounded-2xl shadow-lg border overflow-hidden"
+      style={{ borderColor: 'var(--color-bg-surface)' }}
+    >
+      <div
+        className="md:w-1/2 flex items-center justify-center px-8 py-10 md:py-16"
+        style={{ backgroundColor: 'var(--color-brand)' }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-casa-empresarial.svg" alt="Casa Empresarial" className="w-48 md:w-72 h-auto" />
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border p-8" style={{ borderColor: 'var(--color-bg-surface)' }}>
-        <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text-primary)' }}>
-          Entrar na sua conta
-        </h2>
+      <div className="md:w-1/2 px-8 py-10 md:px-12 md:py-16">
+        <h1 className="text-2xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+          Bem-vindo de volta!
+        </h1>
+        <p className="text-sm mt-1 mb-8" style={{ color: 'var(--color-text-muted)' }}>
+          Entre para continuar na Casa Empresarial.
+        </p>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
           <Input
@@ -74,8 +97,18 @@ export default function LoginPage() {
               error={errors.password?.message}
               {...register('password')}
             />
-            <div className="flex justify-end">
-              <Link href="/esqueci-senha" className="text-xs hover:underline" style={{ color: 'var(--color-primary-dark)' }}>
+            <div className="flex items-center justify-between mt-2">
+              <label className="flex items-center gap-2 text-xs cursor-pointer select-none" style={{ color: 'var(--color-text-muted)' }}>
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer"
+                  style={{ accentColor: 'var(--color-brand)' }}
+                />
+                Lembrar de mim
+              </label>
+              <Link href="/esqueci-senha" className="text-xs hover:underline" style={{ color: 'var(--color-brand)' }}>
                 Esqueci minha senha
               </Link>
             </div>
@@ -87,14 +120,14 @@ export default function LoginPage() {
             </p>
           )}
 
-          <Button type="submit" loading={isSubmitting} size="lg" className="w-full mt-2">
+          <Button type="submit" loading={isSubmitting} size="lg" className="w-full mt-2" style={{ backgroundColor: 'var(--color-brand)', color: '#fff' }}>
             Entrar
           </Button>
         </form>
 
         <p className="text-center text-sm mt-6" style={{ color: 'var(--color-text-muted)' }}>
           Não tem conta?{' '}
-          <Link href="/cadastro/passo-1" className="font-medium hover:underline" style={{ color: 'var(--color-primary-dark)' }}>
+          <Link href="/cadastro/passo-1" className="font-medium hover:underline" style={{ color: 'var(--color-brand)' }}>
             Criar conta grátis
           </Link>
         </p>

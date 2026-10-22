@@ -7,6 +7,8 @@
   --color-primary:          #EED9C4;
   --color-primary-dark:     #C19A6B;
   --color-primary-darker:   #A67B5B;
+  --color-brand:            #A88E5D; /* fundo da logo */
+  --color-brand-light:      #EFE9DF;
 
   /* Texto */
   --color-text-primary:     #05070F;
