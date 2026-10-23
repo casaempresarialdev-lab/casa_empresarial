@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { UserMenu } from './user-menu'
+import { Icon, type IconName } from '@/components/ui/icon'
 
-type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user'
 
 type NavLeaf  = { label: string; href: string; icon: IconName; children?: never }
 type NavGroup = { label: string; href?: never; icon: IconName; children: { label: string; href: string }[] }
@@ -96,77 +96,6 @@ const COLABORADOR_NAV_ITEMS: NavItem[] = [
   },
 ]
 
-// Ícones em linha (estilo Lucide), herdam a cor do texto
-const ICON_PATHS: Record<IconName, React.ReactNode> = {
-  grid: (
-    <>
-      <rect x="3" y="3" width="7" height="9" rx="1" />
-      <rect x="14" y="3" width="7" height="5" rx="1" />
-      <rect x="14" y="12" width="7" height="9" rx="1" />
-      <rect x="3" y="16" width="7" height="5" rx="1" />
-    </>
-  ),
-  file: (
-    <>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-    </>
-  ),
-  dollar: (
-    <>
-      <circle cx="12" cy="12" r="10" />
-      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
-      <path d="M12 18V6" />
-    </>
-  ),
-  users: (
-    <>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </>
-  ),
-  briefcase: (
-    <>
-      <rect x="2" y="7" width="20" height="14" rx="2" />
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-    </>
-  ),
-  megaphone: (
-    <>
-      <path d="m3 11 18-5v12L3 14v-3z" />
-      <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
-    </>
-  ),
-  user: (
-    <>
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </>
-  ),
-}
-
-function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="shrink-0"
-    >
-      {ICON_PATHS[name]}
-    </svg>
-  )
-}
-
 function normalize(s: string) {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 }
@@ -176,10 +105,10 @@ interface SidebarProps {
   myEmployeeId?: string | null
   userName?: string
   userAvatar?: string | null
-  companyName?: string | null
+  companies?: { id: string; razao_social: string }[]
 }
 
-export function Sidebar({ role, myEmployeeId, userName, userAvatar, companyName }: SidebarProps) {
+export function Sidebar({ role, myEmployeeId, userName, userAvatar, companies }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const setSidebarExpanded = useAppStore((s) => s.setSidebarExpanded)
@@ -260,6 +189,22 @@ export function Sidebar({ role, myEmployeeId, userName, userAvatar, companyName 
 
   return (
     <>
+      {/* Abrir menu — mobile apenas */}
+      {!mobileSidebarOpen && (
+        <button
+          className="md:hidden fixed top-3 left-3 z-30 p-2 rounded-xl border bg-white shadow-sm cursor-pointer"
+          onClick={() => setMobileSidebarOpen(true)}
+          aria-label="Abrir menu"
+          style={{ color: 'var(--color-sidebar-text)', borderColor: 'var(--color-brand)' }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      )}
+
       {/* Overlay escuro — mobile apenas */}
       {mobileSidebarOpen && (
         <div
@@ -271,6 +216,8 @@ export function Sidebar({ role, myEmployeeId, userName, userAvatar, companyName 
       <aside
         className={cn(
           'flex flex-col fixed left-3 top-3 bottom-3 z-40 rounded-2xl border shadow-sm transition-all duration-200 bg-white',
+          // Botões (áreas, busca, recolher, menu do usuário) com cursor de link
+          '[&_button]:cursor-pointer',
           // Mobile: sempre 240px. Desktop: 64px retraído ou 240px expandido.
           expanded ? 'w-60' : 'w-60 md:w-16',
           // Mobile: oculto por padrão, desliza ao abrir. Desktop: sempre visível.
@@ -489,7 +436,7 @@ export function Sidebar({ role, myEmployeeId, userName, userAvatar, companyName 
           <UserMenu
             userName={userName}
             userAvatar={userAvatar}
-            companyName={companyName}
+            companies={companies}
             compact={!expanded}
             onNavigate={closeMobile}
           />

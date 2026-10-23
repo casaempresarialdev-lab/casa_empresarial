@@ -2,10 +2,10 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
-import { Header } from '@/components/layout/header'
 import { AppStoreInitializer } from '@/components/layout/app-store-initializer'
 import { AppShell } from '@/components/layout/app-shell'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { PageTransition } from '@/components/layout/page-transition'
 import { ThemeSync } from '@/components/layout/theme-sync'
 import { deriveThemeColors } from '@/lib/theme'
 
@@ -63,6 +63,11 @@ export default async function AppLayout({
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: themeCSS }} />
+      {/* Fundo em degradê (mesmo do login), fixo atrás de tudo */}
+      <div
+        className="fixed inset-0 -z-10"
+        style={{ background: 'linear-gradient(135deg, var(--color-brand-light) 0%, var(--color-bg-default) 100%)' }}
+      />
       <AppStoreInitializer companies={companies} firstCompanyId={firstCompanyId}>
         <ThemeSync companies={companyThemes} />
         <Sidebar
@@ -70,15 +75,14 @@ export default async function AppLayout({
           myEmployeeId={myEmployeeId}
           userName={profile?.name ?? user.email ?? ''}
           userAvatar={profile?.avatar_url}
-          companyName={activeCompany?.razao_social ?? null}
+          companies={companies}
         />
         <AppShell>
-          <Header companies={companies} />
-          <main className="flex-1 pt-16 p-6" style={{ backgroundColor: 'var(--color-bg-default)' }}>
+          <main className="flex-1 p-6 pt-16 md:pt-6">
             <div className="mb-4">
               <Breadcrumb />
             </div>
-            {children}
+            <PageTransition>{children}</PageTransition>
           </main>
         </AppShell>
       </AppStoreInitializer>

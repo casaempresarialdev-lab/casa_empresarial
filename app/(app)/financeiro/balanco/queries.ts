@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { getAccountBalances } from '@/lib/finance/balances'
 
 export type BPTipo =
   | 'ativo_circulante'
@@ -29,12 +30,14 @@ export async function getBPData(
 ): Promise<BPData> {
   const admin = createAdminClient()
 
-  const [contasRes, txRes, lancamentosRes] = await Promise.all([
+  const [contasRes, balances, txRes, lancamentosRes] = await Promise.all([
     admin
       .from('bank_accounts')
-      .select('saldo_atual')
+      .select('id')
       .eq('company_id', companyId)
       .eq('ativo', true),
+
+    getAccountBalances(companyId),
 
     admin
       .from('transactions')
@@ -53,7 +56,7 @@ export async function getBPData(
   if (txRes.error) throw txRes.error
   if (lancamentosRes.error) throw lancamentosRes.error
 
-  const caixa = (contasRes.data ?? []).reduce((s, c) => s + (c.saldo_atual ?? 0), 0)
+  const caixa = (contasRes.data ?? []).reduce((s, c) => s + (balances.get(c.id)?.saldo ?? 0), 0)
 
   let contasReceber = 0
   let contasPagar = 0

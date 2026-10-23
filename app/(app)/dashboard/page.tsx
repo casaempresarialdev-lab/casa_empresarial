@@ -2,11 +2,25 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { ModuleSection } from '@/components/modules/dashboard/module-section'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { Icon } from '@/components/ui/icon'
+import { StatCard } from '@/components/modules/dashboard/stat-card'
+import { UpcomingPayments, type UpcomingPayment } from '@/components/modules/dashboard/upcoming-payments'
+import { EmployeesList, type EmployeeRow } from '@/components/modules/dashboard/employees-list'
+import { OpenReceivables, type OpenReceivable } from '@/components/modules/dashboard/open-receivables'
+import { DocumentsValidity, type DocumentValidity } from '@/components/modules/dashboard/documents-validity'
+import { ScheduledPosts, type ScheduledPost } from '@/components/modules/dashboard/scheduled-posts'
+import { getAccountBalances } from '@/lib/finance/balances'
+import { fetchAll } from '@/lib/supabase/fetch-all'
+import { Welcome } from '@/components/modules/dashboard/welcome'
+import { IntroProvider } from '@/components/modules/dashboard/intro'
 
 export const dynamic = 'force-dynamic'
 
 function isoDate(d: Date) { return d.toISOString().split('T')[0] }
+
+// Pedido de venda ainda não entregue nem cancelado
+const SALE_ORDER_OPEN_STATUSES = ['rascunho', 'confirmado', 'em_producao', 'enviado']
 
 function offsetDate(days: number) {
   return isoDate(new Date(Date.now() + days * 86400000))
@@ -26,11 +40,16 @@ export default async function DashboardPage() {
   const cookieCompanyId = cookieStore.get('active_company_id')?.value
   const admin = createAdminClient()
 
-  const { data: memberships } = await admin
-    .from('company_members')
-    .select('company_id, role, companies(id, razao_social, nome_fantasia)')
-    .eq('profile_id', user.id)
-    .eq('status', 'active')
+  const [{ data: memberships }, { data: profile }] = await Promise.all([
+    admin
+      .from('company_members')
+      .select('company_id, role, companies(id, razao_social, nome_fantasia)')
+      .eq('profile_id', user.id)
+      .eq('status', 'active'),
+    admin.from('profiles').select('name').eq('id', user.id).single(),
+  ])
+  // Primeiro nome para a saudação
+  const firstName = profile?.name?.trim().split(/\s+/)[0] || null
 
   type Company = { id: string; razao_social: string; nome_fantasia: string | null }
   type Membership = { company_id: string; role: string; companies: Company | Company[] | null }
@@ -65,163 +84,326 @@ export default async function DashboardPage() {
   const activeCompany = companies.find(c => c.id === cookieCompanyId) ?? companies[0]
   const companyId = activeCompany.id
 
-  const today    = isoDate(new Date())
-  const in30d    = offsetDate(30)
-  const now      = new Date()
-  const inicioMes = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const fimMes    = isoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+  // Datas no fuso do Brasil (o servidor roda em UTC)
+  const today     = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const in30d     = offsetDate(30)
+  const [ano, mes] = today.split('-').map(Number)
+  const inicioMes = `${today.slice(0, 7)}-01`
+  const fimMes    = isoDate(new Date(Date.UTC(ano, mes, 0)))
 
   const [
     // Administrativo — Documentação
-    { count: docsCount },
     { count: docsVencidosCount },
-    { data: docsVencendo },
+    { count: docsVencendoCount },
     // Financeiro
     { data: bankAccounts },
-    { data: receitasMes },
-    { data: despesasMes },
-    // Operacional
-    { count: comprasAbertasCount },
-    { count: vendasAbertasCount },
-    { count: produtosCount },
+    balances,
+    { data: pagamentosPendentes },
+    // Pessoas — vencimentos e lista
+    { data: empDatas },
+    { data: empLista },
+    { data: convitesPendentes },
     // Pessoas
     { count: empAtivosCount },
-    { count: empAdmissaoCount },
-    { data: empFeriasAlert },
-    { data: empExamesAlert },
+    // Operacional
+    { count: osAbertasCount },
+    { count: vendasAbertasCount },
+    // Marketing
+    { count: publicacoesMesCount },
+    // Seções detalhadas — Operacional, Administrativo e Marketing
+    { data: vendasAbertas },
+    recebimentosPendentes,
+    { data: documentos },
+    { data: postagens },
   ] = await Promise.all([
     // Administrativo — Documentação
     admin.from('documents').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId),
-    admin.from('documents').select('*', { count: 'exact', head: true })
       .eq('company_id', companyId).not('vencimento', 'is', null).lt('vencimento', today),
-    admin.from('documents').select('descricao, nome, vencimento')
+    admin.from('documents').select('*', { count: 'exact', head: true })
       .eq('company_id', companyId).not('vencimento', 'is', null)
-      .gte('vencimento', today).lte('vencimento', in30d)
-      .order('vencimento').limit(3),
+      .gte('vencimento', today).lte('vencimento', in30d),
     // Financeiro
-    admin.from('bank_accounts').select('saldo_atual')
+    admin.from('bank_accounts').select('id')
       .eq('company_id', companyId).eq('ativo', true),
-    admin.from('transactions').select('valor')
-      .eq('company_id', companyId).eq('tipo', 'receita')
-      .gte('data_transacao', inicioMes).lte('data_transacao', fimMes),
-    admin.from('transactions').select('valor')
-      .eq('company_id', companyId).eq('tipo', 'despesa')
-      .gte('data_transacao', inicioMes).lte('data_transacao', fimMes),
-    // Operacional
-    admin.from('purchase_orders').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).neq('status', 'recebido').neq('status', 'cancelado'),
-    admin.from('sale_orders').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelado'),
-    admin.from('products').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId),
+    getAccountBalances(companyId, inicioMes),
+    admin.from('transactions').select('id, descricao, valor, data_vencimento, contacts(nome)')
+      .eq('company_id', companyId).eq('tipo', 'pagamento').eq('status', 'pendente')
+      .order('data_vencimento', { ascending: true, nullsFirst: false })
+      .limit(5),
+    // Pessoas — vencimentos e lista
+    admin.from('employees')
+      .select('id, vcto_ferias, exame_periodico, fim_experiencia_1, fim_experiencia_2, data_experiencia_fim')
+      .eq('company_id', companyId).not('status', 'in', '(inativo,demitido)'),
+    admin.from('employees').select('id, nome, cargo, status')
+      .eq('company_id', companyId).not('status', 'in', '(inativo,demitido)')
+      .order('nome').limit(5),
+    admin.from('invitations').select('employee_id')
+      .eq('company_id', companyId).eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString()).not('employee_id', 'is', null),
     // Pessoas
     admin.from('employees').select('*', { count: 'exact', head: true })
       .eq('company_id', companyId).eq('status', 'ativo'),
-    admin.from('employees').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).in('status', ['admissao', 'experiencia']),
-    admin.from('employees').select('nome, vcto_ferias')
-      .eq('company_id', companyId).eq('status', 'ativo')
-      .not('vcto_ferias', 'is', null)
-      .gte('vcto_ferias', today).lte('vcto_ferias', in30d)
-      .order('vcto_ferias').limit(3),
-    admin.from('employees').select('nome, exame_periodico')
-      .eq('company_id', companyId).eq('status', 'ativo')
-      .not('exame_periodico', 'is', null)
-      .gte('exame_periodico', today).lte('exame_periodico', in30d)
-      .order('exame_periodico').limit(3),
+    // Operacional
+    admin.from('service_orders').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).eq('status', 'aberta'),
+    admin.from('sale_orders').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelado'),
+    // Marketing
+    admin.from('editorial_calendar').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('data_publicacao', inicioMes).lte('data_publicacao', fimMes),
+    // Seções detalhadas — Operacional, Administrativo e Marketing
+    admin.from('sale_orders').select('valor_total')
+      .eq('company_id', companyId).in('status', SALE_ORDER_OPEN_STATUSES),
+    fetchAll((from, to) =>
+      admin.from('transactions').select('contact_id, valor, data_vencimento, contacts(nome)')
+        .eq('company_id', companyId).eq('tipo', 'recebimento').eq('status', 'pendente')
+        .not('contact_id', 'is', null)
+        .order('id').range(from, to),
+    ),
+    admin.from('documents').select('id, nome, descricao, vencimento')
+      .eq('company_id', companyId)
+      .order('vencimento', { ascending: true, nullsFirst: false })
+      .limit(5),
+    admin.from('editorial_calendar').select('id, titulo, plataforma, data_publicacao, status')
+      .eq('company_id', companyId).neq('status', 'publicado')
+      .gte('data_publicacao', today)
+      .order('data_publicacao').limit(5),
   ])
 
-  // Administrativo
-  const totalDocs        = docsCount ?? 0
-  const docsVencidos     = docsVencidosCount ?? 0
-  const docsVencendoList = docsVencendo ?? []
+  // Administrativo: vencidos + vencendo em 30 dias
+  const docsVencidos = docsVencidosCount ?? 0
+  const atencao      = docsVencidos + (docsVencendoCount ?? 0)
 
-  // Financeiro
-  const saldoTotal   = (bankAccounts ?? []).reduce((s, a) => s + (a.saldo_atual ?? 0), 0)
-  const totalReceitas = (receitasMes ?? []).reduce((s, t) => s + (t.valor ?? 0), 0)
-  const totalDespesas = (despesasMes ?? []).reduce((s, t) => s + (t.valor ?? 0), 0)
-  const resultado     = totalReceitas - totalDespesas
+  // Operacional: pedidos de venda em aberto e o valor somado
+  const qtdVendasAbertas  = (vendasAbertas ?? []).length
+  const valorVendasAbertas = (vendasAbertas ?? []).reduce((s, v) => s + Number(v.valor_total ?? 0), 0)
 
-  // Operacional
-  const comprasAbertas = comprasAbertasCount ?? 0
-  const vendasAbertas  = vendasAbertasCount ?? 0
-  const totalProdutos  = produtosCount ?? 0
+  // Clientes com recebimentos pendentes, agrupados (maiores valores primeiro)
+  type RecebimentoRow = { contact_id: string; valor: number; data_vencimento: string | null; contacts: { nome: string } | { nome: string }[] | null }
+  const porCliente = new Map<string, OpenReceivable>()
+  for (const r of recebimentosPendentes as unknown as RecebimentoRow[]) {
+    const contato = Array.isArray(r.contacts) ? r.contacts[0] : r.contacts
+    const c = porCliente.get(r.contact_id) ?? { contactId: r.contact_id, nome: contato?.nome ?? 'Cliente', parcelas: 0, vencidas: 0, total: 0 }
+    c.parcelas += 1
+    c.total += Number(r.valor ?? 0)
+    if (r.data_vencimento && r.data_vencimento < today) c.vencidas += 1
+    porCliente.set(r.contact_id, c)
+  }
+  const clientesEmAberto = [...porCliente.values()].sort((a, b) => b.total - a.total).slice(0, 5)
 
-  // Pessoas
-  const empAtivos   = empAtivosCount ?? 0
-  const empAdmissao = empAdmissaoCount ?? 0
-  const feriasCount = (empFeriasAlert ?? []).length
-  const examesCount = (empExamesAlert ?? []).length
+  const docsValidade: DocumentValidity[] = (documentos ?? []).map((d) => ({
+    id: d.id, nome: d.descricao || d.nome, vencimento: d.vencimento,
+  }))
+
+  // Financeiro: saldo calculado a partir dos lançamentos quitados (lib/finance/balances.ts)
+  const contasAtivas = bankAccounts ?? []
+  const saldoTotal   = contasAtivas.reduce((s, a) => s + (balances.get(a.id)?.saldo ?? 0), 0)
+  const movimentoMes = contasAtivas.reduce((s, a) => s + (balances.get(a.id)?.movimentoDesde ?? 0), 0)
+  const saldoInicioMes = saldoTotal - movimentoMes
+  const variacaoMes  = saldoInicioMes !== 0 ? (movimentoMes / Math.abs(saldoInicioMes)) * 100 : null
+  const sinal        = movimentoMes > 0 ? '+' : movimentoMes < 0 ? '−' : ''
+  const variacaoLabel =
+    movimentoMes === 0 ? 'sem movimentação no mês'
+    : variacaoMes !== null ? `${sinal}${Math.abs(variacaoMes).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% no mês`
+    : `${sinal}${formatCurrency(Math.abs(movimentoMes))} no mês`
+
+  type PagamentoRow = { id: string; descricao: string; valor: number; data_vencimento: string | null; contacts: { nome: string } | { nome: string }[] | null }
+  const pagamentos: UpcomingPayment[] = ((pagamentosPendentes ?? []) as unknown as PagamentoRow[]).map((p) => {
+    const c = Array.isArray(p.contacts) ? p.contacts[0] : p.contacts
+    return { id: p.id, descricao: p.descricao, valor: Number(p.valor), data_vencimento: p.data_vencimento, contato: c?.nome ?? null }
+  })
+
+  // Pessoas: quem tem férias, exame periódico ou fim de experiência nos próximos 15 dias
+  const in15d = isoDate(new Date(Date.UTC(ano, mes - 1, Number(today.slice(8, 10)) + 15)))
+  const DATAS_VENCIMENTO = ['vcto_ferias', 'exame_periodico', 'fim_experiencia_1', 'fim_experiencia_2', 'data_experiencia_fim'] as const
+  const pessoasVencendo = (empDatas ?? []).filter((e) =>
+    DATAS_VENCIMENTO.some((k) => {
+      const d = e[k] as string | null
+      return d && d >= today && d <= in15d
+    }),
+  ).length
+
+  const comConvite = new Set((convitesPendentes ?? []).map((c) => c.employee_id as string))
+  const funcionarios: EmployeeRow[] = (empLista ?? []).map((e) => ({
+    id: e.id, nome: e.nome, cargo: e.cargo, status: e.status, convitePendente: comConvite.has(e.id),
+  }))
+
+  const empAtivos    = empAtivosCount ?? 0
+  const emAndamento  = (osAbertasCount ?? 0) + (vendasAbertasCount ?? 0)
+  const publicacoes  = publicacoesMesCount ?? 0
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+    <IntroProvider play={cookieStore.get('play_intro')?.value === '1'}>
+      <Welcome firstName={firstName} />
 
-        {/* 1 — Administrativo: Documentação */}
-        <ModuleSection
-          icon="🏢"
-          title="ADMINISTRATIVO"
-          metrics={[
-            { label: 'Documentos',         value: totalDocs },
-            { label: 'Vencidos',           value: docsVencidos,           accent: docsVencidos           > 0 ? 'red'    : undefined },
-            { label: 'Vencendo (30 dias)', value: docsVencendoList.length, accent: docsVencendoList.length > 0 ? 'yellow' : undefined },
-          ]}
-          href="/admin/documentacao"
-          linkLabel="Ver documentação"
-        />
+      <section>
+        <h2
+          className="animate-enter flex items-center gap-2 text-lg font-bold mb-4"
+          style={{ fontFamily: 'Manrope', color: 'var(--color-brand)', animationDelay: '100ms' }}
+        >
+          <Icon name="grid" />
+          Sua casa hoje
+        </h2>
 
-        {/* 2 — Financeiro */}
-        <ModuleSection
-          icon="💰"
-          title="FINANCEIRO"
-          metrics={[
-            { label: 'Saldo total',         value: formatCurrency(saldoTotal),   accent: saldoTotal   < 0 ? 'red' : undefined },
-            { label: 'Receitas do mês',     value: formatCurrency(totalReceitas), accent: 'green' },
-            { label: 'Despesas do mês',     value: formatCurrency(totalDespesas), accent: totalDespesas > 0 ? 'red' : undefined },
-            { label: 'Resultado do mês',    value: formatCurrency(resultado),     accent: resultado < 0 ? 'red' : resultado > 0 ? 'green' : undefined },
-          ]}
-          href="/financeiro/fluxo"
-          linkLabel="Ver fluxo de caixa"
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          <SummaryCard
+            icon="file"
+            title="Administrativo"
+            delay={200}
+            value={atencao}
+            caption={atencao === 1 ? 'item pedindo atenção' : 'itens pedindo atenção'}
+            accent={docsVencidos > 0 ? 'red' : atencao > 0 ? 'yellow' : undefined}
+            href="/admin/documentacao"
+            linkLabel="Ver documentação"
+          />
+          <SummaryCard
+            icon="dollar"
+            title="Financeiro"
+            delay={280}
+            value={formatCurrency(saldoTotal)}
+            caption="saldo atual em conta"
+            accent={saldoTotal < 0 ? 'red' : undefined}
+            href="/financeiro/fluxo-de-caixa"
+            linkLabel="Ver fluxo de caixa"
+          />
+          <SummaryCard
+            icon="users"
+            title="Pessoas"
+            delay={360}
+            value={empAtivos}
+            caption={empAtivos === 1 ? 'pessoa na equipe' : 'pessoas na equipe'}
+            href="/pessoas/funcionarios"
+            linkLabel="Ver equipe"
+          />
+          <SummaryCard
+            icon="briefcase"
+            title="Operacional"
+            delay={440}
+            value={emAndamento}
+            caption="OS e pedidos em andamento"
+            href="/operacional/ordens-de-servico"
+            linkLabel="Ver ordens de serviço"
+          />
+          <SummaryCard
+            icon="megaphone"
+            title="Marketing"
+            delay={520}
+            value={publicacoes}
+            caption={publicacoes === 1 ? 'publicação neste mês' : 'publicações neste mês'}
+            href="/marketing/calendario"
+            linkLabel="Ver calendário"
+          />
+        </div>
+      </section>
 
-        {/* 3 — Operacional */}
-        <ModuleSection
-          icon="📦"
-          title="OPERACIONAL"
-          metrics={[
-            { label: 'Compras em aberto', value: comprasAbertas, accent: comprasAbertas > 0 ? 'yellow' : undefined },
-            { label: 'Vendas em aberto',  value: vendasAbertas,  accent: vendasAbertas  > 0 ? 'yellow' : undefined },
-            { label: 'Total de produtos', value: totalProdutos },
-          ]}
-          href="/operacional/pedidos-compra"
-          linkLabel="Ver pedidos"
-        />
+      <section className="mt-8">
+        <h2
+          className="animate-enter flex items-center gap-2 text-lg font-bold mb-4"
+          style={{ fontFamily: 'Manrope', color: 'var(--color-brand)', animationDelay: '600ms' }}
+        >
+          <Icon name="wallet" />
+          Financeiro
+        </h2>
 
-        {/* 4 — Pessoas */}
-        <ModuleSection
-          icon="👥"
-          title="PESSOAS"
-          metrics={[
-            { label: 'Funcionários ativos',        value: empAtivos },
-            { label: 'Em admissão / experiência',  value: empAdmissao,  accent: empAdmissao  > 0 ? 'yellow' : undefined },
-            { label: 'Férias vencendo (30 dias)',   value: feriasCount,  accent: feriasCount  > 0 ? 'yellow' : undefined },
-            { label: 'Exames periódicos (30 dias)', value: examesCount,  accent: examesCount  > 0 ? 'yellow' : undefined },
-          ]}
-          href="/pessoas/funcionarios"
-          linkLabel="Ver funcionários"
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+            <StatCard
+              title="Saldo em conta"
+              value={formatCurrency(saldoTotal)}
+              caption={variacaoLabel}
+              captionTone={movimentoMes > 0 ? 'positive' : movimentoMes < 0 ? 'negative' : undefined}
+              href="/financeiro/contas-cartoes"
+              delay={680}
+            />
+            <StatCard
+              title="Contas bancárias"
+              value={`${contasAtivas.length} ${contasAtivas.length === 1 ? 'conta' : 'contas'}`}
+              caption={`${formatCurrency(saldoTotal)} no total`}
+              href="/financeiro/contas-cartoes"
+              delay={760}
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <UpcomingPayments payments={pagamentos} today={today} delay={840} />
+          </div>
+        </div>
+      </section>
 
-        {/* 5 — Marketing (em branco) */}
-        <ModuleSection
-          icon="📣"
-          title="MARKETING"
-          metrics={[]}
-          href="/marketing/calendario"
-          linkLabel="Ver marketing"
-        />
+      <section className="mt-8">
+        <h2
+          className="animate-enter flex items-center gap-2 text-lg font-bold mb-4"
+          style={{ fontFamily: 'Manrope', color: 'var(--color-brand)', animationDelay: '920ms' }}
+        >
+          <Icon name="users" />
+          Pessoas
+        </h2>
 
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <StatCard
+            title="Vencimentos"
+            value={`${pessoasVencendo} ${pessoasVencendo === 1 ? 'pessoa' : 'pessoas'}`}
+            caption="férias, exames ou experiência nos próximos 15 dias"
+            captionTone={pessoasVencendo > 0 ? 'negative' : undefined}
+            href="/pessoas/funcionarios"
+            delay={1000}
+          />
+          <div className="lg:col-span-2">
+            <EmployeesList employees={funcionarios} delay={1080} />
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2
+          className="animate-enter flex items-center gap-2 text-lg font-bold mb-4"
+          style={{ fontFamily: 'Manrope', color: 'var(--color-brand)', animationDelay: '1160ms' }}
+        >
+          <Icon name="briefcase" />
+          Operacional
+        </h2>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <StatCard
+            title="Vendas em aberto"
+            value={`${qtdVendasAbertas} ${qtdVendasAbertas === 1 ? 'pedido' : 'pedidos'}`}
+            caption={`${formatCurrency(valorVendasAbertas)} em negociação`}
+            href="/operacional/pedidos-venda"
+            delay={1240}
+          />
+          <div className="lg:col-span-2">
+            <OpenReceivables clients={clientesEmAberto} delay={1320} />
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <section className="flex flex-col">
+          <h2
+            className="animate-enter flex items-center gap-2 text-lg font-bold mb-4"
+            style={{ fontFamily: 'Manrope', color: 'var(--color-brand)', animationDelay: '1400ms' }}
+          >
+            <Icon name="file" />
+            Administrativo
+          </h2>
+          <div className="flex-1">
+            <DocumentsValidity documents={docsValidade} today={today} delay={1480} />
+          </div>
+        </section>
+
+        <section className="flex flex-col">
+          <h2
+            className="animate-enter flex items-center gap-2 text-lg font-bold mb-4"
+            style={{ fontFamily: 'Manrope', color: 'var(--color-brand)', animationDelay: '1400ms' }}
+          >
+            <Icon name="megaphone" />
+            Marketing
+          </h2>
+          <div className="flex-1">
+            <ScheduledPosts posts={(postagens ?? []) as ScheduledPost[]} today={today} delay={1560} />
+          </div>
+        </section>
       </div>
-    </div>
+    </IntroProvider>
   )
 }

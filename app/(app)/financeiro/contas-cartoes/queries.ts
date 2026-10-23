@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { getAccountBalances } from '@/lib/finance/balances'
 
 export type BankAccount = {
   id: string
@@ -28,14 +29,21 @@ export type CreditCard = {
 
 export async function getBankAccounts(companyId: string): Promise<BankAccount[]> {
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('bank_accounts')
-    .select('*')
-    .eq('company_id', companyId)
-    .order('banco', { ascending: true })
+  const [{ data, error }, balances] = await Promise.all([
+    admin
+      .from('bank_accounts')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('banco', { ascending: true }),
+    getAccountBalances(companyId),
+  ])
 
   if (error) throw error
-  return (data ?? []) as BankAccount[]
+  // saldo_atual calculado a partir dos lançamentos quitados (a coluna do banco não é atualizada)
+  return ((data ?? []) as BankAccount[]).map((a) => ({
+    ...a,
+    saldo_atual: balances.get(a.id)?.saldo ?? Number(a.saldo_inicial ?? 0),
+  }))
 }
 
 export async function getCreditCards(companyId: string): Promise<CreditCard[]> {

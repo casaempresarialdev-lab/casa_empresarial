@@ -10,6 +10,7 @@ import { loginSchema, type LoginData } from '@/lib/validations/auth'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
+import { INTRO_COOKIE } from '@/components/modules/dashboard/intro'
 
 const REMEMBER_EMAIL_KEY = 'login_email'
 
@@ -54,6 +55,8 @@ export default function LoginPage() {
       if (remember) localStorage.setItem(REMEMBER_EMAIL_KEY, data.email)
       else localStorage.removeItem(REMEMBER_EMAIL_KEY)
     } catch {}
+    // Intro do dashboard (título digitado) só nesta primeira visita — ver components/modules/dashboard/intro.tsx
+    document.cookie = `${INTRO_COOKIE}=1; path=/; max-age=60; SameSite=Lax`
     router.push('/dashboard')
     router.refresh()
   }
