@@ -101,6 +101,9 @@ function normalize(s: string) {
 }
 
 interface SidebarProps {
+  /** Logos da empresa (Configurações); sem elas, usa as da Casa Empresarial */
+  logoUrl?: string | null
+  logoReduzidaUrl?: string | null
   role?: string | null
   myEmployeeId?: string | null
   userName?: string
@@ -108,7 +111,7 @@ interface SidebarProps {
   companies?: { id: string; razao_social: string }[]
 }
 
-export function Sidebar({ role, myEmployeeId, userName, userAvatar, companies }: SidebarProps) {
+export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName, userAvatar, companies }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const setSidebarExpanded = useAppStore((s) => s.setSidebarExpanded)
@@ -215,7 +218,7 @@ export function Sidebar({ role, myEmployeeId, userName, userAvatar, companies }:
 
       <aside
         className={cn(
-          'flex flex-col fixed left-3 top-3 bottom-3 z-40 rounded-2xl border-l-[3px] shadow-sm transition-all duration-200 bg-white',
+          'flex flex-col fixed left-3 top-3 bottom-3 z-40 rounded-2xl border-l-[3px] shadow-[0_4px_16px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.06)] transition-all duration-200 bg-white',
           // Botões (áreas, busca, recolher, menu do usuário) com cursor de link
           '[&_button]:cursor-pointer',
           // Mobile: sempre 240px. Desktop: 64px retraído ou 240px expandido.
@@ -247,16 +250,16 @@ export function Sidebar({ role, myEmployeeId, userName, userAvatar, companies }:
           {/* Expandida: logo completa. Retraída (desktop): só o símbolo */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo-casa-empresarial-completa.svg"
-            alt="Casa Empresarial"
-            className={cn('h-auto', hideWhenCollapsed)}
-            style={{ width: 170 }}
+            src={logoUrl || '/logo-casa-empresarial-completa.svg'}
+            alt={logoUrl ? 'Logo da empresa' : 'Casa Empresarial'}
+            className={cn('object-contain', hideWhenCollapsed)}
+            style={{ maxWidth: 170, maxHeight: 72 }}
           />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo-casa-empresarial-reduzida.svg"
-            alt="Casa Empresarial"
-            className={cn('hidden', !expanded && 'md:block')}
+            src={logoReduzidaUrl || '/logo-casa-empresarial-reduzida.svg'}
+            alt={logoReduzidaUrl ? 'Logo da empresa' : 'Casa Empresarial'}
+            className={cn('hidden object-contain', !expanded && 'md:block')}
             style={{ width: 36, height: 36 }}
           />
         </div>

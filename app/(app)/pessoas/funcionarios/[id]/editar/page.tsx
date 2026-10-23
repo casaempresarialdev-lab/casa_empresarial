@@ -34,7 +34,7 @@ export default async function FuncionarioEditPage({ params }: Props) {
   if (!employee) notFound()
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       <EditFuncionarioPage
         employee={employee}
         companyId={companyId}

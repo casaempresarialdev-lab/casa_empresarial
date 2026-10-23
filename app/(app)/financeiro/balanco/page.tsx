@@ -32,7 +32,7 @@ export default async function BalancoPage({
   const bpData = await getBPData(companyId, dataBase, inicioExercicio)
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <BalancoClient bpData={bpData} mes={mes} ano={ano} companyId={companyId} />
     </div>
   )

@@ -18,7 +18,7 @@ export default async function ContatosPage() {
   const contacts = await getContacts(companyId)
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <ContatosClient contacts={contacts} companyId={companyId} />
     </div>
   )

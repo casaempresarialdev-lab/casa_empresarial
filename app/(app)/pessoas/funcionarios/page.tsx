@@ -22,7 +22,7 @@ export default async function FuncionariosPage() {
   ])
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-full">
       <FuncionariosClient
         employees={employees}
         companyId={companyId}

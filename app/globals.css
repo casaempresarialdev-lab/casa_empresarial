@@ -101,6 +101,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .page-loader-logo {
+  background: var(--brand-icon, url('/logo-casa-empresarial-reduzida.svg')) center / contain no-repeat;
   animation: logo-pulse 1s ease-in-out infinite;
 }
 

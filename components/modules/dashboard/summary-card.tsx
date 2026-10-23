@@ -20,7 +20,7 @@ const accentColor = {
 
 // Visual base dos cards do dashboard (borda, sombra e hover que sobe)
 export const DASHBOARD_CARD_CLASS =
-  'animate-enter bg-white rounded-2xl border p-5 shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-xl border-[var(--color-card-border)] hover:border-[var(--color-card-border-hover)]'
+  'animate-enter bg-white rounded-2xl border p-5 shadow-[0_4px_16px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.06)] transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-[0_14px_32px_rgba(0,0,0,0.14),0_4px_8px_rgba(0,0,0,0.06)] border-[var(--color-card-border)] hover:border-[var(--color-card-border-hover)]'
 
 // Título padrão das caixas do dashboard
 export const DASHBOARD_CARD_TITLE_CLASS = 'text-sm font-medium'

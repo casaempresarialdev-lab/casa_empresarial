@@ -32,7 +32,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             'h-10 w-full rounded-lg border px-3 text-sm transition-colors bg-white',
             'focus:outline-none focus:ring-2',
             'disabled:opacity-50 disabled:cursor-not-allowed',
-            error ? 'border-red-400 focus:ring-red-300' : 'focus:ring-[#C19A6B]',
+            error ? 'border-red-400 focus:ring-red-300' : 'focus:ring-[var(--color-brand)]',
             className
           )}
           style={{

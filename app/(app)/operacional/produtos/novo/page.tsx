@@ -15,7 +15,7 @@ export default async function NovoProdutoPage() {
   if (!companyId) redirect('/empresa')
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-full">
       <FormNovoProduto companyId={companyId} />
     </div>
   )

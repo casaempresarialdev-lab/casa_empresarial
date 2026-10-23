@@ -18,7 +18,7 @@ export default async function CentroCustoPage() {
   const costCenters = await getCostCenters(companyId)
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       <CentroCustoClient costCenters={costCenters} companyId={companyId} />
     </div>
   )

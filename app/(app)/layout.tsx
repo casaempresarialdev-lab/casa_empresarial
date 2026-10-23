@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
@@ -7,7 +8,15 @@ import { AppShell } from '@/components/layout/app-shell'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { PageTransition } from '@/components/layout/page-transition'
 import { ThemeSync } from '@/components/layout/theme-sync'
-import { deriveThemeColors } from '@/lib/theme'
+import { themeCssVars } from '@/lib/theme'
+import { getCompanyBranding } from '@/lib/company-branding'
+
+// Favicon: ícone da empresa ativa, quando configurado (sobrescreve o icons do layout raiz)
+export async function generateMetadata(): Promise<Metadata> {
+  const cookieStore = await cookies()
+  const { iconeUrl } = await getCompanyBranding(cookieStore.get('active_company_id')?.value)
+  return iconeUrl ? { icons: { icon: [{ url: iconeUrl, type: 'image/png' }], apple: iconeUrl } } : {}
+}
 
 export default async function AppLayout({
   children,
@@ -54,23 +63,25 @@ export default async function AppLayout({
   const activeRole     = activeCompany?.role ?? null
   const myEmployeeId   = activeCompany?.employeeId ?? null
 
-  // Tema: cores derivadas da empresa ativa (server-side → sem flash)
-  const { primary, dark, darker } = deriveThemeColors(activeCompany?.cor_primaria ?? null)
-  const themeCSS = `body{--color-primary:${primary};--color-primary-dark:${dark};--color-primary-darker:${darker}}`
+  const branding = await getCompanyBranding(activeCompany?.id)
+
+  // Tema: cores derivadas da empresa ativa (server-side → sem flash).
+  // --brand-icon: ícone da empresa no pré-loader (sem ele, o CSS usa o símbolo padrão).
+  // background-color: cor de fundo configurada (sem ela, fica o branco padrão).
+  const iconVar = branding.iconeUrl ? `;--brand-icon:url("${branding.iconeUrl.replace(/["\\]/g, '')}")` : ''
+  const fundo   = branding.corFundo ? `;background-color:${branding.corFundo}` : ''
+  const themeCSS = `body{${themeCssVars(activeCompany?.cor_primaria ?? null)}${iconVar}${fundo}}`
 
   const companyThemes = companies.map(c => ({ id: c.id, cor_primaria: c.cor_primaria ?? null }))
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: themeCSS }} />
-      {/* Fundo em degradê (mesmo do login), fixo atrás de tudo */}
-      <div
-        className="fixed inset-0 -z-10"
-        style={{ background: 'linear-gradient(135deg, var(--color-brand-light) 0%, var(--color-bg-default) 100%)' }}
-      />
       <AppStoreInitializer companies={companies} firstCompanyId={firstCompanyId}>
         <ThemeSync companies={companyThemes} />
         <Sidebar
+          logoUrl={activeCompany?.logo_url ?? null}
+          logoReduzidaUrl={branding.logoReduzidaUrl}
           role={activeRole}
           myEmployeeId={myEmployeeId}
           userName={profile?.name ?? user.email ?? ''}

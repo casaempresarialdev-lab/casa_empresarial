@@ -25,7 +25,7 @@ export default async function ContatoViewPage({ params }: Props) {
   if (!contact) notFound()
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-full">
       <ViewContato contact={contact} />
     </div>
   )

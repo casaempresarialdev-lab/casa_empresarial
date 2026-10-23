@@ -4,6 +4,8 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Casa Empresarial',
   description: 'Gestão empresarial para microempresários',
+  // Declarado aqui (e não como app/favicon.ico) para a área logada poder trocar pelo ícone da empresa
+  icons: { icon: '/favicon.ico' },
 }
 
 export default function RootLayout({

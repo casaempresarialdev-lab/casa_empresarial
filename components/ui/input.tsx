@@ -34,7 +34,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             'placeholder:text-gray-400',
             error
               ? 'border-red-400 focus:ring-red-300'
-              : 'focus:ring-[#C19A6B]',
+              : 'focus:ring-[var(--color-brand)]',
             className
           )}
           style={{

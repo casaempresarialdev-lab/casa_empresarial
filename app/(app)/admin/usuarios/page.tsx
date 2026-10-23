@@ -30,7 +30,7 @@ export default async function UsuariosPage() {
   ])
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <UsuariosClient
         members={members}
         invitations={invitations}

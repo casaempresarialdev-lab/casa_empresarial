@@ -21,7 +21,7 @@ export default async function OrdensDeServicoPage() {
   ])
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <OrdensServicoClient
         orders={orders}
         contacts={contacts}

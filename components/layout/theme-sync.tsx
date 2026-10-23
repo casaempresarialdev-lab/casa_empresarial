@@ -13,11 +13,13 @@ export function ThemeSync({ companies }: Props) {
 
   useEffect(() => {
     const company = companies.find(c => c.id === activeId)
-    const { primary, dark, darker } = deriveThemeColors(company?.cor_primaria ?? null)
+    const { primary, dark, darker, brand, brandLight } = deriveThemeColors(company?.cor_primaria ?? null)
     const root = document.documentElement
     root.style.setProperty('--color-primary',        primary)
     root.style.setProperty('--color-primary-dark',   dark)
     root.style.setProperty('--color-primary-darker', darker)
+    root.style.setProperty('--color-brand',          brand)
+    root.style.setProperty('--color-brand-light',    brandLight)
   }, [activeId, companies])
 
   return null

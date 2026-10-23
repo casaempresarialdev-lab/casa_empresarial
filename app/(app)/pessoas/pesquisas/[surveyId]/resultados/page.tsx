@@ -18,7 +18,7 @@ export default async function ResultadosPage({ params }: Props) {
   if (!survey) notFound()
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 w-full">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>

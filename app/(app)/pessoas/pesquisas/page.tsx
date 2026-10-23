@@ -18,7 +18,7 @@ export default async function PesquisasPage() {
   const surveys = await getSurveys(companyId)
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <PesquisasClient surveys={surveys} companyId={companyId} />
     </div>
   )

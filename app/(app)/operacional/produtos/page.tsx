@@ -18,7 +18,7 @@ export default async function ProdutosPage() {
   const products = await getProducts(companyId)
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <ProdutosClient products={products} companyId={companyId} />
     </div>
   )

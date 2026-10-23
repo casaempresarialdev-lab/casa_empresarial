@@ -31,7 +31,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
               'focus:outline-none focus:ring-2',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               'placeholder:text-gray-400',
-              error ? 'border-red-400 focus:ring-red-300' : 'focus:ring-[#C19A6B]',
+              error ? 'border-red-400 focus:ring-red-300' : 'focus:ring-[var(--color-brand)]',
               className
             )}
             style={{

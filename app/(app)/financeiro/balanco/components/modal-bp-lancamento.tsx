@@ -79,7 +79,7 @@ export function ModalBPLancamento({ open, onClose, companyId, lancamento, defaul
           <select
             value={tipo}
             onChange={e => setTipo(e.target.value as BPTipo)}
-            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
             style={{
               borderColor: 'var(--color-bg-surface)',
               color: 'var(--color-text-primary)',

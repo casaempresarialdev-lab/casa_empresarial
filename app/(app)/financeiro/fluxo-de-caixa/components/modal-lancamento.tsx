@@ -180,7 +180,7 @@ export function ModalLancamento({
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
             <select value={status} onChange={e => setStatus(e.target.value)}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}>
               <option value="pendente">Pendente</option>
               <option value="pago">Pago / Recebido</option>
@@ -204,7 +204,7 @@ export function ModalLancamento({
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Categoria</label>
             <select value={categoriaId} onChange={e => setCategoriaId(e.target.value)}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}>
               <option value="">Selecione...</option>
               {catsFiltradas.map(c => (
@@ -220,7 +220,7 @@ export function ModalLancamento({
               {tipo === 'recebimento' ? 'Cliente' : 'Fornecedor'}
             </label>
             <select value={contactId} onChange={e => setContactId(e.target.value)}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}>
               <option value="">Selecione...</option>
               {contacts.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -233,7 +233,7 @@ export function ModalLancamento({
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Conta bancária</label>
             <select value={accountId} onChange={e => handleAccountChange(e.target.value)}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}>
               <option value="">Selecione...</option>
               {bankAccounts.filter(a => a.ativo).map(a => <option key={a.id} value={a.id}>{a.banco}</option>)}
@@ -243,7 +243,7 @@ export function ModalLancamento({
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Cartão de crédito</label>
             <select value={cardId} onChange={e => handleCardChange(e.target.value)}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}>
               <option value="">Selecione...</option>
               {creditCards.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -256,7 +256,7 @@ export function ModalLancamento({
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Centro de custo</label>
             <select value={costCenterId} onChange={e => setCostCenterId(e.target.value)}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}>
               <option value="">Selecione...</option>
               {costCenters.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -268,7 +268,7 @@ export function ModalLancamento({
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
           <textarea value={detalhes} onChange={e => setDetalhes(e.target.value)} rows={2} placeholder="Informações adicionais..."
-            className="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            className="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }} />
         </div>
 
@@ -292,7 +292,7 @@ export function ModalLancamento({
                 <div className="flex flex-col gap-1">
                   <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Frequência</label>
                   <select value={recorrenciaTipo} onChange={e => setRecorrenciaTipo(e.target.value)}
-                    className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+                    className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
                     style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}>
                     {RECORRENCIA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>

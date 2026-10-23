@@ -157,7 +157,7 @@ export function ModalContato({ open, onClose, companyId, contact }: Props) {
             onChange={e => setObservacao(e.target.value)}
             rows={3}
             placeholder="Informações adicionais..."
-            className="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            className="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
           />
         </div>

@@ -18,7 +18,7 @@ export default async function LoginseSenhasPage() {
   const credentials = await getCredentials(companyId)
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <CredentialsClient credentials={credentials} companyId={companyId} />
     </div>
   )

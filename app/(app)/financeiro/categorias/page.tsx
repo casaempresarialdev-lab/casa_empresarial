@@ -18,7 +18,7 @@ export default async function CategoriasPage() {
   const categories = await getCategories(companyId)
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       <CategoriasClient categories={categories} companyId={companyId} />
     </div>
   )

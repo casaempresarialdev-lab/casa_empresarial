@@ -21,7 +21,7 @@ export default async function ContasCartoesPage() {
   ])
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <ContasCartoesClient
         bankAccounts={bankAccounts}
         creditCards={creditCards}

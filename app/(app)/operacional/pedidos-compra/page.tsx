@@ -22,7 +22,7 @@ export default async function PedidosCompraPage() {
   ])
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <PedidosCompraClient
         orders={orders}
         contacts={contacts}

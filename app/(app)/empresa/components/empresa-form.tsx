@@ -160,11 +160,11 @@ export function EmpresaForm({ company }: Props) {
     })
   }
 
-  const selectCls = 'h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]'
+  const selectCls = 'h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]'
   const selectSty = { borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       <div className="mb-6">
         <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
           Minha Empresa

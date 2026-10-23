@@ -1,6 +1,6 @@
 // Derivação de cores do tema a partir de cor_primaria (= --color-primary-dark)
 
-function hexToHsl(hex: string): [number, number, number] {
+export function hexToHsl(hex: string): [number, number, number] {
   const r = parseInt(hex.slice(1, 3), 16) / 255
   const g = parseInt(hex.slice(3, 5), 16) / 255
   const b = parseInt(hex.slice(5, 7), 16) / 255
@@ -18,7 +18,7 @@ function hexToHsl(hex: string): [number, number, number] {
   return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)]
 }
 
-function hslToHex(h: number, s: number, l: number): string {
+export function hslToHex(h: number, s: number, l: number): string {
   const sl = s / 100, ll = l / 100
   const k = (n: number) => (n + h / 30) % 12
   const a = sl * Math.min(ll, 1 - ll)
@@ -27,7 +27,19 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${hex(f(0))}${hex(f(8))}${hex(f(4))}`
 }
 
-const DEFAULT = { primary: '#EED9C4', dark: '#C19A6B', darker: '#A67B5B' }
+// Mistura a cor com branco (amount = fração de branco, 0..1)
+function mixWithWhite(hex: string, amount: number): string {
+  const ch = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16)
+    return Math.round(c + (255 - c) * amount).toString(16).padStart(2, '0')
+  }
+  return `#${ch(1)}${ch(3)}${ch(5)}`
+}
+
+// brand = cor da marca (títulos, links, borda da sidebar…); brandLight = fundo claro derivado
+const DEFAULT = { primary: '#EED9C4', dark: '#C19A6B', darker: '#A67B5B', brand: '#A88E5D', brandLight: '#EFE9DF' }
+
+export const DEFAULT_BRAND_COLOR = DEFAULT.brand
 
 export function deriveThemeColors(corPrimaria: string | null): typeof DEFAULT {
   const base = corPrimaria?.trim() ?? ''
@@ -35,8 +47,17 @@ export function deriveThemeColors(corPrimaria: string | null): typeof DEFAULT {
 
   const [h, s, l] = hexToHsl(base)
   return {
-    primary: hslToHex(h, Math.max(0, s - 5),  Math.min(95, l + 27)),
-    dark:    base,
-    darker:  hslToHex(h, Math.max(0, s - 8),  Math.max(10, l - 10)),
+    primary:    hslToHex(h, Math.max(0, s - 5),  Math.min(95, l + 27)),
+    dark:       base,
+    darker:     hslToHex(h, Math.max(0, s - 8),  Math.max(10, l - 10)),
+    brand:      base,
+    brandLight: mixWithWhite(base, 0.82),
   }
+}
+
+/** CSS com as variáveis do tema da empresa (aplicado no <body> da área logada) */
+export function themeCssVars(corPrimaria: string | null): string {
+  const t = deriveThemeColors(corPrimaria)
+  return `--color-primary:${t.primary};--color-primary-dark:${t.dark};--color-primary-darker:${t.darker};` +
+    `--color-brand:${t.brand};--color-brand-light:${t.brandLight}`
 }

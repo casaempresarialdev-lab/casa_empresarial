@@ -21,7 +21,7 @@ export default async function SegurancaSaudePage() {
   ])
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="w-full">
       <SegurancaClient records={records} employees={employees} companyId={companyId} />
     </div>
   )

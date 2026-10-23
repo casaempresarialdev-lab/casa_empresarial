@@ -29,7 +29,7 @@ export default async function RecebimentosPage() {
   ])
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <LancamentosClient
         transactions={transactions}
         tipo="recebimento"

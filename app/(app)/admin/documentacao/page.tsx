@@ -18,7 +18,7 @@ export default async function DocumentacaoPage() {
   const documents = await getDocuments(companyId)
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <DocsClient documents={documents} companyId={companyId} />
     </div>
   )

@@ -21,7 +21,7 @@ export default async function EncargosPage() {
   ])
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="w-full">
       <EncargosClient employees={employees} aliquotas={aliquotas} companyId={companyId} />
     </div>
   )

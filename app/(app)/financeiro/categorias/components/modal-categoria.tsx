@@ -138,7 +138,7 @@ export function ModalCategoria({ open, onClose, companyId, category, allCategori
           <select
             value={parentId}
             onChange={e => setParentId(e.target.value)}
-            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
           >
             <option value="">Nenhuma (categoria raiz)</option>
@@ -156,7 +156,7 @@ export function ModalCategoria({ open, onClose, companyId, category, allCategori
           <select
             value={dreGrupo}
             onChange={e => setDreGrupo(e.target.value as DreGrupo)}
-            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
             style={{ borderColor: dreGrupo === 'nao_classificado' ? '#F59E0B' : 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
           >
             {(tipo === 'receita' ? DRE_GRUPOS_RECEITA : DRE_GRUPOS_DESPESA).map(g => (

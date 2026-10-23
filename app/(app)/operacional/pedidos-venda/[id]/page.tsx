@@ -34,7 +34,7 @@ export default async function PedidoVendaViewPage({ params }: Props) {
   const companyCnpj = company?.cnpj || ''
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       <ViewPedidoVenda order={order} companyName={companyName} companyCnpj={companyCnpj} />
     </div>
   )

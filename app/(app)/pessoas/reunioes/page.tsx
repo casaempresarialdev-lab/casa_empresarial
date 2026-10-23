@@ -18,7 +18,7 @@ export default async function ReunioesPage() {
   const meetings = await getMeetings(companyId)
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <ReunioesClient meetings={meetings} companyId={companyId} />
     </div>
   )

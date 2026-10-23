@@ -1,4 +1,5 @@
-// Logo reduzida pulsando (reduz e amplia) — usada no loading.tsx e na transição entre páginas
+// Ícone da empresa pulsando (reduz e amplia) — usado no loading.tsx e na transição entre páginas.
+// A imagem vem da variável CSS --brand-icon (definida no layout); sem ela, usa o símbolo padrão.
 export function PageLoader() {
   return (
     <div className="page-loader flex items-center justify-center min-h-[70vh]" role="status" aria-label="Carregando">
@@ -6,8 +7,7 @@ export function PageLoader() {
         className="w-24 h-24 rounded-full bg-white border shadow-md flex items-center justify-center"
         style={{ borderColor: 'var(--color-card-border)' }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-casa-empresarial-reduzida.svg" alt="" className="page-loader-logo w-12 h-12" />
+        <div className="page-loader-logo w-12 h-12" />
       </div>
     </div>
   )

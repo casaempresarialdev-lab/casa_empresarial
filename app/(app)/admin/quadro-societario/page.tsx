@@ -18,7 +18,7 @@ export default async function QuadroSocietarioPage() {
   const socios = await getSocios(companyId)
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <SociosClient socios={socios} companyId={companyId} />
     </div>
   )

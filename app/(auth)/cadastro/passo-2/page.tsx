@@ -109,7 +109,7 @@ export default function CadastroPasso2Page() {
               placeholder="00000-000"
               inputMode="numeric"
               maxLength={9}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: errors.cep ? 'var(--color-error)' : 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
               {...register('cep', {
                 onChange: (e) => {
@@ -132,7 +132,7 @@ export default function CadastroPasso2Page() {
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>UF</label>
               <select
-                className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+                className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
                 style={{ borderColor: errors.uf ? 'var(--color-error)' : 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
                 {...register('uf')}
               >

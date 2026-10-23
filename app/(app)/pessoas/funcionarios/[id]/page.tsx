@@ -43,7 +43,7 @@ export default async function FuncionarioViewPage({ params }: Props) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       <ViewFuncionarioPage
         employee={employee}
         companyId={companyId}

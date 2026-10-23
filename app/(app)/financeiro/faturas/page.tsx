@@ -18,7 +18,7 @@ export default async function FaturasPage() {
   const invoices = await getCardInvoices(companyId)
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="w-full">
       <FaturasClient invoices={invoices} />
     </div>
   )

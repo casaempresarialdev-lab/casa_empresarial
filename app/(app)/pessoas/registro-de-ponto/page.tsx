@@ -44,7 +44,7 @@ export default async function RegistroDePontoPage({
   const exceptions = viewer?.isColaborador ? exceptionsAll.filter(e => e.employee_id === myId) : exceptionsAll
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <PontoClient
         records={records}
         employees={employees}

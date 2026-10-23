@@ -164,7 +164,7 @@ export function ModalSocio({ open, onClose, companyId, socio }: Props) {
         <label className="flex items-center gap-3 cursor-pointer select-none">
           <div
             onClick={() => setAdministrador((v) => !v)}
-            className={`relative w-10 h-6 rounded-full transition-colors ${administrador ? 'bg-[#C19A6B]' : 'bg-gray-200'}`}
+            className={`relative w-10 h-6 rounded-full transition-colors ${administrador ? 'bg-[var(--color-brand)]' : 'bg-gray-200'}`}
           >
             <span
               className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${administrador ? 'translate-x-5' : 'translate-x-1'}`}
@@ -194,7 +194,7 @@ export function ModalSocio({ open, onClose, companyId, socio }: Props) {
             value={cep}
             onChange={(e) => setCep(maskCep(e.target.value))}
             onBlur={handleCepBlur}
-            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
           />
         </div>
@@ -206,7 +206,7 @@ export function ModalSocio({ open, onClose, companyId, socio }: Props) {
               name="uf"
               value={uf}
               onChange={(e) => setUf(e.target.value)}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
             >
               <option value="">UF</option>
@@ -221,7 +221,7 @@ export function ModalSocio({ open, onClose, companyId, socio }: Props) {
               placeholder="Cidade"
               value={cidade}
               onChange={(e) => setCidade(e.target.value)}
-              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+              className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
             />
           </div>
@@ -235,7 +235,7 @@ export function ModalSocio({ open, onClose, companyId, socio }: Props) {
             placeholder="Rua, Avenida, etc."
             value={logradouro}
             onChange={(e) => setLogradouro(e.target.value)}
-            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
           />
         </div>
@@ -248,7 +248,7 @@ export function ModalSocio({ open, onClose, companyId, socio }: Props) {
             placeholder="Bairro"
             value={bairro}
             onChange={(e) => setBairro(e.target.value)}
-            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C19A6B]"
+            className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
           />
         </div>

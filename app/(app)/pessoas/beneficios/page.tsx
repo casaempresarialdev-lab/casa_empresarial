@@ -28,14 +28,14 @@ export default async function BeneficiosPage() {
     const me = employees.find(e => e.id === viewer.myEmployeeId)
     if (!me) notFound()
     return (
-      <div className="max-w-5xl mx-auto">
+      <div className="w-full">
         <MeusBeneficios employee={me} benefits={benefits} />
       </div>
     )
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <BeneficiosClient companyId={companyId} benefits={benefits} employees={employees} />
     </div>
   )

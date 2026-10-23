@@ -40,7 +40,7 @@ export default async function EscalaDeTrabalhoPage({
   const employees  = viewer?.isColaborador ? employeesAll.filter(e => e.id === myId) : employeesAll
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="w-full">
       <EscalaClient
         rules={rules}
         exceptions={exceptions}

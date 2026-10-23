@@ -30,7 +30,7 @@ export default async function DREPage({
   const dreData = await getDREData(companyId, startDate, endDate)
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       <DREClient dreData={dreData} mes={mes} ano={ano} />
     </div>
   )

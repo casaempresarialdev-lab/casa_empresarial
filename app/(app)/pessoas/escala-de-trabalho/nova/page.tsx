@@ -18,7 +18,7 @@ export default async function NovaRegraEscalaPage() {
   const employees = await getActiveEmployees(companyId)
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-full">
       <FormNovaRegra companyId={companyId} employees={employees} />
     </div>
   )

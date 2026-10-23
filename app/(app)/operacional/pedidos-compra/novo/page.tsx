@@ -21,7 +21,7 @@ export default async function NovoPedidoCompraPage() {
   ])
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       <FormNovoPedidoCompra
         companyId={companyId}
         contacts={contacts}

@@ -41,7 +41,7 @@ export default async function FluxoCaixaPage({
   ])
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <FluxoClient
         transactions={transactions}
         companyId={companyId}
