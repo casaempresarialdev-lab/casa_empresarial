@@ -215,7 +215,7 @@ export function Sidebar({ role, myEmployeeId, userName, userAvatar, companies }:
 
       <aside
         className={cn(
-          'flex flex-col fixed left-3 top-3 bottom-3 z-40 rounded-2xl border shadow-sm transition-all duration-200 bg-white',
+          'flex flex-col fixed left-3 top-3 bottom-3 z-40 rounded-2xl border-l-[3px] shadow-sm transition-all duration-200 bg-white',
           // Botões (áreas, busca, recolher, menu do usuário) com cursor de link
           '[&_button]:cursor-pointer',
           // Mobile: sempre 240px. Desktop: 64px retraído ou 240px expandido.
