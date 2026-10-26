@@ -1,7 +1,5 @@
+import { ComingSoon } from '@/components/layout/coming-soon'
+
 export default function Page() {
-  return (
-    <div>
-      <h1>Material Gráfico</h1>
-    </div>
-  )
+  return <ComingSoon title="Material Gráfico" description="Peças e materiais de divulgação" />
 }

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createRuleAction } from '../../actions'
 import type { FolgaPattern } from '@/lib/escala/generate'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 const DIAS_SEMANA = [
   { idx: 0, label: 'Dom' },
@@ -222,10 +223,14 @@ export function FormNovaRegra({ companyId, employees }: Props) {
       </div>
 
       <div className="mb-6">
-        <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-          Adicionar Regra de Escala
-        </h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        {/* Título e breadcrumb na mesma linha */}
+        <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+            Adicionar Regra de Escala
+          </h1>
+          <Breadcrumb />
+        </div>
+        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
           Defina o horário e os dias de trabalho do colaborador
         </p>
       </div>

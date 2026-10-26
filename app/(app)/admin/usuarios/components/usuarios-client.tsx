@@ -8,7 +8,9 @@ import { ModalUsuario } from './modal-usuario'
 import { removeMemberAction, cancelInvitationAction, resendInvitationAction } from '../actions'
 import type { MemberWithProfile, Invitation } from '../queries'
 import { formatDate } from '@/lib/utils'
+import { toast } from '@/lib/toast'
 import { ModalPainelUsuario } from './modal-painel-usuario'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Proprietário',
@@ -194,7 +196,6 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
-  const [infoMsg, setInfoMsg] = useState('')
 
   function openAdd() { setEditingMember(null); setModalOpen(true) }
   function openEdit(member: MemberWithProfile) { setEditingMember(member); setModalOpen(true) }
@@ -213,7 +214,6 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
     if (!confirm(`Cancelar convite para ${inv.email}?`)) return
     setCancellingId(inv.id)
     setErrorMsg('')
-    setInfoMsg('')
     const result = await cancelInvitationAction(inv.id, companyId)
     setCancellingId(null)
     if ('error' in result) setErrorMsg(result.error ?? 'Erro ao cancelar.')
@@ -223,11 +223,13 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
   async function handleResendInvite(inv: Invitation) {
     setResendingId(inv.id)
     setErrorMsg('')
-    setInfoMsg('')
-    const result = await resendInvitationAction(inv.id, companyId)
+    // Erros do servidor aparecem no próprio toast (✕)
+    await toast.promise(resendInvitationAction(inv.id, companyId), {
+      loading: `Reenviando convite para ${inv.email}…`,
+      success: `Convite reenviado para ${inv.email}.`,
+      error: 'Erro ao reenviar convite.',
+    })
     setResendingId(null)
-    if ('error' in result) setErrorMsg(result.error ?? 'Erro ao reenviar convite.')
-    else setInfoMsg(`Convite reenviado para ${inv.email}.`)
   }
 
   const active = members.filter((m) => m.status === 'active')
@@ -236,11 +238,15 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Usuários
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Usuários
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Membros com acesso a esta empresa
           </p>
         </div>
@@ -252,14 +258,9 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
           {errorMsg}
         </p>
       )}
-      {infoMsg && (
-        <p className="text-sm mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700">
-          {infoMsg}
-        </p>
-      )}
 
       {/* ── Membros ── */}
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card overflow-x-auto">
         <table className="w-full min-w-[600px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>
@@ -349,7 +350,7 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
           <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
             Convites pendentes
           </h2>
-          <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <div className="app-card overflow-x-auto">
             <table className="w-full min-w-[500px] text-sm">
               <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <tr>

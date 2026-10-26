@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ModalProduto } from './modal-produto'
 import { deleteProductAction, toggleProductAtivoAction } from '../actions'
 import type { Product } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   products: Product[]
@@ -155,11 +156,15 @@ export function ProdutosClient({ products, companyId }: Props) {
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Produtos e Serviços
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Produtos e Serviços
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Catálogo de itens para venda
           </p>
         </div>
@@ -168,11 +173,11 @@ export function ProdutosClient({ products, companyId }: Props) {
 
       {/* Métricas */}
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="p-3 rounded-xl border text-center" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="p-3 app-card text-center">
           <div className="text-2xl font-bold" style={{ color: 'var(--color-primary-darker)' }}>{totalProdutos}</div>
           <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Produtos</div>
         </div>
-        <div className="p-3 rounded-xl border text-center" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="p-3 app-card text-center">
           <div className="text-2xl font-bold" style={{ color: 'var(--color-primary-darker)' }}>{totalServicos}</div>
           <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Serviços</div>
         </div>
@@ -222,7 +227,7 @@ export function ProdutosClient({ products, companyId }: Props) {
         </select>
       </div>
 
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card overflow-x-auto">
         <table className="w-full min-w-[800px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>

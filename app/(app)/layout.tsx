@@ -5,8 +5,8 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { AppStoreInitializer } from '@/components/layout/app-store-initializer'
 import { AppShell } from '@/components/layout/app-shell'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { PageTransition } from '@/components/layout/page-transition'
+import { Toaster } from '@/components/ui/toaster'
 import { ThemeSync } from '@/components/layout/theme-sync'
 import { themeCssVars } from '@/lib/theme'
 import { getCompanyBranding } from '@/lib/company-branding'
@@ -90,12 +90,10 @@ export default async function AppLayout({
         />
         <AppShell>
           <main className="flex-1 p-6 pt-16 md:pt-6">
-            <div className="mb-4">
-              <Breadcrumb />
-            </div>
             <PageTransition>{children}</PageTransition>
           </main>
         </AppShell>
+        <Toaster />
       </AppStoreInitializer>
     </>
   )

@@ -8,6 +8,14 @@ interface ActiveModal {
   data?: unknown
 }
 
+export type ToastStatus = 'loading' | 'success' | 'error'
+
+export interface Toast {
+  id: number
+  message: string
+  status: ToastStatus
+}
+
 interface AppStore {
   // Empresa ativa (multi-CNPJ)
   activeCompanyId: string | null
@@ -26,7 +34,15 @@ interface AppStore {
   activeModal: ActiveModal | null
   openModal: (id: string, data?: unknown) => void
   closeModal: () => void
+
+  // Toasts de confirmação (não persistido) — use toast() de @/lib/toast
+  toasts: Toast[]
+  pushToast: (message: string, status?: ToastStatus) => number
+  updateToast: (id: number, patch: Partial<Omit<Toast, 'id'>>) => void
+  dismissToast: (id: number) => void
 }
+
+let nextToastId = 1
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -44,6 +60,16 @@ export const useAppStore = create<AppStore>()(
       activeModal: null,
       openModal: (id, data) => set({ activeModal: { id, data } }),
       closeModal: () => set({ activeModal: null }),
+
+      toasts: [],
+      pushToast: (message, status = 'success') => {
+        const id = nextToastId++
+        set((s) => ({ toasts: [...s.toasts, { id, message, status }] }))
+        return id
+      },
+      updateToast: (id, patch) =>
+        set((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
+      dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
     }),
     {
       name: 'casa-empresarial-store',

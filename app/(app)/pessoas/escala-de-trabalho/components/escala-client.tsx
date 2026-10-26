@@ -9,6 +9,7 @@ import { deleteRuleAction } from '../actions'
 import { generateMonth } from '@/lib/escala/generate'
 import type { ScheduleRule, ScheduleException, DayResult } from '@/lib/escala/generate'
 import { exportListaPDF, exportCalendarioPDF, exportExcel } from '@/lib/export/escala-export'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   rules: ScheduleRule[]
@@ -283,11 +284,15 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
     <>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Escala de Trabalho
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Escala de Trabalho
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Turnos e jornadas dos colaboradores
           </p>
         </div>
@@ -311,8 +316,7 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
       </div>
 
       {/* Navegação de mês */}
-      <div className="flex items-center justify-between mb-4 p-3 rounded-xl border"
-        style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="flex items-center justify-between mb-4 p-3 app-card">
         <button onClick={() => navMes(-1)} className="px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
           style={{ color: 'var(--color-text-secondary)' }}>← Anterior</button>
         <span className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
@@ -334,8 +338,7 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
 
       {/* ── Calendário ───────────────────────────────────────────────────── */}
       {view === 'calendario' && (
-        <div ref={calendarRef} className="rounded-xl border overflow-hidden"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div ref={calendarRef} className="app-card overflow-hidden">
           <div className="grid grid-cols-7 border-b"
             style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
             {DIAS_SEMANA.map(d => (
@@ -460,8 +463,7 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
           </div>
 
           {/* Grade semanal */}
-          <div className="rounded-xl border overflow-x-auto"
-            style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <div className="app-card overflow-x-auto">
             <table style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse', fontSize: '0.8rem' }}>
               <thead>
                 <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>

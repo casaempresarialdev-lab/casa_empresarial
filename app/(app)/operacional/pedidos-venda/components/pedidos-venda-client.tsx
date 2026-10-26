@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ModalPedidoVenda } from './modal-pedido-venda'
 import { deleteSaleOrderAction, updateSaleOrderStatusAction } from '../actions'
 import type { SaleOrder } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   orders: SaleOrder[]
@@ -217,11 +218,15 @@ export function PedidosVendaClient({ orders, contacts, products, companyId }: Pr
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Pedidos de Venda
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Pedidos de Venda
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Total em pedidos ativos: <span className="font-semibold" style={{ color: 'var(--color-primary-darker)' }}>{formatBRL(totalMes)}</span>
           </p>
         </div>
@@ -252,7 +257,7 @@ export function PedidosVendaClient({ orders, contacts, products, companyId }: Pr
         })}
       </div>
 
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card overflow-x-auto">
         <table className="w-full min-w-[800px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>

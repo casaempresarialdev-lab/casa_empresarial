@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { toast } from '@/lib/toast'
 import { changePasswordAction } from '../actions'
 import type { MemberWithProfile } from '../queries'
 
@@ -35,7 +36,6 @@ export function ModalPainelUsuario({ open, onClose, member, email }: Props) {
   const [showConf, setShowConf]       = useState(false)
   const [loading, setLoading]         = useState(false)
   const [pwdError, setPwdError]       = useState('')
-  const [pwdOk, setPwdOk]             = useState(false)
 
   const profile = member?.profiles
 
@@ -44,13 +44,11 @@ export function ModalPainelUsuario({ open, onClose, member, email }: Props) {
     setNovaSenha('')
     setConfirmar('')
     setPwdError('')
-    setPwdOk(false)
     onClose()
   }
 
   function openPwdForm() {
     setChangingPwd(true)
-    setPwdOk(false)
     setPwdError('')
     setNovaSenha('')
     setConfirmar('')
@@ -68,10 +66,14 @@ export function ModalPainelUsuario({ open, onClose, member, email }: Props) {
     if (novaSenha !== confirmar) { setPwdError('As senhas não coincidem.'); return }
     setLoading(true)
     setPwdError('')
-    const result = await changePasswordAction(novaSenha)
+    // Erros do servidor aparecem no próprio toast (✕); o formulário fica aberto para tentar de novo
+    const result = await toast.promise(changePasswordAction(novaSenha), {
+      loading: 'Alterando senha…',
+      success: 'Senha alterada com sucesso!',
+      error: 'Não foi possível alterar a senha.',
+    })
     setLoading(false)
-    if (result.error) { setPwdError(result.error); return }
-    setPwdOk(true)
+    if (result.error) return
     setChangingPwd(false)
     setNovaSenha('')
     setConfirmar('')
@@ -198,11 +200,6 @@ export function ModalPainelUsuario({ open, onClose, member, email }: Props) {
             )}
           </div>
 
-          {pwdOk && (
-            <p className="text-xs mt-2 px-3 py-2 rounded-lg bg-green-50 text-green-700">
-              Senha alterada com sucesso!
-            </p>
-          )}
         </div>
 
         <div className="flex justify-end pt-1">

@@ -34,9 +34,7 @@ function QuestionCard({
   const allAnswers = responses.map(r => r.respostas[question.id]).filter(a => a !== undefined && a !== null && a !== '')
 
   return (
-    <div style={{
-      background: 'white', border: '1px solid #E5E7EB', borderRadius: 10, padding: '1.25rem',
-    }}>
+    <div className="app-card" style={{ padding: '1.25rem' }}>
       <p style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: '0.4rem' }}>
         Pergunta {index}
       </p>

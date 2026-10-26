@@ -11,6 +11,7 @@ import type { Category } from '../../categorias/queries'
 import type { Contact } from '../../contatos/queries'
 import type { BankAccount, CreditCard } from '../../contas-cartoes/queries'
 import type { CostCenter } from '../../centro-de-custo/queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 type ViewMode = 'detalhado' | 'resumo'
 
@@ -154,7 +155,7 @@ function Section({ tipo, transactions, onAdd, onEdit, onDelete, onTogglePaid, ac
   const pago = transactions.filter(t => t.status === 'pago').reduce((s, t) => s + t.valor, 0)
 
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+    <div className="app-card overflow-hidden">
       <div className="px-4 py-3 flex items-center justify-between border-b"
         style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: isRec ? '#F0FFF4' : '#FFF5F5' }}>
         <div className="flex items-center gap-2">
@@ -297,10 +298,14 @@ export function FluxoClient({ transactions, companyId, mes, ano, categories, con
       {/* Header com navegação de mês */}
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         {/* Título + navegação de mês */}
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Fluxo de Caixa
-          </h1>
+        <div className="flex flex-1 min-w-0 items-center gap-3">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Fluxo de Caixa
+            </h1>
+            <Breadcrumb />
+          </div>
           <div className="flex items-center gap-1">
             <button onClick={() => navigate(-1)}
               className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm"

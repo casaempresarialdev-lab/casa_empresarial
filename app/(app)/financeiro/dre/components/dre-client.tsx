@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import type { DREData, DRELinha } from '../queries'
 import type { DreGrupo } from '../../categorias/queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 function fmt(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -174,10 +175,14 @@ export function DREClient({ dreData, mes, ano }: Props) {
     <>
       {/* Header */}
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            DRE
-          </h1>
+        <div className="flex flex-1 min-w-0 items-center gap-3">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              DRE
+            </h1>
+            <Breadcrumb />
+          </div>
           <div className="flex items-center gap-1">
             <button onClick={() => navigate(-1)}
               className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm"
@@ -216,12 +221,12 @@ export function DREClient({ dreData, mes, ano }: Props) {
       )}
 
       {hasSemDados ? (
-        <div className="rounded-xl border flex flex-col items-center justify-center py-16 gap-2"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-muted)' }}>
+        <div className="app-card flex flex-col items-center justify-center py-16 gap-2"
+          style={{ color: 'var(--color-text-muted)' }}>
           <p className="text-sm">Nenhuma transação realizada neste período.</p>
         </div>
       ) : (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card overflow-hidden">
           <table className="w-full text-sm">
             <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
               <tr>

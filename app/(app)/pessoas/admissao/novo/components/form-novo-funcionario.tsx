@@ -303,7 +303,8 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
 
   const lbl: React.CSSProperties = { color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500, marginBottom: 4, display: 'block' }
   const sec: React.CSSProperties = { color: 'var(--color-primary-darker)', fontSize: '0.75rem', fontWeight: 700, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid var(--color-bg-surface)', letterSpacing: '0.05em' }
-  const card: React.CSSProperties = { backgroundColor: 'white', borderRadius: '0.75rem', border: '1px solid var(--color-bg-surface)', padding: '1.5rem' }
+  // Mesmo visual dos cards do dashboard (.app-card em globals.css)
+  const card: React.CSSProperties = { backgroundColor: 'white', borderRadius: '1rem', border: '1px solid var(--color-card-border)', boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06)', padding: '1.5rem' }
 
   const isPJ        = tipoContrato === 'pj'
   const isAutonomo  = tipoContrato === 'autonomo'
@@ -333,7 +334,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
             <span>/</span>
             <span style={{ color: 'var(--color-text-secondary)' }}>Novo colaborador</span>
           </div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
             Novo Colaborador
           </h1>
         </div>

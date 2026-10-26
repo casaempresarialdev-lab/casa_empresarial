@@ -25,7 +25,7 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { label: 'Minha Empresa', href: '/empresa' },
       { label: 'Quadro Societário', href: '/admin/quadro-societario' },
-      { label: 'Logins e Senhas', href: '/admin/logins-senhas' },
+      { label: 'Cofre de senhas', href: '/admin/logins-senhas' },
       { label: 'Documentação', href: '/admin/documentacao' },
     ],
   },
@@ -417,7 +417,8 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
                                 active ? 'font-semibold' : 'hover:bg-gray-50',
                               )}
                               style={active
-                                ? { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }
+                                // Mesmo destaque do item principal ativo (ex.: Visão geral)
+                                ? { backgroundColor: 'var(--color-primary-dark)', color: '#FFFFFF' }
                                 : { color: 'var(--color-sidebar-text)' }
                               }
                             >

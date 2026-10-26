@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createSaleOrderAction } from '../../actions'
 import type { PedidoVendaItem } from '../../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   companyId: string
@@ -119,15 +120,19 @@ export function FormNovoPedidoVenda({ companyId, contacts, products }: Props) {
             <path d="M11 14L6 9l5-5" />
           </svg>
         </button>
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>Novo Pedido de Venda</h1>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Novo Pedido de Venda</h1>
+            <Breadcrumb />
+          </div>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Registrar venda para cliente</p>
         </div>
       </div>
 
       <div className="space-y-4">
         {/* Dados do Pedido */}
-        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-6">
           <p style={sectionTitle}>Dados do Pedido</p>
           <div className="space-y-3">
             <div>
@@ -202,7 +207,7 @@ export function FormNovoPedidoVenda({ companyId, contacts, products }: Props) {
         </div>
 
         {/* Itens do Pedido */}
-        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-6">
           <p style={sectionTitle}>Itens do Pedido</p>
 
           {/* Adicionar item */}

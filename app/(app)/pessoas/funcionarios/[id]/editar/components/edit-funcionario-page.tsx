@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { FuncionarioFormFields } from '../../../components/funcionario-form-fields'
 import type { Employee } from '../../../queries'
 import type { CompanyBenefit } from '../../../../beneficios/queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   employee: Employee
@@ -29,15 +30,18 @@ export function EditFuncionarioPage({ employee, companyId, companyBenefits }: Pr
         ← {employee.nome}
       </button>
 
-      <div>
-        <h1 className="text-lg font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-          Editar Funcionário
-        </h1>
+      <div className="flex-1 min-w-0">
+        {/* Título e breadcrumb na mesma linha */}
+        <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+            Editar Funcionário
+          </h1>
+          <Breadcrumb />
+        </div>
       </div>
 
       <div
-        className="rounded-xl border p-6"
-        style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}
+        className="app-card p-6"
       >
         <FuncionarioFormFields
           companyId={companyId}

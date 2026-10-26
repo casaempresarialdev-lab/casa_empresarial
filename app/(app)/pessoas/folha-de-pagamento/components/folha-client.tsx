@@ -9,6 +9,7 @@ import { ModalLancamentoFolha } from './modal-lancamento-folha'
 import type { EmployeeForPayroll, PayrollEntryVariable } from '../queries'
 import type { AliquotaRow } from '../../encargos/queries'
 import type { Company } from '../../../empresa/queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 const DIAS_UTEIS = 22
 
@@ -257,11 +258,15 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
     <>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Folha de Pagamento
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Folha de Pagamento
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Visão de folha e custo da equipe — gerada a partir do cadastro de funcionários
           </p>
         </div>
@@ -285,7 +290,7 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
       </div>
 
       {/* Grid */}
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr>
@@ -404,8 +409,7 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
 
       {/* Exportar para contabilidade */}
       {rows.length > 0 && (
-        <div className="mt-4 flex items-center justify-between p-4 rounded-xl border"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="mt-4 flex items-center justify-between p-4 app-card">
           <div>
             <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Enviar para a contabilidade</p>
             <p className="text-xs mt-0.5" style={{ color: muted }}>

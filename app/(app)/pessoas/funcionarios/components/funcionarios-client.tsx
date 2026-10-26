@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { deleteEmployeeAction } from '../actions'
 import type { Employee } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 const TODAY = new Date()
 TODAY.setHours(0, 0, 0, 0)
@@ -201,11 +202,15 @@ export function FuncionariosClient({ employees, finalStageKey }: Props) {
     <>
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Equipe
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Equipe
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Colaboradores, prestadores e autônomos da empresa
           </p>
         </div>
@@ -221,7 +226,7 @@ export function FuncionariosClient({ employees, finalStageKey }: Props) {
           const cfg   = STATUS_CFG[key]
           const count = countByStatus(key)
           return (
-            <div key={key} className="px-3 py-2.5 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+            <div key={key} className="px-3 py-2.5 app-card">
               <p className="text-xs" style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</p>
               <p className="text-xl font-bold mt-0.5" style={{ color: count > 0 ? cfg.color : 'var(--color-text-primary)' }}>{count}</p>
             </div>

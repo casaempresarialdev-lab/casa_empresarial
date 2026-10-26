@@ -115,9 +115,14 @@ export async function deleteDocumentAction(
   return {}
 }
 
+/**
+ * Link temporário (1h) para o arquivo.
+ * download = true: o link força o download com o nome original do arquivo.
+ */
 export async function getSignedUrlAction(
   id: string,
   companyId: string,
+  download = false,
 ): Promise<{ url?: string; error?: string }> {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
@@ -126,7 +131,7 @@ export async function getSignedUrlAction(
 
   const { data: doc } = await admin
     .from('documents')
-    .select('storage_path')
+    .select('storage_path, nome')
     .eq('id', id)
     .eq('company_id', companyId)
     .single()
@@ -135,7 +140,7 @@ export async function getSignedUrlAction(
 
   const { data, error } = await admin.storage
     .from('documentos')
-    .createSignedUrl(doc.storage_path, 3600)
+    .createSignedUrl(doc.storage_path, 3600, download ? { download: doc.nome } : undefined)
 
   if (error) return { error: error.message }
   return { url: data.signedUrl }

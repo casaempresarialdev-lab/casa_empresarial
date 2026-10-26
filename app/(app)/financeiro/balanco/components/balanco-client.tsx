@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { BPData, BPLancamento, BPTipo } from '../queries'
 import { deleteBPLancamentoAction } from '../actions'
 import { ModalBPLancamento } from './modal-bp-lancamento'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 function fmt(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -279,10 +280,14 @@ export function BalancoClient({ bpData, mes, ano, companyId }: Props) {
     <>
       {/* Header */}
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Balanço Patrimonial
-          </h1>
+        <div className="flex flex-1 min-w-0 items-center gap-3">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Balanço Patrimonial
+            </h1>
+            <Breadcrumb />
+          </div>
           <div className="flex items-center gap-1">
             <button
               onClick={() => navigate(-1)}
@@ -335,8 +340,7 @@ export function BalancoClient({ bpData, mes, ano, companyId }: Props) {
 
         {/* ── ATIVO ── */}
         <div
-          className="rounded-xl border overflow-hidden"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}
+          className="app-card overflow-hidden"
         >
           <SecaoTitulo titulo="ATIVO" />
 
@@ -374,8 +378,7 @@ export function BalancoClient({ bpData, mes, ano, companyId }: Props) {
 
         {/* ── PASSIVO + PL ── */}
         <div
-          className="rounded-xl border overflow-hidden"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}
+          className="app-card overflow-hidden"
         >
           <SecaoTitulo titulo="PASSIVO" />
 

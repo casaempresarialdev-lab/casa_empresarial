@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { updateInvoiceStatusAction } from '../actions'
 import type { CardInvoice } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 function formatCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -52,18 +53,22 @@ export function FaturasClient({ invoices }: Props) {
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Faturas de Cartão
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Faturas de Cartão
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Faturas mensais dos cartões de crédito
           </p>
         </div>
       </div>
 
       {invoices.length === 0 && (
-        <div className="rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-10 text-center">
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
             Nenhuma fatura encontrada. As faturas são geradas automaticamente quando há lançamentos com cartão de crédito vinculado.
           </p>
@@ -80,7 +85,7 @@ export function FaturasClient({ invoices }: Props) {
               <span>{BANDEIRA_EMOJI[bandeira] ?? '💳'}</span>
               <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>{cardNome}</h2>
             </div>
-            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+            <div className="app-card overflow-hidden">
               <table className="w-full text-sm">
                 <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                   <tr>

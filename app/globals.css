@@ -51,6 +51,29 @@ h1, h2, h3, h4, h5, h6 {
   font-family: 'Manrope', sans-serif;
 }
 
+/* Cursor de "mãozinha" em tudo que é clicável (o Tailwind 4 deixa botões com a seta).
+   Na camada base, para classes como cursor-wait / cursor-not-allowed continuarem valendo. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab'],
+  a[href],
+  select:not(:disabled),
+  summary,
+  label[for],
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  input[type='file']:not(:disabled),
+  input[type='color']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
+}
+
 /* Entrada do conteúdo: desce levemente e aparece.
    Use animation-delay para cascata. fill-mode "backwards" libera o transform no fim,
    então hovers com translate continuam funcionando. */
@@ -68,9 +91,56 @@ h1, h2, h3, h4, h5, h6 {
   animation: enter-down 500ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
+/* Toast: entra deslizando da direita (components/ui/toaster.tsx) */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.toast-enter {
+  animation: toast-in 250ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Troca de ícone (girando → ✓/✕): "estoura" de leve */
+@keyframes toast-icon-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  70%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+.toast-icon {
+  animation: toast-icon-pop 350ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* ✓ e ✕ desenhados (o traço "corre" pelo caminho) */
+@keyframes toast-draw {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
+}
+
+.toast-draw {
+  stroke-dasharray: 24;
+  animation: toast-draw 350ms ease-out 150ms backwards;
+}
+
+.toast-draw-2 {
+  animation-delay: 300ms;
+}
+
+/* Caixa padrão das telas (tabelas, formulários, listas) — mesmo visual dos cards do dashboard,
+   sem o efeito de subir no hover. Entra com a animação de entrada, logo após o título. */
+.app-card {
+  background-color: #fff;
+  border: 1px solid var(--color-card-border);
+  border-radius: 1rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+  animation: enter-down 500ms cubic-bezier(0.22, 1, 0.36, 1) 120ms backwards;
+}
+
 /* Movimento reduzido (ex.: efeitos de animação do Windows desligados): só fade */
 @media (prefers-reduced-motion: reduce) {
-  .animate-enter { animation-name: enter-fade; }
+  .animate-enter,
+  .app-card { animation-name: enter-fade; }
 }
 
 /* Intro pós-login: o conteúdo espera escondido até o título terminar de ser digitado.

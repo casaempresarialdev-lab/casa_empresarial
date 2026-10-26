@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createProductAction } from '../../actions'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 const UNIDADES = ['un', 'kg', 'g', 'l', 'ml', 'm', 'cm', 'cx', 'pc', 'par', 'pct', 'h']
 
@@ -102,10 +103,14 @@ export function FormNovoProduto({ companyId }: Props) {
             <path d="M11 14L6 9l5-5" />
           </svg>
         </button>
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Novo Item
-          </h1>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Novo Item
+            </h1>
+            <Breadcrumb />
+          </div>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
             Cadastrar produto ou serviço no catálogo
           </p>
@@ -113,8 +118,7 @@ export function FormNovoProduto({ companyId }: Props) {
       </div>
 
       <div
-        className="rounded-xl border p-6 space-y-6"
-        style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}
+        className="app-card p-6 space-y-6"
       >
         {/* Tipo */}
         <div className="flex gap-2">

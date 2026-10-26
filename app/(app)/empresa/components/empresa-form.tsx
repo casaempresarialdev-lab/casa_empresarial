@@ -9,7 +9,9 @@ import { companySchema, type CompanyData } from '@/lib/validations/company'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
+import { toast } from '@/lib/toast'
 import type { Company } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 const UF_OPTIONS = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
@@ -32,31 +34,19 @@ function maskCep(value: string) {
   return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-2xl border p-6 flex flex-col gap-4"
-      style={{ borderColor: 'var(--color-bg-surface)' }}>
-      {children}
-    </div>
-  )
-}
+// Abas do formulário e os campos de cada uma (para levar a pessoa até a aba com erro)
+const TABS = [
+  { id: 'dados',       label: 'Dados da empresa',    fields: ['razao_social', 'cnpj', 'nome_fantasia', 'telefone', 'email'] },
+  { id: 'endereco',    label: 'Endereço',            fields: ['cep', 'uf', 'cidade', 'logradouro', 'numero', 'bairro', 'complemento'] },
+  { id: 'fiscal',      label: 'Dados fiscais',       fields: ['regime_tributario', 'inscricao_municipal', 'ie_situacao', 'inscricao_estadual'] },
+  { id: 'certificado', label: 'Certificado digital', fields: ['certificado_digital_senha'] },
+] as const
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-bold uppercase tracking-wider pb-1 border-b"
-      style={{ color: 'var(--color-primary-darker)', borderColor: 'var(--color-bg-surface)', letterSpacing: '0.06em' }}>
-      {children}
-    </p>
-  )
-}
+type TabId = (typeof TABS)[number]['id']
 
-function SubTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-wider mt-1"
-      style={{ color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
-      {children}
-    </p>
-  )
+// Conteúdo de uma aba: fica montado mesmo escondido, para os campos não perderem o valor
+function TabPanel({ active, children }: { active: boolean; children: React.ReactNode }) {
+  return <div className={active ? 'flex flex-col gap-4' : 'hidden'}>{children}</div>
 }
 
 function Req() {
@@ -72,8 +62,8 @@ export function EmpresaForm({ company }: Props) {
   const router = useRouter()
 
   const [serverError, setServerError] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg]   = useState<string | null>(null)
   const [cepLoading, setCepLoading]   = useState(false)
+  const [activeTab, setActiveTab]     = useState<TabId>('dados')
   const [isPending, startTransition]  = useTransition()
 
   const certInputRef = useRef<HTMLInputElement>(null)
@@ -112,6 +102,14 @@ export function EmpresaForm({ company }: Props) {
 
   const loading  = isSubmitting || isPending
 
+  const tabHasError = (tab: (typeof TABS)[number]) => tab.fields.some((f) => f in errors)
+
+  // Validação falhou: abre a primeira aba que tem campo com erro
+  function onInvalid(formErrors: typeof errors) {
+    const tab = TABS.find((t) => t.fields.some((f) => f in formErrors))
+    if (tab) setActiveTab(tab.id)
+  }
+
   function handleCertChange(e: React.ChangeEvent<HTMLInputElement>) {
     setCertName(e.target.files?.[0]?.name ?? null)
   }
@@ -135,7 +133,6 @@ export function EmpresaForm({ company }: Props) {
 
   async function onSubmit(data: CompanyData) {
     setServerError(null)
-    setSuccessMsg(null)
     const formData = new FormData()
     Object.entries(data).forEach(([k, v]) => {
       if (v !== undefined && v !== '') formData.set(k, String(v))
@@ -145,9 +142,12 @@ export function EmpresaForm({ company }: Props) {
 
     startTransition(async () => {
       if (isEdit) {
-        const result = await updateCompanyAction(company.id, formData)
-        if (result?.error) setServerError(result.error)
-        else setSuccessMsg('Dados da empresa atualizados com sucesso!')
+        // Erros do servidor aparecem no próprio toast (✕)
+        await toast.promise(updateCompanyAction(company.id, formData), {
+          loading: 'Salvando dados da empresa…',
+          success: 'Dados da empresa atualizados com sucesso!',
+          error: 'Não foi possível salvar os dados da empresa.',
+        })
       } else {
         const result = await createCompanyAction(formData)
         if (result?.error) {
@@ -166,20 +166,51 @@ export function EmpresaForm({ company }: Props) {
   return (
     <div className="w-full">
       <div className="mb-6">
-        <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-          Minha Empresa
-        </h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        {/* Título e breadcrumb na mesma linha */}
+        <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+            Minha Empresa
+          </h1>
+          <Breadcrumb />
+        </div>
+        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
           {isEdit ? 'Edite os dados da sua empresa' : 'Cadastre os dados da sua empresa para começar a usar o sistema'}
         </p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-4">
+        <div className="app-card p-6 flex flex-col gap-6">
 
-        {/* 1 — Dados da empresa + Endereço */}
-        <Card>
-          <SectionTitle>Dados da Empresa</SectionTitle>
+        {/* Abas */}
+        <div className="flex flex-wrap gap-2" role="tablist">
+          {TABS.map((tab) => {
+            const active = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative h-10 px-4 rounded-xl text-sm font-semibold transition-colors cursor-pointer ${active ? '' : 'hover:bg-gray-50'}`}
+                style={{
+                  fontFamily: 'Manrope',
+                  ...(active
+                    ? { backgroundColor: 'var(--color-brand)', color: '#fff' }
+                    : { color: 'var(--color-sidebar-text)' }),
+                }}
+              >
+                {tab.label}
+                {tabHasError(tab) && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" aria-label="Campo com erro" />
+                )}
+              </button>
+            )
+          })}
+        </div>
 
+        {/* Dados da empresa */}
+        <TabPanel active={activeTab === 'dados'}>
           {/* Razão Social — linha inteira */}
           <Input label={<>Razão Social <Req /></>} type="text" placeholder="Nome oficial da empresa"
             error={errors.razao_social?.message} {...register('razao_social')} />
@@ -219,9 +250,10 @@ export function EmpresaForm({ company }: Props) {
               error={errors.email?.message} {...register('email')} />
           </div>
 
-          {/* Endereço — dentro do mesmo card */}
-          <SubTitle>Endereço</SubTitle>
+        </TabPanel>
 
+        {/* Endereço */}
+        <TabPanel active={activeTab === 'endereco'}>
           <div className="grid grid-cols-3 gap-3">
             <div className="flex flex-col gap-1">
               <div className="flex items-center justify-between">
@@ -265,12 +297,10 @@ export function EmpresaForm({ company }: Props) {
             <Input label="Bairro" type="text" placeholder="Bairro" {...register('bairro')} />
             <Input label="Complemento" type="text" placeholder="Apto, sala..." {...register('complemento')} />
           </div>
-        </Card>
+        </TabPanel>
 
-        {/* 2 — Dados Fiscais */}
-        <Card>
-          <SectionTitle>Dados Fiscais</SectionTitle>
-
+        {/* Dados fiscais */}
+        <TabPanel active={activeTab === 'fiscal'}>
           {/* Regime Tributário + IM */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
@@ -305,12 +335,10 @@ export function EmpresaForm({ company }: Props) {
             <Input label="IE — Número" type="text" placeholder="000.000.000.000"
               {...register('inscricao_estadual')} />
           </div>
-        </Card>
+        </TabPanel>
 
-        {/* 3 — Certificado Digital */}
-        <Card>
-          <SectionTitle>Certificado Digital</SectionTitle>
-
+        {/* Certificado digital */}
+        <TabPanel active={activeTab === 'certificado'}>
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
               Arquivo do certificado (.pfx / .p12)
@@ -334,13 +362,8 @@ export function EmpresaForm({ company }: Props) {
             autoComplete="off"
             {...register('certificado_digital_senha')}
           />
-        </Card>
-
-        {successMsg && (
-          <p className="text-sm text-center py-2 px-3 rounded-lg bg-green-50 border border-green-200 text-green-700">
-            {successMsg}
-          </p>
-        )}
+        </TabPanel>
+        </div>
 
         {serverError && (
           <p className="text-sm text-center py-2 px-3 rounded-lg bg-red-50 border border-red-200"

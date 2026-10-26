@@ -1,7 +1,5 @@
+import { ComingSoon } from '@/components/layout/coming-soon'
+
 export default function Page() {
-  return (
-    <div>
-      <h1>Fotos e Vídeos</h1>
-    </div>
-  )
+  return <ComingSoon title="Fotos e Vídeos" description="Banco de imagens e vídeos da empresa" />
 }

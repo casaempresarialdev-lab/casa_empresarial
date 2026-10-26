@@ -1,7 +1,5 @@
+import { ComingSoon } from '@/components/layout/coming-soon'
+
 export default function Page() {
-  return (
-    <div>
-      <h1>Depoimentos</h1>
-    </div>
-  )
+  return <ComingSoon title="Depoimentos" description="Depoimentos de clientes" />
 }

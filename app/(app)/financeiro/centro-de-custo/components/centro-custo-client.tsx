@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ModalCentroCusto } from './modal-centro-custo'
 import { deleteCostCenterAction } from '../actions'
 import type { CostCenter } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   costCenters: CostCenter[]
@@ -42,11 +43,15 @@ export function CentroCustoClient({ costCenters, companyId }: Props) {
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Centro de Custo
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Centro de Custo
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Agrupe lançamentos por área ou projeto
           </p>
         </div>
@@ -68,7 +73,7 @@ export function CentroCustoClient({ costCenters, companyId }: Props) {
         <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{deleteError}</p>
       )}
 
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card overflow-hidden">
         <table className="w-full text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>

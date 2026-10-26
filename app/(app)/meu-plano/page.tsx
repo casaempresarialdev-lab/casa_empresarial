@@ -1,7 +1,5 @@
+import { ComingSoon } from '@/components/layout/coming-soon'
+
 export default function Page() {
-  return (
-    <div>
-      <h1>Meu Plano</h1>
-    </div>
-  )
+  return <ComingSoon title="Meu Plano" description="Assinatura e cobrança" />
 }

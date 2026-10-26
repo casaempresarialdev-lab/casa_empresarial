@@ -1,4 +1,5 @@
 import type { CompanyBenefit, EmployeeWithBenefits } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   employee: EmployeeWithBenefits
@@ -14,16 +15,20 @@ export function MeusBeneficios({ employee, benefits }: Props) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-          Meus Benefícios
-        </h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        {/* Título e breadcrumb na mesma linha */}
+        <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+            Meus Benefícios
+          </h1>
+          <Breadcrumb />
+        </div>
+        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
           Benefícios vinculados ao seu cadastro
         </p>
       </div>
 
       {activeBenefits.length === 0 ? (
-        <div className="rounded-xl border p-8 text-center" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-8 text-center">
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Nenhum benefício vinculado ao seu cadastro no momento.</p>
         </div>
       ) : (
@@ -31,7 +36,7 @@ export function MeusBeneficios({ employee, benefits }: Props) {
           {activeBenefits.map(b => {
             const valor = empBenefitIds.get(b.id) ?? b.valor
             return (
-              <div key={b.id} className="rounded-xl border p-4" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+              <div key={b.id} className="app-card p-4">
                 <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{b.nome}</p>
                 <p className="text-lg font-bold mt-1" style={{ color: 'var(--color-primary-darker)' }}>
                   {valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}

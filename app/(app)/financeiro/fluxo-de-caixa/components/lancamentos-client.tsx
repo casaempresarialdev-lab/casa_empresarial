@@ -10,6 +10,7 @@ import type { Category } from '../../categorias/queries'
 import type { Contact } from '../../contatos/queries'
 import type { BankAccount, CreditCard } from '../../contas-cartoes/queries'
 import type { CostCenter } from '../../centro-de-custo/queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 function formatCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -126,11 +127,15 @@ export function LancamentosClient({ transactions, tipo, companyId, categories, c
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            {isRec ? 'Recebimentos' : 'Pagamentos'}
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              {isRec ? 'Recebimentos' : 'Pagamentos'}
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Todos os {isRec ? 'recebimentos' : 'pagamentos'} da empresa
           </p>
         </div>
@@ -146,7 +151,7 @@ export function LancamentosClient({ transactions, tipo, companyId, categories, c
           { label: isRec ? 'Recebido' : 'Pago', value: pago, color: '#1E8449' },
           { label: 'Pendente', value: pendente, color: '#D4AC0D' },
         ].map(c => (
-          <div key={c.label} className="rounded-xl border p-4" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <div key={c.label} className="app-card p-4">
             <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>{c.label}</p>
             <p className="text-base font-bold" style={{ color: c.color }}>{formatCurrency(c.value)}</p>
           </div>
@@ -173,7 +178,7 @@ export function LancamentosClient({ transactions, tipo, companyId, categories, c
         </div>
       </div>
 
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card overflow-x-auto">
         <table className="w-full min-w-[620px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>

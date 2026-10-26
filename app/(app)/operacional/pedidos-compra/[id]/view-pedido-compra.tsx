@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import type { PurchaseOrder } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 const STATUS_LABELS: Record<string, string> = {
   rascunho: 'Rascunho',
@@ -224,10 +225,14 @@ export function ViewPedidoCompra({ order, companyName, companyCnpj }: Props) {
           </svg>
         </button>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-              Pedido #{String(order.numero).padStart(3, '0')}
-            </h1>
+          <div className="flex flex-1 min-w-0 items-center gap-3">
+            {/* Título e breadcrumb na mesma linha */}
+            <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+                Pedido #{String(order.numero).padStart(3, '0')}
+              </h1>
+              <Breadcrumb />
+            </div>
             <span
               className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
               style={{ backgroundColor: colors.bg, color: colors.text }}
@@ -252,7 +257,7 @@ export function ViewPedidoCompra({ order, companyName, companyCnpj }: Props) {
 
       <div className="space-y-4">
         {/* Fornecedor */}
-        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-6">
           <p style={sectionTitle}>Fornecedor</p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4">
             <div>
@@ -267,7 +272,7 @@ export function ViewPedidoCompra({ order, companyName, companyCnpj }: Props) {
         </div>
 
         {/* Dados */}
-        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-6">
           <p style={sectionTitle}>Dados do Pedido</p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4">
             <div>
@@ -296,7 +301,7 @@ export function ViewPedidoCompra({ order, companyName, companyCnpj }: Props) {
         </div>
 
         {/* Itens */}
-        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-6">
           <p style={sectionTitle}>Itens do Pedido</p>
           {order.itens.length === 0 ? (
             <p className="text-sm text-center py-4" style={{ color: 'var(--color-text-muted)' }}>Nenhum item.</p>

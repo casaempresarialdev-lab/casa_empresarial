@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DEFAULT_BRAND_COLOR } from '@/lib/theme'
+import { PageTitle } from '@/components/layout/page-title'
 import { getCompany } from '../empresa/queries'
 import { ConfigIdentidadeVisual } from './components/config-identidade-visual'
 
@@ -26,14 +27,7 @@ export default async function ConfiguracoesPage() {
 
   return (
     <div className="w-full">
-      <div className="mb-6 animate-enter">
-        <h1 className="text-3xl font-extrabold" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-          Configurações
-        </h1>
-        <p className="text-sm font-semibold mt-1" style={{ color: 'var(--color-text-muted)' }}>
-          Personalize a aparência da sua empresa no sistema
-        </p>
-      </div>
+      <PageTitle title="Configurações" description="Personalize a aparência da sua empresa no sistema" />
 
       <ConfigIdentidadeVisual
         companyId={companyId}

@@ -1,124 +1,42 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Icon } from '@/components/ui/icon'
+import { IconButton } from '@/components/ui/icon-button'
+import { AddButton } from '@/components/ui/add-button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { TABLE_WRAPPER_CLASS, TABLE_HEAD_STYLE, TH_CLASS, ROW_CLASS, ROW_STYLE } from '@/components/ui/table-styles'
+import { toast } from '@/lib/toast'
 import { ModalDocument } from './modal-document'
+import { ModalViewer } from './modal-viewer'
 import { deleteDocumentAction, getSignedUrlAction } from '../actions'
 import type { Document } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
-function fileIcon(tipo: string | null) {
-  if (!tipo) return '📎'
-  if (tipo.startsWith('image/')) return '🖼️'
-  if (tipo === 'application/pdf') return '📄'
-  if (tipo.includes('spreadsheet') || tipo.includes('excel') || tipo === 'text/csv') return '📊'
-  if (tipo.includes('word') || tipo.includes('document')) return '📝'
-  if (tipo.startsWith('video/')) return '🎬'
-  if (tipo.startsWith('audio/')) return '🎵'
-  if (tipo.includes('zip') || tipo.includes('rar') || tipo.includes('compressed')) return '📦'
-  return '📎'
-}
+// Mesmo critério do dashboard: "vencendo" = até 30 dias
+const VENCENDO_DIAS = 30
 
-function formatDate(iso: string | null) {
-  if (!iso) return '—'
+function formatDate(iso: string) {
   const [year, month, day] = iso.split('T')[0].split('-')
   return `${day}/${month}/${year}`
 }
 
-function isExpired(vencimento: string | null) {
-  if (!vencimento) return false
-  return new Date(vencimento) < new Date()
+function todayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function isNearExpiry(vencimento: string | null) {
-  if (!vencimento) return false
-  const diff = new Date(vencimento).getTime() - Date.now()
-  return diff > 0 && diff < 30 * 24 * 60 * 60 * 1000
-}
-
-function ThreeDotMenu({ onView, onEdit, onDelete, loadingView, loadingDelete }: {
-  onView: () => void
-  onEdit: () => void
-  onDelete: () => void
-  loadingView: boolean
-  loadingDelete: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, right: 0 })
-  const menuRef = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false)
-    }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const openUp = rect.bottom + 130 > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - 134, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen((v) => !v)
-  }
-
-  return (
-    <div>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={handleOpen}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
-        style={{ color: 'var(--color-text-muted)' }}
-        aria-label="Opções"
-      >
-        ···
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
-          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
-        >
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
-            onClick={() => { setOpen(false); onView() }}
-            disabled={loadingView}
-          >
-            {loadingView ? 'Abrindo…' : 'Visualizar'}
-          </button>
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
-            onClick={() => { setOpen(false); onEdit() }}
-          >
-            Editar
-          </button>
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
-            style={{ color: 'var(--color-error)' }}
-            onClick={() => { setOpen(false); onDelete() }}
-            disabled={loadingDelete}
-          >
-            {loadingDelete ? 'Excluindo…' : 'Excluir'}
-          </button>
-        </div>
-      )}
-    </div>
-  )
+// Situação do vencimento: selo + cores
+function vencimentoStatus(vencimento: string | null, today: string) {
+  if (!vencimento) return null
+  const venc = vencimento.split('T')[0]
+  const dias = Math.round((Date.parse(venc) - Date.parse(today)) / 86400000)
+  if (dias < 0) return { label: 'Vencido', bg: '#FEE2E2', color: '#B91C1C' }
+  if (dias <= VENCENDO_DIAS) return { label: dias === 0 ? 'Vence hoje' : `Vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`, bg: '#FEF3C7', color: '#B45309' }
+  return { label: 'Válido', bg: '#DCFCE7', color: '#15803D' }
 }
 
 interface Props {
@@ -132,8 +50,12 @@ export function DocsClient({ documents, companyId }: Props) {
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
   const [search, setSearch] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [viewTarget, setViewTarget] = useState<Document | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
-  const [errorMsg, setErrorMsg] = useState('')
+  const [confirmTarget, setConfirmTarget] = useState<Document | null>(null)
+  const [infoTarget, setInfoTarget] = useState<Document | null>(null)
+
+  const today = todayIso()
 
   const filtered = documents.filter((d) => {
     const q = search.toLowerCase()
@@ -144,115 +66,154 @@ export function DocsClient({ documents, companyId }: Props) {
     )
   })
 
-  async function handleDelete(doc: Document) {
-    if (!confirm(`Excluir "${doc.nome}"?`)) return
-    setDeletingId(doc.id)
-    setErrorMsg('')
-    const result = await deleteDocumentAction(doc.id, companyId)
+  function openAdd() { setEditingDoc(null); setModalOpen(true) }
+  function openEdit(d: Document) { setEditingDoc(d); setModalOpen(true) }
+
+  // Remoção confirmada no modal; o resultado aparece no toast (✓ / ✕)
+  async function confirmDelete() {
+    const d = confirmTarget
+    if (!d) return
+    const titulo = d.descricao || d.nome
+    setDeletingId(d.id)
+    const result = await toast.promise(deleteDocumentAction(d.id, companyId), {
+      loading: `Removendo ${titulo}…`,
+      success: `${titulo} foi removido da documentação.`,
+      error: 'Não foi possível remover o documento.',
+    })
     setDeletingId(null)
-    if (result.error) setErrorMsg(result.error)
-    else router.refresh()
+    setConfirmTarget(null)
+    if (!('error' in result && result.error)) router.refresh()
   }
 
-  async function handleView(doc: Document) {
-    setDownloadingId(doc.id)
-    setErrorMsg('')
-    const result = await getSignedUrlAction(doc.id, companyId)
+  // Download com o nome original do arquivo (link temporário com Content-Disposition: attachment)
+  async function handleDownload(d: Document) {
+    setDownloadingId(d.id)
+    const result = await getSignedUrlAction(d.id, companyId, true)
     setDownloadingId(null)
-    if (result.error) setErrorMsg(result.error)
-    else window.open(result.url, '_blank')
+    if (result.error || !result.url) {
+      toast.error(result.error ?? 'Não foi possível baixar o documento.')
+      return
+    }
+    const a = window.document.createElement('a')
+    a.href = result.url
+    a.download = d.nome
+    a.click()
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+      <div className="mb-6">
+        {/* Título e breadcrumb na mesma linha */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
             Documentação
           </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            Armazene e organize os documentos da empresa
-          </p>
+          <Breadcrumb />
         </div>
-        <Button onClick={() => { setEditingDoc(null); setModalOpen(true) }}>Adicionar</Button>
-      </div>
-
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Pesquisar por arquivo, descrição ou observação..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
-          style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
-        />
-      </div>
-
-      {errorMsg && (
-        <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>
-          {errorMsg}
+        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
+          Armazene e organize os documentos da empresa
         </p>
-      )}
+      </div>
 
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-        <table className="w-full min-w-[600px] text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Arquivo</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Descrição</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Vencimento</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
+      <div className="app-card p-5 flex flex-col gap-4">
+        {/* Barra do box: resumo + busca + adicionar */}
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm font-semibold shrink-0" style={{ color: 'var(--color-sidebar-text)' }}>
+            {documents.length} {documents.length === 1 ? 'documento' : 'documentos'}
+          </p>
+          <div className="flex-1 min-w-[200px] flex items-center gap-2 h-9 px-3 rounded-lg border" style={{ borderColor: 'var(--color-card-border)' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Pesquisar por documento, arquivo ou observação..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 min-w-0 bg-transparent text-sm outline-none"
+              style={{ color: 'var(--color-text-primary)' }}
+            />
+          </div>
+          <AddButton onClick={openAdd} />
+        </div>
+
+        <div className={TABLE_WRAPPER_CLASS}>
+          <table className="w-full min-w-[640px] text-sm">
+            <thead style={TABLE_HEAD_STYLE}>
               <tr>
-                <td colSpan={4} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  {search ? 'Nenhum documento encontrado.' : 'Nenhum documento enviado ainda.'}
-                </td>
+                <th className={TH_CLASS}>Documento</th>
+                <th className={TH_CLASS}>Vencimento</th>
+                <th className="px-4 py-3" />
               </tr>
-            )}
-            {filtered.map((doc) => (
-              <tr key={doc.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg shrink-0">{fileIcon(doc.tipo)}</span>
-                    <span className="font-medium truncate max-w-[180px]" style={{ color: 'var(--color-text-primary)' }} title={doc.descricao ?? doc.nome}>
-                      {doc.descricao ?? '—'}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                  {doc.observacao ?? '—'}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {doc.vencimento ? (
-                    <span
-                      className="text-xs font-medium px-2 py-0.5 rounded-full"
-                      style={{
-                        backgroundColor: isExpired(doc.vencimento) ? '#FEE2E2' : isNearExpiry(doc.vencimento) ? '#FEF3C7' : 'var(--color-bg-surface)',
-                        color: isExpired(doc.vencimento) ? 'var(--color-error)' : isNearExpiry(doc.vencimento) ? '#92400E' : 'var(--color-text-secondary)',
-                      }}
-                    >
-                      {formatDate(doc.vencimento)}
-                    </span>
-                  ) : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end">
-                    <ThreeDotMenu
-                      onView={() => handleView(doc)}
-                      onEdit={() => { setEditingDoc(doc); setModalOpen(true) }}
-                      onDelete={() => handleDelete(doc)}
-                      loadingView={downloadingId === doc.id}
-                      loadingDelete={deletingId === doc.id}
-                    />
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
+                    {search ? 'Nenhum documento encontrado para essa pesquisa.' : 'Nenhum documento enviado ainda.'}
+                  </td>
+                </tr>
+              )}
+              {filtered.map((d) => {
+                const status = vencimentoStatus(d.vencimento, today)
+                const titulo = d.descricao || d.nome
+                return (
+                  <tr key={d.id} className={ROW_CLASS} style={ROW_STYLE}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        {/* ⓘ abre a observação (mais apagado quando não há observação) */}
+                        <button
+                          type="button"
+                          onClick={() => setInfoTarget(d)}
+                          className="p-1 -ml-1 rounded-md transition-colors hover:bg-gray-100 shrink-0"
+                          style={{ color: d.observacao ? 'var(--color-brand)' : 'var(--color-text-muted)', opacity: d.observacao ? 1 : 0.5 }}
+                          title={d.observacao ? 'Ver observação' : 'Sem observação'}
+                          aria-label={`Observação de ${titulo}`}
+                        >
+                          <Icon name="info" size={16} />
+                        </button>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{titulo}</p>
+                          <p className="flex items-center gap-1 text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
+                            <Icon name="file" size={12} />
+                            {d.nome}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {status && d.vencimento ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor: status.bg, color: status.color }}>
+                            {status.label}
+                          </span>
+                          <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(d.vencimento)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Sem vencimento</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 justify-end">
+                        <IconButton icon="eye" label={`Visualizar ${titulo}`} onClick={() => setViewTarget(d)} />
+                        <IconButton icon="download" label={`Baixar ${titulo}`} onClick={() => handleDownload(d)} disabled={downloadingId === d.id} />
+                        <IconButton icon="pencil" label={`Editar ${titulo}`} onClick={() => openEdit(d)} />
+                        <IconButton
+                          icon="trash"
+                          label={`Remover ${titulo}`}
+                          tone="danger"
+                          onClick={() => setConfirmTarget(d)}
+                          disabled={deletingId === d.id}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <ModalDocument
@@ -260,6 +221,44 @@ export function DocsClient({ documents, companyId }: Props) {
         onClose={() => { setModalOpen(false); setEditingDoc(null) }}
         companyId={companyId}
         document={editingDoc}
+      />
+
+      <ModalViewer
+        document={viewTarget}
+        companyId={companyId}
+        onClose={() => setViewTarget(null)}
+        onDownload={handleDownload}
+        downloading={!!viewTarget && downloadingId === viewTarget.id}
+      />
+
+      {/* Observação do documento */}
+      <Modal open={!!infoTarget} onClose={() => setInfoTarget(null)} title={`Observação · ${infoTarget ? infoTarget.descricao || infoTarget.nome : ''}`}>
+        <div className="flex items-start gap-4">
+          <span
+            className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
+          >
+            <Icon name="info" size={20} />
+          </span>
+          <p
+            className="text-sm pt-2.5 whitespace-pre-wrap break-words flex-1 min-w-0"
+            style={{ color: infoTarget?.observacao ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}
+          >
+            {infoTarget?.observacao || 'Nenhuma observação cadastrada para este documento.'}
+          </p>
+        </div>
+        <div className="flex justify-end pt-6">
+          <Button type="button" onClick={() => setInfoTarget(null)}>Fechar</Button>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirmTarget}
+        onClose={() => { if (!deletingId) setConfirmTarget(null) }}
+        onConfirm={confirmDelete}
+        loading={!!deletingId}
+        title="Remover documento"
+        message={<p>Remover <strong>{confirmTarget ? confirmTarget.descricao || confirmTarget.nome : ''}</strong> da documentação?</p>}
       />
     </>
   )

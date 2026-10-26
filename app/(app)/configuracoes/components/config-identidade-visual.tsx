@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { DEFAULT_BRAND_COLOR, hexToHsl, hslToHex } from '@/lib/theme'
 import { trimImage } from '@/lib/image-trim'
+import { toast } from '@/lib/toast'
 import { updateIdentidadeVisualAction } from '../actions'
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024
@@ -94,13 +95,11 @@ export function ConfigIdentidadeVisual({
   const [corAtual, setCorAtual] = useState(corPrimaria ?? DEFAULT_BRAND_COLOR)
   const [corFundo, setCorFundo] = useState(corFundoInicial ?? DEFAULT_BG_COLOR)
   const [loading, setLoading] = useState(false)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    setSuccessMsg(null)
     setError(null)
 
     const fd = new FormData()
@@ -113,13 +112,15 @@ export function ConfigIdentidadeVisual({
     if (icone.remove) fd.set('remove_icone', 'true')
     if (icone.file) fd.set('icone_file', icone.file)
 
-    const result = await updateIdentidadeVisualAction(companyId, fd)
+    // Erros do servidor aparecem no próprio toast (✕)
+    const result = await toast.promise(updateIdentidadeVisualAction(companyId, fd), {
+      loading: 'Salvando identidade visual…',
+      success: 'Identidade visual salva! O sistema já está usando as novas configurações.',
+      error: 'Não foi possível salvar a identidade visual.',
+    })
     setLoading(false)
 
-    if ('error' in result && result.error) {
-      setError(result.error)
-    } else {
-      setSuccessMsg('Identidade visual salva! O sistema já está usando as novas configurações.')
+    if (!('error' in result && result.error)) {
       setLogo((l) => ({ ...l, file: null, remove: false }))
       setLogoReduzida((l) => ({ ...l, file: null, remove: false }))
       setIcone((l) => ({ ...l, file: null, remove: false }))
@@ -196,11 +197,6 @@ export function ConfigIdentidadeVisual({
         </div>
       </div>
 
-      {successMsg && (
-        <p className="text-sm py-2 px-3 rounded-lg bg-green-50 border border-green-200 text-green-700">
-          {successMsg}
-        </p>
-      )}
       {error && (
         <p className="text-sm py-2 px-3 rounded-lg bg-red-50 border border-red-200" style={{ color: 'var(--color-error)' }}>
           {error}

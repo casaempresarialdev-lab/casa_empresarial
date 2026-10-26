@@ -11,7 +11,7 @@ const ROUTE_LABELS: Record<string, string> = {
   admin: 'Administrativo',
   usuarios: 'Usuários',
   'quadro-societario': 'Quadro Societário',
-  'logins-senhas': 'Logins e Senhas',
+  'logins-senhas': 'Cofre de senhas',
   documentacao: 'Documentação',
   financeiro: 'Financeiro',
   contatos: 'Contatos',

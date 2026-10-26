@@ -7,6 +7,7 @@ import { ModalFuncionario } from '../../components/modal-funcionario'
 import { MeusDadosForm } from './meus-dados-form'
 import type { Employee } from '../../queries'
 import type { CompanyBenefit } from '../../../beneficios/queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -60,10 +61,12 @@ const GRAU_LABEL: Record<string, string> = {
   pos_graduacao:          'Pós-graduação',
 }
 
+// Mesmo visual dos cards do dashboard (.app-card em globals.css)
 const card: React.CSSProperties = {
   backgroundColor: 'white',
-  borderRadius: '0.75rem',
-  border: '1px solid var(--color-bg-surface)',
+  borderRadius: '1rem',
+  border: '1px solid var(--color-card-border)',
+  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06)',
   padding: '1.25rem 1.5rem',
 }
 
@@ -136,7 +139,8 @@ export function ViewFuncionarioPage({ employee: emp, companyId, companyBenefits,
           >
             {isColaboradorSelf ? '← Voltar' : '← Equipe'}
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <Breadcrumb />
             <Button onClick={() => isColaboradorSelf ? setSelfEditOpen(true) : setEditOpen(true)}>Editar</Button>
           </div>
         </div>

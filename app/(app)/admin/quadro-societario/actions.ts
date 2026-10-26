@@ -30,6 +30,23 @@ function parseSocioFields(formData: FormData) {
   }
 }
 
+type Admin = ReturnType<typeof createAdminClient>
+
+// A soma das participações da empresa não pode passar de 100% (excludeId: o sócio sendo editado)
+async function participacaoExcedida(admin: Admin, companyId: string, participacao: number | null, excludeId?: string) {
+  if (participacao === null) return null
+  let query = admin.from('socios').select('participacao').eq('company_id', companyId)
+  if (excludeId) query = query.neq('id', excludeId)
+  const { data, error } = await query
+  if (error) return error.message
+  const outros = (data ?? []).reduce((sum, s) => sum + Number(s.participacao ?? 0), 0)
+  if (outros + participacao > 100 + 1e-9) {
+    const disponivel = Math.max(0, 100 - outros)
+    return `A participação total passaria de 100%. Disponível para este sócio: ${disponivel.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%.`
+  }
+  return null
+}
+
 export async function createSocioAction(companyId: string, formData: FormData) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
@@ -41,6 +58,9 @@ export async function createSocioAction(companyId: string, formData: FormData) {
   }
 
   const admin = createAdminClient()
+  const excedida = await participacaoExcedida(admin, companyId, fields.participacao)
+  if (excedida) return { error: excedida }
+
   const { error } = await admin.from('socios').insert({ company_id: companyId, ...fields })
 
   if (error) return { error: error.message }
@@ -59,6 +79,11 @@ export async function updateSocioAction(socioId: string, formData: FormData) {
   }
 
   const admin = createAdminClient()
+  const { data: atual, error: atualError } = await admin.from('socios').select('company_id').eq('id', socioId).single()
+  if (atualError) return { error: atualError.message }
+  const excedida = await participacaoExcedida(admin, atual.company_id, fields.participacao, socioId)
+  if (excedida) return { error: excedida }
+
   const { error } = await admin.from('socios').update(fields).eq('id', socioId)
 
   if (error) return { error: error.message }

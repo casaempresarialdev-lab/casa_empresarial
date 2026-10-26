@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ModalAliquota } from './modal-aliquota'
 import { deleteAliquotaAction, seedDefaultAliquotasAction } from '../actions'
 import type { EmployeeEncargo, AliquotaRow } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   employees: EmployeeEncargo[]
@@ -142,11 +143,15 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
     <>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Encargos Trabalhistas
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Encargos Trabalhistas
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Estimativa de custo patronal por funcionário
           </p>
         </div>
@@ -157,28 +162,28 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
 
       {/* Cards de resumo */}
       <div className="grid grid-cols-4 gap-3 mb-6">
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="p-4 app-card">
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total salários</p>
           <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha)}</p>
         </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="p-4 app-card">
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>FGTS mensal</p>
           <p className="text-xl font-bold mt-1" style={{ color: '#E67E22' }}>{fmtCurrency(totalFgts)}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{fmtPct(fgtsPct)} sobre salário</p>
         </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="p-4 app-card">
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Outros encargos + prov.</p>
           <p className="text-xl font-bold mt-1" style={{ color: '#C0392B' }}>{fmtCurrency(totalOutrosEnc)}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{fmtPct(outrosPct)} sobre salário</p>
         </div>
-        <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="p-4 app-card">
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Custo total empresa</p>
           <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha + totalEncargos + totalBeneficios)}</p>
         </div>
       </div>
 
       {/* Gerenciamento de Alíquotas */}
-      <div className="rounded-xl border mb-4" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card mb-4">
         {/* Cabeçalho clicável */}
         <button
           type="button"
@@ -329,13 +334,13 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
 
       {/* Tabela custo por funcionário */}
       {employees.length === 0 ? (
-        <div className="rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-10 text-center">
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
             Nenhum funcionário ativo com salário cadastrado.
           </p>
         </div>
       ) : (
-        <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
               <tr>

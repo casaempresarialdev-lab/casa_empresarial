@@ -246,8 +246,8 @@ export function GridDetalhado({ transactions, onEdit, onDelete, onTogglePaid, ac
   if (transactions.length === 0) {
     return (
       <div
-        className="rounded-xl border flex flex-col items-center justify-center py-16"
-        style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-muted)' }}
+        className="app-card flex flex-col items-center justify-center py-16"
+        style={{ color: 'var(--color-text-muted)' }}
       >
         <p className="text-sm">Nenhum lançamento neste período.</p>
       </div>
@@ -255,7 +255,7 @@ export function GridDetalhado({ transactions, onEdit, onDelete, onTogglePaid, ac
   }
 
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+    <div className="app-card overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>

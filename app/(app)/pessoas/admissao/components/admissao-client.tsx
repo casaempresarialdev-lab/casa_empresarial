@@ -8,6 +8,7 @@ import { generateOnboardingTokenAction } from '../../funcionarios/actions'
 import { ModalGerenciarColunas } from './modal-gerenciar-colunas'
 import type { Employee } from '../../funcionarios/queries'
 import type { OnboardingTokenInfo, AdmissionStage } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 type StageKey = string
 
@@ -256,11 +257,15 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, stages
     <>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Admissão
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Admissão
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Arraste os cards entre as etapas ou use as setas ← →
           </p>
         </div>
@@ -439,8 +444,7 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, stages
       {/* Empty total state */}
       {employees.length === 0 && (
         <div
-          className="rounded-xl border p-10 text-center mt-4"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}
+          className="app-card p-10 text-center mt-4"
         >
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
             Nenhum candidato em processo de admissão.

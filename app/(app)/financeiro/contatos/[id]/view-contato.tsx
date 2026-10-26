@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import type { Contact } from '../queries'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 function formatDoc(doc: string | null, tipo: 'PF' | 'PJ') {
   if (!doc) return '—'
@@ -72,10 +73,14 @@ export function ViewContato({ contact }: Props) {
           </svg>
         </button>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-              {contact.nome}
-            </h1>
+          <div className="flex flex-1 min-w-0 items-center gap-3">
+            {/* Título e breadcrumb na mesma linha */}
+            <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+                {contact.nome}
+              </h1>
+              <Breadcrumb />
+            </div>
             <span
               className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
               style={{
@@ -92,7 +97,7 @@ export function ViewContato({ contact }: Props) {
 
       <div className="space-y-4">
         {/* Dados principais */}
-        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-6">
           <p style={sectionTitle}>Dados do Contato</p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4">
             <div>
@@ -139,7 +144,7 @@ export function ViewContato({ contact }: Props) {
         </div>
 
         {/* Metadados */}
-        <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+        <div className="app-card p-6">
           <p style={sectionTitle}>Informações do Cadastro</p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4">
             <div>

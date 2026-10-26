@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createContactAction } from '../../actions'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 function maskCPF(v: string) {
   const d = v.replace(/\D/g, '').slice(0, 11)
@@ -97,17 +98,21 @@ export function FormNovoContato({ companyId }: Props) {
             <path d="M11 14L6 9l5-5" />
           </svg>
         </button>
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Novo Contato
-          </h1>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Novo Contato
+            </h1>
+            <Breadcrumb />
+          </div>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
             Cadastrar cliente ou fornecedor
           </p>
         </div>
       </div>
 
-      <div className="rounded-xl border p-6" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card p-6">
         <p style={sectionTitle}>Dados do Contato</p>
         <div className="space-y-4">
           {/* Tipo PF / PJ */}

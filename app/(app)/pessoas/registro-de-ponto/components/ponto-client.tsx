@@ -8,6 +8,7 @@ import { deleteTimeRecordAction } from '../actions'
 import { generateMonth } from '@/lib/escala/generate'
 import type { TimeRecord } from '../queries'
 import type { ScheduleRule, ScheduleException, DayResult } from '@/lib/escala/generate'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 interface Props {
   records: TimeRecord[]
@@ -576,11 +577,15 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     <>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Registro de Ponto
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex-1 min-w-0">
+          {/* Título e breadcrumb na mesma linha */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+              Registro de Ponto
+            </h1>
+            <Breadcrumb />
+          </div>
+          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
             Controle de entrada e saída dos colaboradores
           </p>
         </div>
@@ -606,8 +611,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
       </div>
 
       {/* Navegação de mês */}
-      <div className="flex items-center justify-between mb-4 p-3 rounded-xl border"
-        style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="flex items-center justify-between mb-4 p-3 app-card">
         <button onClick={() => navMes(-1)} className="px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
           style={{ color: 'var(--color-text-secondary)' }}>← Anterior</button>
         <span className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
@@ -630,8 +634,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
             color: metrics.rate >= 90 ? '#1E8449' : metrics.rate >= 75 ? '#D35400' : '#C0392B',
           },
         ].map(m => (
-          <div key={m.label} className="p-3 rounded-xl border text-center"
-            style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+          <div key={m.label} className="p-3 app-card text-center">
             <div className="text-xl font-bold" style={{ color: m.color }}>{m.value}</div>
             <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{m.label}</div>
           </div>
@@ -655,7 +658,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
       )}
 
       {/* ── Lista ── */}
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
+      <div className="app-card overflow-x-auto">
         <table className="w-full min-w-[820px] text-sm">
           <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
             <tr>
