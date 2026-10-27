@@ -9,6 +9,189 @@ async function getAuthUser() {
   return user
 }
 
+type Admin = ReturnType<typeof createAdminClient>
+
+// Pasta do documento: só entra no insert/update quando o formulário manda 'folder_id'
+// (vazio = sem pasta). Aceita pasta padrão ou pasta da própria empresa.
+async function folderField(admin: Admin, companyId: string, formData: FormData): Promise<{ value: { folder_id?: string | null } } | { error: string }> {
+  if (!formData.has('folder_id')) return { value: {} }
+  const folderId = (formData.get('folder_id') as string) || null
+  if (!folderId) return { value: { folder_id: null } }
+  const { data } = await admin
+    .from('document_folders')
+    .select('id, company_id, sistema')
+    .eq('id', folderId)
+    .maybeSingle()
+  if (!data || (!data.sistema && data.company_id !== companyId)) return { error: 'Pasta não encontrada.' }
+  return { value: { folder_id: folderId } }
+}
+
+// Membro ativo da empresa (pastas são alteradas pelo admin client)
+async function isActiveMember(admin: Admin, userId: string, companyId: string) {
+  const { data } = await admin
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', userId)
+    .eq('company_id', companyId)
+    .eq('status', 'active')
+    .maybeSingle()
+  return !!data
+}
+
+// Pasta acessível pela empresa (padrão ou da própria empresa)
+async function folderDaEmpresa(admin: Admin, companyId: string, folderId: string) {
+  const { data } = await admin
+    .from('document_folders')
+    .select('id, company_id, sistema')
+    .eq('id', folderId)
+    .maybeSingle()
+  return !!data && (data.sistema || data.company_id === companyId)
+}
+
+// parentId null = raiz; dentro de uma pasta (inclusive padrão) também pode criar
+export async function createFolderAction(companyId: string, nome: string, parentId: string | null = null): Promise<{ error?: string }> {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+  const admin = createAdminClient()
+  if (!(await isActiveMember(admin, user.id, companyId))) return { error: 'Acesso não autorizado.' }
+
+  const nomeLimpo = nome.trim()
+  if (!nomeLimpo) return { error: 'Informe o nome da pasta.' }
+  if (parentId && !(await folderDaEmpresa(admin, companyId, parentId))) return { error: 'Pasta não encontrada.' }
+
+  const { error } = await admin.from('document_folders').insert({
+    company_id: companyId, nome: nomeLimpo, sistema: false,
+    ...(parentId && { parent_id: parentId }),
+  })
+  if (error) return { error: `Erro ao criar a pasta: ${error.message}` }
+  revalidatePath('/admin/documentacao')
+  return {}
+}
+
+// Move a pasta (parentId null = raiz). Pastas padrão não se movem, e uma pasta não pode ir para dentro dela mesma
+export async function moveFolderAction(folderId: string, companyId: string, parentId: string | null): Promise<{ error?: string }> {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+  const admin = createAdminClient()
+  if (!(await isActiveMember(admin, user.id, companyId))) return { error: 'Acesso não autorizado.' }
+
+  const { data: pasta } = await admin
+    .from('document_folders')
+    .select('id, company_id, sistema')
+    .eq('id', folderId)
+    .maybeSingle()
+  if (!pasta || (!pasta.sistema && pasta.company_id !== companyId)) return { error: 'Pasta não encontrada.' }
+  if (pasta.sistema) return { error: 'Pastas padrão não podem ser movidas.' }
+
+  if (parentId) {
+    if (!(await folderDaEmpresa(admin, companyId, parentId))) return { error: 'Pasta de destino não encontrada.' }
+    // Sobe a partir do destino: se passar pela própria pasta, seria um ciclo
+    let cur: string | null = parentId
+    const vistos = new Set<string>()
+    while (cur && !vistos.has(cur)) {
+      if (cur === folderId) return { error: 'Não é possível mover uma pasta para dentro dela mesma.' }
+      vistos.add(cur)
+      const { data: p }: { data: { parent_id: string | null } | null } = await admin
+        .from('document_folders').select('parent_id').eq('id', cur).maybeSingle()
+      cur = p?.parent_id ?? null
+    }
+  }
+
+  const { error } = await admin
+    .from('document_folders')
+    .update({ parent_id: parentId })
+    .eq('id', folderId)
+    .eq('company_id', companyId)
+    .eq('sistema', false)
+  if (error) return { error: error.message }
+  revalidatePath('/admin/documentacao')
+  return {}
+}
+
+// Renomear/excluir só vale para pastas da empresa — as padrão (sistema) ficam bloqueadas
+export async function renameFolderAction(folderId: string, companyId: string, nome: string): Promise<{ error?: string }> {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+  const admin = createAdminClient()
+  if (!(await isActiveMember(admin, user.id, companyId))) return { error: 'Acesso não autorizado.' }
+
+  const nomeLimpo = nome.trim()
+  if (!nomeLimpo) return { error: 'Informe o nome da pasta.' }
+
+  const { data, error } = await admin
+    .from('document_folders')
+    .update({ nome: nomeLimpo })
+    .eq('id', folderId)
+    .eq('company_id', companyId)
+    .eq('sistema', false)
+    .select('id')
+  if (error) return { error: error.message }
+  if (!data?.length) return { error: 'Pastas padrão não podem ser editadas.' }
+  revalidatePath('/admin/documentacao')
+  return {}
+}
+
+export async function deleteFolderAction(folderId: string, companyId: string): Promise<{ error?: string }> {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+  const admin = createAdminClient()
+  if (!(await isActiveMember(admin, user.id, companyId))) return { error: 'Acesso não autorizado.' }
+
+  const { data: pasta } = await admin
+    .from('document_folders')
+    .select('*')
+    .eq('id', folderId)
+    .eq('company_id', companyId)
+    .eq('sistema', false)
+    .maybeSingle()
+  if (!pasta) return { error: 'Pastas padrão não podem ser excluídas.' }
+
+  // O conteúdo (documentos e subpastas) sobe para a pasta de cima (ou para a raiz)
+  const destino = (pasta as { parent_id?: string | null }).parent_id ?? null
+  const { error: docsErr } = await admin.from('documents').update({ folder_id: destino }).eq('folder_id', folderId).eq('company_id', companyId)
+  if (docsErr) return { error: docsErr.message }
+  if ('parent_id' in pasta) {
+    const { error: subErr } = await admin.from('document_folders').update({ parent_id: destino }).eq('parent_id', folderId)
+    if (subErr) return { error: subErr.message }
+  }
+
+  const { data, error } = await admin
+    .from('document_folders')
+    .delete()
+    .eq('id', folderId)
+    .eq('company_id', companyId)
+    .eq('sistema', false)
+    .select('id')
+  if (error) return { error: error.message }
+  if (!data?.length) return { error: 'Pastas padrão não podem ser excluídas.' }
+  revalidatePath('/admin/documentacao')
+  return {}
+}
+
+// Move o documento para uma pasta (folderId null = raiz)
+export async function moveDocumentAction(documentId: string, companyId: string, folderId: string | null): Promise<{ error?: string }> {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Não autenticado' }
+  const admin = createAdminClient()
+  if (!(await isActiveMember(admin, user.id, companyId))) return { error: 'Acesso não autorizado.' }
+
+  const fd = new FormData()
+  fd.set('folder_id', folderId ?? '')
+  const folder = await folderField(admin, companyId, fd)
+  if ('error' in folder) return folder
+
+  const { data, error } = await admin
+    .from('documents')
+    .update(folder.value)
+    .eq('id', documentId)
+    .eq('company_id', companyId)
+    .select('id')
+  if (error) return { error: error.message }
+  if (!data?.length) return { error: 'Documento não encontrado.' }
+  revalidatePath('/admin/documentacao')
+  return {}
+}
+
 export async function uploadDocumentAction(
   companyId: string,
   formData: FormData,
@@ -34,6 +217,11 @@ export async function uploadDocumentAction(
   const descricao = formData.get('descricao') as string | null
   const vencimento = formData.get('vencimento') as string | null
   const observacao = formData.get('observacao') as string | null
+  const folder = await folderField(admin, companyId, formData)
+  if ('error' in folder) {
+    await admin.storage.from('documentos').remove([path])
+    return folder
+  }
 
   const { error: dbErr } = await admin.from('documents').insert({
     company_id: companyId,
@@ -44,6 +232,7 @@ export async function uploadDocumentAction(
     descricao: descricao || null,
     vencimento: vencimento || null,
     observacao: observacao || null,
+    ...folder.value,
   })
 
   if (dbErr) {
@@ -67,6 +256,8 @@ export async function updateDocumentAction(
   const descricao = formData.get('descricao') as string | null
   const vencimento = formData.get('vencimento') as string | null
   const observacao = formData.get('observacao') as string | null
+  const folder = await folderField(admin, companyId, formData)
+  if ('error' in folder) return folder
 
   const { error } = await admin
     .from('documents')
@@ -74,6 +265,7 @@ export async function updateDocumentAction(
       descricao: descricao || null,
       vencimento: vencimento || null,
       observacao: observacao || null,
+      ...folder.value,
     })
     .eq('id', id)
     .eq('company_id', companyId)

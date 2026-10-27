@@ -2,12 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { IconButton } from '@/components/ui/icon-button'
+import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { AddButton } from '@/components/ui/add-button'
-import { TABLE_WRAPPER_CLASS, TABLE_HEAD_STYLE, TH_CLASS, ROW_CLASS, ROW_STYLE } from '@/components/ui/table-styles'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/lib/toast'
 import { ModalSocio } from './modal-socio'
+import { ModalSocioFoto } from './modal-socio-foto'
+import { ModalSocioDocumentos } from './modal-socio-documentos'
 import { deleteSocioAction } from '../actions'
 import type { Socio } from '../queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
@@ -34,6 +35,8 @@ export function SociosClient({ socios, companyId }: Props) {
   const [editingSocio, setEditingSocio] = useState<Socio | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Socio | null>(null)
+  const [fotoTarget, setFotoTarget] = useState<Socio | null>(null)
+  const [docsTarget, setDocsTarget] = useState<Socio | null>(null)
 
   function openAdd() { setEditingSocio(null); setModalOpen(true) }
   function openEdit(s: Socio) { setEditingSocio(s); setModalOpen(true) }
@@ -84,76 +87,53 @@ export function SociosClient({ socios, companyId }: Props) {
           <AddButton onClick={openAdd} />
         </div>
 
-        <div className={TABLE_WRAPPER_CLASS}>
-          <table className="w-full min-w-[640px] text-sm">
-            <thead style={TABLE_HEAD_STYLE}>
-              <tr>
-                <th className={TH_CLASS}>Nome</th>
-                <th className={TH_CLASS}>Participação</th>
-                <th className={TH_CLASS}>CPF</th>
-                <th className={TH_CLASS}>Cargo</th>
-                <th className={TH_CLASS}>Administrador</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {socios.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                    Nenhum sócio cadastrado.
-                  </td>
-                </tr>
-              )}
-              {socios.map((s) => (
-                <tr key={s.id} className={ROW_CLASS} style={ROW_STYLE}>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{s.nome}</td>
-                  <td className="px-4 py-3">
-                    {/* Percentual + barra proporcional */}
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold w-14 shrink-0" style={{ color: 'var(--color-text-primary)' }}>
-                        {formatPercent(s.participacao)}
-                      </span>
-                      {s.participacao !== null && (
-                        <span className="h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-brand-light)' }}>
-                          <span
-                            className="block h-full rounded-full"
-                            style={{ width: `${Math.min(100, Number(s.participacao))}%`, backgroundColor: 'var(--color-brand)' }}
-                          />
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{cpfMask(s.cpf)}</td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{s.cargo ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    {s.administrador ? (
+        <ul className="flex flex-col gap-3">
+          {socios.length === 0 && <ListEmpty>Nenhum sócio cadastrado.</ListEmpty>}
+          {socios.map((s) => (
+            <ListItem
+              key={s.id}
+              media={
+                // Foto (ou iniciais)
+                <span
+                  className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 text-xs font-bold"
+                  style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
+                >
+                  {s.foto_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={s.foto_url} alt={s.nome} className="w-full h-full object-cover" />
+                  ) : (
+                    s.nome.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase()
+                  )}
+                </span>
+              }
+              title={s.nome}
+              subtitle={[s.cargo, s.cpf ? `CPF ${cpfMask(s.cpf)}` : null, s.administrador ? 'Administrador' : null].filter(Boolean).join(' · ') || 'Sem cargo informado'}
+              aside={
+                // Percentual + barra proporcional
+                <div className="flex items-center gap-2">
+                  {s.participacao !== null && (
+                    <span className="hidden sm:block h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-brand-light)' }}>
                       <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-primary-darker)' }}
-                      >
-                        Sim
-                      </span>
-                    ) : (
-                      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Não</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <IconButton icon="pencil" label={`Editar ${s.nome}`} onClick={() => openEdit(s)} />
-                      <IconButton
-                        icon="trash"
-                        label={`Remover ${s.nome}`}
-                        tone="danger"
-                        onClick={() => setConfirmTarget(s)}
-                        disabled={deletingId === s.id}
+                        className="block h-full rounded-full"
+                        style={{ width: `${Math.min(100, Number(s.participacao))}%`, backgroundColor: 'var(--color-brand)' }}
                       />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    </span>
+                  )}
+                  <span className="text-sm font-semibold w-14 text-right" style={{ color: 'var(--color-text-primary)' }}>
+                    {formatPercent(s.participacao)}
+                  </span>
+                </div>
+              }
+              actionsLabel={s.nome}
+              actions={[
+                { icon: 'pencil', label: 'Editar', onClick: () => openEdit(s) },
+                { icon: 'camera', label: 'Foto', onClick: () => setFotoTarget(s) },
+                { icon: 'folder', label: s.documentos ? `Documentos (${s.documentos})` : 'Documentos', onClick: () => setDocsTarget(s) },
+                { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(s), disabled: deletingId === s.id },
+              ]}
+            />
+          ))}
+        </ul>
       </div>
 
       <ModalSocio
@@ -163,6 +143,10 @@ export function SociosClient({ socios, companyId }: Props) {
         socio={editingSocio}
         outrasParticipacoes={outrasParticipacoes}
       />
+
+      <ModalSocioFoto open={!!fotoTarget} onClose={() => setFotoTarget(null)} companyId={companyId} socio={fotoTarget} />
+
+      <ModalSocioDocumentos open={!!docsTarget} onClose={() => setDocsTarget(null)} companyId={companyId} socio={docsTarget} />
 
       <ConfirmDialog
         open={!!confirmTarget}

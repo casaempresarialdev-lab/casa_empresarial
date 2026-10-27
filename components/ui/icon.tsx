@@ -1,6 +1,6 @@
 // Ícones em linha (estilo Lucide), herdam a cor do texto
 
-export type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user' | 'wallet' | 'card' | 'folder' | 'camera' | 'settings' | 'star' | 'logout' | 'plus' | 'pencil' | 'trash' | 'eye' | 'eye-off' | 'external' | 'info' | 'download'
+export type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user' | 'wallet' | 'card' | 'folder' | 'camera' | 'settings' | 'star' | 'logout' | 'plus' | 'pencil' | 'trash' | 'eye' | 'eye-off' | 'external' | 'info' | 'download' | 'lock' | 'shield' | 'mail'
 
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
   grid: (
@@ -143,6 +143,24 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m22 7-10 6L2 7" />
     </>
   ),
 }

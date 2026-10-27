@@ -4,11 +4,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
+import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { AddButton } from '@/components/ui/add-button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
-import { TABLE_WRAPPER_CLASS, TABLE_HEAD_STYLE, TH_CLASS, ROW_CLASS, ROW_STYLE } from '@/components/ui/table-styles'
 import { toast } from '@/lib/toast'
 import { ModalCredential } from './modal-credential'
 import { deleteCredentialAction, revealPasswordAction } from '../actions'
@@ -111,95 +111,43 @@ export function CredentialsClient({ credentials, companyId }: Props) {
           <AddButton onClick={openAdd} />
         </div>
 
-        <div className={TABLE_WRAPPER_CLASS}>
-          <table className="w-full min-w-[640px] text-sm">
-            <thead style={TABLE_HEAD_STYLE}>
-              <tr>
-                <th className={TH_CLASS}>Identificação</th>
-                <th className={TH_CLASS}>Login</th>
-                <th className={TH_CLASS}>Senha</th>
-                <th className={TH_CLASS}>Acesso</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                    {search ? 'Nenhuma credencial encontrada para essa pesquisa.' : 'Nenhuma credencial cadastrada.'}
-                  </td>
-                </tr>
-              )}
-              {filtered.map((c) => {
-                const revealed = revealedPasswords[c.id]
-                return (
-                  <tr key={c.id} className={ROW_CLASS} style={ROW_STYLE}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        {/* ⓘ abre a observação (mais apagado quando não há observação) */}
-                        <button
-                          type="button"
-                          onClick={() => setInfoTarget(c)}
-                          className="p-1 -ml-1 rounded-md transition-colors hover:bg-gray-100 shrink-0"
-                          style={{ color: c.observacao ? 'var(--color-brand)' : 'var(--color-text-muted)', opacity: c.observacao ? 1 : 0.5 }}
-                          title={c.observacao ? 'Ver observação' : 'Sem observação'}
-                          aria-label={`Observação de ${c.sistema}`}
-                        >
-                          <Icon name="info" size={16} />
-                        </button>
-                        <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{c.sistema}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                      {c.login}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono text-xs min-w-20" style={{ color: 'var(--color-text-secondary)' }}>
-                          {revealed ?? '••••••••'}
-                        </span>
-                        <IconButton
-                          icon={revealed ? 'eye-off' : 'eye'}
-                          label={revealed ? 'Ocultar senha' : 'Ver senha'}
-                          onClick={() => handleReveal(c)}
-                          disabled={revealingId === c.id}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {c.url ? (
-                        <a
-                          href={c.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs font-medium hover:underline"
-                          style={{ color: 'var(--color-brand)' }}
-                        >
-                          <Icon name="external" size={14} />
-                          Abrir site
-                        </a>
-                      ) : (
-                        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end">
-                        <IconButton icon="pencil" label={`Editar ${c.sistema}`} onClick={() => openEdit(c)} />
-                        <IconButton
-                          icon="trash"
-                          label={`Remover ${c.sistema}`}
-                          tone="danger"
-                          onClick={() => setConfirmTarget(c)}
-                          disabled={deletingId === c.id}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ul className="flex flex-col gap-3">
+          {filtered.length === 0 && (
+            <ListEmpty>{search ? 'Nenhuma credencial encontrada para essa pesquisa.' : 'Nenhuma credencial cadastrada.'}</ListEmpty>
+          )}
+          {filtered.map((c) => {
+            const revealed = revealedPasswords[c.id]
+            return (
+              <ListItem
+                key={c.id}
+                icon="lock"
+                title={c.sistema}
+                subtitle={<span className="font-mono text-xs">{c.login}</span>}
+                aside={
+                  // Senha escondida, com o olho para mostrar
+                  <div className="flex items-center gap-1">
+                    <span className="font-mono text-xs min-w-20 text-right" style={{ color: 'var(--color-text-secondary)' }}>
+                      {revealed ?? '••••••••'}
+                    </span>
+                    <IconButton
+                      icon={revealed ? 'eye-off' : 'eye'}
+                      label={revealed ? 'Ocultar senha' : 'Ver senha'}
+                      onClick={() => handleReveal(c)}
+                      disabled={revealingId === c.id}
+                    />
+                  </div>
+                }
+                actionsLabel={c.sistema}
+                actions={[
+                  ...(c.url ? [{ icon: 'external' as const, label: 'Abrir site', onClick: () => window.open(c.url!, '_blank', 'noopener,noreferrer') }] : []),
+                  { icon: 'info', label: c.observacao ? 'Observação' : 'Sem observação', onClick: () => setInfoTarget(c) },
+                  { icon: 'pencil', label: 'Editar', onClick: () => openEdit(c) },
+                  { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(c), disabled: deletingId === c.id },
+                ]}
+              />
+            )
+          })}
+        </ul>
       </div>
 
       <ModalCredential

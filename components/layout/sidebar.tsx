@@ -23,10 +23,10 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Administrativo',
     icon: 'file',
     children: [
-      { label: 'Minha Empresa', href: '/empresa' },
       { label: 'Quadro Societário', href: '/admin/quadro-societario' },
       { label: 'Cofre de senhas', href: '/admin/logins-senhas' },
       { label: 'Documentação', href: '/admin/documentacao' },
+      { label: 'Certificado digital', href: '/admin/certificado-digital' },
     ],
   },
   {
@@ -107,11 +107,12 @@ interface SidebarProps {
   role?: string | null
   myEmployeeId?: string | null
   userName?: string
+  userEmail?: string | null
   userAvatar?: string | null
-  companies?: { id: string; razao_social: string }[]
+  companies?: { id: string; razao_social: string; role?: string }[]
 }
 
-export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName, userAvatar, companies }: SidebarProps) {
+export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName, userEmail, userAvatar, companies }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const setSidebarExpanded = useAppStore((s) => s.setSidebarExpanded)
@@ -439,6 +440,7 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
         <div className={cn('mx-3 mb-3 pt-3 border-t', !expanded && 'md:mx-2')} style={{ borderColor: 'var(--color-bg-surface)' }}>
           <UserMenu
             userName={userName}
+            userEmail={userEmail}
             userAvatar={userAvatar}
             companies={companies}
             compact={!expanded}

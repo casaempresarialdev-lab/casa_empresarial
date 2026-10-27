@@ -1,7 +1,7 @@
 ﻿import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getDocuments } from './queries'
+import { getDocuments, getFolders } from './queries'
 import { DocsClient } from './components/docs-client'
 
 export const dynamic = 'force-dynamic'
@@ -15,11 +15,14 @@ export default async function DocumentacaoPage() {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const documents = await getDocuments(companyId)
+  const [documents, { folders, error: foldersError }] = await Promise.all([
+    getDocuments(companyId),
+    getFolders(companyId),
+  ])
 
   return (
     <div className="w-full">
-      <DocsClient documents={documents} companyId={companyId} />
+      <DocsClient documents={documents} folders={folders} foldersError={foldersError} companyId={companyId} />
     </div>
   )
 }

@@ -85,6 +85,7 @@ export default async function AppLayout({
           role={activeRole}
           myEmployeeId={myEmployeeId}
           userName={profile?.name ?? user.email ?? ''}
+          userEmail={user.email}
           userAvatar={profile?.avatar_url}
           companies={companies}
         />

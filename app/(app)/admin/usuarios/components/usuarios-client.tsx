@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { RoleBadge, StatusBadge } from '@/components/ui/badge'
+import { AddButton } from '@/components/ui/add-button'
+import { ListItem, ListEmpty } from '@/components/ui/list-item'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Icon } from '@/components/ui/icon'
 import { ModalUsuario } from './modal-usuario'
 import { removeMemberAction, cancelInvitationAction, resendInvitationAction } from '../actions'
 import type { MemberWithProfile, Invitation } from '../queries'
@@ -29,160 +32,23 @@ interface Props {
 }
 
 function cpfMask(cpf: string | null) {
-  if (!cpf) return '—'
+  if (!cpf) return null
   const d = cpf.replace(/\D/g, '')
   return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
 }
 
-function ThreeDotMenu({ onEdit, onRemove, loading, hideEdit, onResend, resending }: { onEdit: () => void; onRemove: () => void; loading: boolean; hideEdit?: boolean; onResend?: () => void; resending?: boolean }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, right: 0 })
-  const menuRef = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false)
-    }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const openUp = rect.bottom + 130 > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - 134, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen((v) => !v)
-  }
-
+// Foto (ou inicial) do usuário, no lugar do ícone do cartão
+function Avatar({ src, alt, children }: { src?: string | null; alt: string; children: React.ReactNode }) {
   return (
-    <div>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={handleOpen}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
-        style={{ color: 'var(--color-text-muted)' }}
-        aria-label="Opções"
-      >
-        ···
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
-          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
-        >
-          {!hideEdit && (
-            <button
-              type="button"
-              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-              style={{ color: 'var(--color-text-secondary)' }}
-              onClick={() => { setOpen(false); onEdit() }}
-            >
-              Editar
-            </button>
-          )}
-          {onResend && (
-            <button
-              type="button"
-              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-              style={{ color: 'var(--color-text-secondary)' }}
-              onClick={() => { setOpen(false); onResend() }}
-              disabled={resending}
-            >
-              {resending ? 'Reenviando…' : 'Reenviar convite'}
-            </button>
-          )}
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
-            style={{ color: 'var(--color-error)' }}
-            onClick={() => { setOpen(false); onRemove() }}
-            disabled={loading}
-          >
-            {loading ? 'Removendo…' : 'Excluir'}
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ThreeDotMenuSelf({ onView, onEdit }: { onView: () => void; onEdit: () => void }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, right: 0 })
-  const menuRef = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false)
-    }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const openUp = rect.bottom + 90 > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - 94, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen((v) => !v)
-  }
-
-  return (
-    <div>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={handleOpen}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
-        style={{ color: 'var(--color-text-muted)' }}
-        aria-label="Opções"
-      >
-        ···
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          className="fixed w-44 rounded-xl border shadow-lg py-1 z-50"
-          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
-        >
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
-            onClick={() => { setOpen(false); onView() }}
-          >
-            Visualizar
-          </button>
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
-            onClick={() => { setOpen(false); onEdit() }}
-          >
-            Editar
-          </button>
-        </div>
-      )}
-    </div>
+    <span
+      className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 text-sm font-bold"
+      style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
+    >
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt={alt} className="w-full h-full object-cover" />
+      ) : children}
+    </span>
   )
 }
 
@@ -192,37 +58,47 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
   const [editingMember, setEditingMember] = useState<MemberWithProfile | null>(null)
   const [painelOpen, setPainelOpen] = useState(false)
   const [painelMember, setPainelMember] = useState<MemberWithProfile | null>(null)
-  const [removingId, setRemovingId] = useState<string | null>(null)
-  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<MemberWithProfile | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<Invitation | null>(null)
+  const [cancelling, setCancelling] = useState(false)
   const [resendingId, setResendingId] = useState<string | null>(null)
-  const [errorMsg, setErrorMsg] = useState('')
 
   function openAdd() { setEditingMember(null); setModalOpen(true) }
   function openEdit(member: MemberWithProfile) { setEditingMember(member); setModalOpen(true) }
 
-  async function handleRemove(member: MemberWithProfile) {
-    if (!confirm(`Remover ${member.profiles?.name ?? 'este membro'} da empresa?`)) return
-    setRemovingId(member.id)
-    setErrorMsg('')
-    const result = await removeMemberAction(member.id, companyId)
-    setRemovingId(null)
-    if ('error' in result) setErrorMsg(result.error ?? 'Erro ao remover.')
-    else router.refresh()
+  // Remoção confirmada no modal; o resultado aparece no toast (✓ / ✕)
+  async function confirmRemove() {
+    const m = removeTarget
+    if (!m) return
+    const nome = m.profiles?.name ?? 'O membro'
+    setRemoving(true)
+    const result = await toast.promise(removeMemberAction(m.id, companyId), {
+      loading: `Removendo ${nome}…`,
+      success: `${nome} foi removido da empresa.`,
+      error: 'Não foi possível remover o membro.',
+    })
+    setRemoving(false)
+    setRemoveTarget(null)
+    if (!('error' in result)) router.refresh()
   }
 
-  async function handleCancelInvite(inv: Invitation) {
-    if (!confirm(`Cancelar convite para ${inv.email}?`)) return
-    setCancellingId(inv.id)
-    setErrorMsg('')
-    const result = await cancelInvitationAction(inv.id, companyId)
-    setCancellingId(null)
-    if ('error' in result) setErrorMsg(result.error ?? 'Erro ao cancelar.')
-    else router.refresh()
+  async function confirmCancelInvite() {
+    const inv = cancelTarget
+    if (!inv) return
+    setCancelling(true)
+    const result = await toast.promise(cancelInvitationAction(inv.id, companyId), {
+      loading: `Cancelando convite para ${inv.email}…`,
+      success: `Convite para ${inv.email} cancelado.`,
+      error: 'Não foi possível cancelar o convite.',
+    })
+    setCancelling(false)
+    setCancelTarget(null)
+    if (!('error' in result)) router.refresh()
   }
 
   async function handleResendInvite(inv: Invitation) {
     setResendingId(inv.id)
-    setErrorMsg('')
     // Erros do servidor aparecem no próprio toast (✕)
     await toast.promise(resendInvitationAction(inv.id, companyId), {
       loading: `Reenviando convite para ${inv.email}…`,
@@ -237,179 +113,107 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Usuários
-            </h1>
-            <Breadcrumb />
-          </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Membros com acesso a esta empresa
-          </p>
+      <div className="mb-6">
+        {/* Título e breadcrumb na mesma linha */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+            Usuários
+          </h1>
+          <Breadcrumb />
         </div>
-        <Button onClick={openAdd}>+ Adicionar</Button>
-      </div>
-
-      {errorMsg && (
-        <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>
-          {errorMsg}
+        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
+          Membros com acesso a esta empresa
         </p>
-      )}
-
-      {/* ── Membros ── */}
-      <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[600px] text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>CPF</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Função</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Desde</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {active.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  Nenhum membro ativo.
-                </td>
-              </tr>
-            )}
-            {[...active, ...inactive].map((m) => (
-              <tr
-                key={m.id}
-                className="border-t"
-                style={{ borderColor: 'var(--color-bg-surface)', opacity: m.status !== 'active' ? 0.5 : 1 }}
-              >
-                <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                  <div className="flex items-center gap-2">
-                    {m.profiles?.avatar_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={m.profiles.avatar_url}
-                        alt={m.profiles.name ?? ''}
-                        className="w-7 h-7 rounded-full object-cover shrink-0"
-                      />
-                    ) : (
-                      <div
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                        style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
-                      >
-                        {m.profiles?.name?.charAt(0).toUpperCase() ?? '?'}
-                      </div>
-                    )}
-                    <span>
-                      {m.profiles?.name ?? '—'}
-                      {m.profile_id === currentProfileId && (
-                        <span className="ml-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>(você)</span>
-                      )}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                  {cpfMask(m.profiles?.cpf ?? null)}
-                </td>
-                <td className="px-4 py-3"><RoleBadge role={m.role} /></td>
-                <td className="px-4 py-3"><StatusBadge status={m.status} /></td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-muted)' }}>
-                  {formatDate(m.created_at)}
-                </td>
-                <td className="px-4 py-3">
-                  {m.status === 'active' && m.profile_id !== currentProfileId && (
-                    <div className="flex justify-end">
-                      <ThreeDotMenu
-                        onEdit={() => openEdit(m)}
-                        onRemove={() => handleRemove(m)}
-                        loading={removingId === m.id}
-                      />
-                    </div>
-                  )}
-                  {m.status === 'active' && m.profile_id === currentProfileId && (
-                    <div className="flex justify-end">
-                      <ThreeDotMenuSelf
-                        onView={() => { setPainelMember(m); setPainelOpen(true) }}
-                        onEdit={() => openEdit(m)}
-                      />
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
 
-      {/* ── Convites pendentes ── */}
+      <div className="app-card p-5 flex flex-col gap-4">
+        {/* Barra do box: resumo + adicionar */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-sidebar-text)' }}>
+            <span className="font-semibold">{active.length} {active.length === 1 ? 'membro ativo' : 'membros ativos'}</span>
+            {invitations.length > 0 && (
+              <span style={{ color: 'var(--color-text-muted)' }}>
+                {' '}· {invitations.length} {invitations.length === 1 ? 'convite pendente' : 'convites pendentes'}
+              </span>
+            )}
+          </p>
+          <AddButton onClick={openAdd} />
+        </div>
+
+        {/* Membros (inativos por último, mais apagados) */}
+        <ul className="flex flex-col gap-3">
+          {members.length === 0 && <ListEmpty>Nenhum membro cadastrado.</ListEmpty>}
+          {[...active, ...inactive].map((m) => {
+            const nome = m.profiles?.name ?? '—'
+            const isSelf = m.profile_id === currentProfileId
+            const cpf = cpfMask(m.profiles?.cpf ?? null)
+            return (
+              <div key={m.id} style={{ opacity: m.status !== 'active' ? 0.55 : 1 }}>
+                <ListItem
+                  media={<Avatar src={m.profiles?.avatar_url} alt={nome}>{nome.charAt(0).toUpperCase()}</Avatar>}
+                  title={
+                    <>
+                      {nome}
+                      {isSelf && <span className="ml-2 text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>(você)</span>}
+                    </>
+                  }
+                  subtitle={[cpf ? `CPF ${cpf}` : null, `Desde ${formatDate(m.created_at)}`].filter(Boolean).join(' · ')}
+                  aside={
+                    <>
+                      <span className="hidden sm:inline-flex"><RoleBadge role={m.role} /></span>
+                      <StatusBadge status={m.status} />
+                    </>
+                  }
+                  actionsLabel={nome}
+                  actions={
+                    m.status !== 'active'
+                      ? [{ icon: 'pencil', label: 'Sem ações para membro inativo', onClick: () => {}, disabled: true }]
+                      : isSelf
+                        ? [
+                            { icon: 'eye', label: 'Visualizar', onClick: () => { setPainelMember(m); setPainelOpen(true) } },
+                            { icon: 'pencil', label: 'Editar', onClick: () => openEdit(m) },
+                          ]
+                        : [
+                            { icon: 'pencil', label: 'Editar', onClick: () => openEdit(m) },
+                            { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setRemoveTarget(m), disabled: removing && removeTarget?.id === m.id },
+                          ]
+                  }
+                />
+              </div>
+            )
+          })}
+        </ul>
+      </div>
+
+      {/* Convites pendentes */}
       {invitations.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+        <div className="app-card p-5 flex flex-col gap-4 mt-6">
+          <h2 className="text-lg font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
             Convites pendentes
           </h2>
-          <div className="app-card overflow-x-auto">
-            <table className="w-full min-w-[500px] text-sm">
-              <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>E-mail</th>
-                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Função</th>
-                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Enviado em</th>
-                  <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Expira em</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {invitations.map((inv) => (
-                  <tr key={inv.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                    <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
-                      <div className="flex items-center gap-2">
-                        {inv.avatar_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={inv.avatar_url}
-                            alt={inv.email}
-                            className="w-7 h-7 rounded-full object-cover shrink-0"
-                          />
-                        ) : (
-                          <div
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                            style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
-                          >
-                            ✉️
-                          </div>
-                        )}
-                        <span>{inv.email}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                      {ROLE_LABELS[inv.role] ?? inv.role}
-                    </td>
-                    <td className="px-4 py-3" style={{ color: 'var(--color-text-muted)' }}>
-                      {formatDate(inv.created_at)}
-                    </td>
-                    <td className="px-4 py-3" style={{ color: 'var(--color-text-muted)' }}>
-                      {formatDate(inv.expires_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end">
-                        <ThreeDotMenu
-                          onEdit={() => {}}
-                          onRemove={() => handleCancelInvite(inv)}
-                          loading={cancellingId === inv.id}
-                          hideEdit
-                          onResend={() => handleResendInvite(inv)}
-                          resending={resendingId === inv.id}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="flex flex-col gap-3">
+            {invitations.map((inv) => (
+              <ListItem
+                key={inv.id}
+                media={<Avatar src={inv.avatar_url} alt={inv.email}><Icon name="mail" size={18} /></Avatar>}
+                title={inv.email}
+                subtitle={`Enviado em ${formatDate(inv.created_at)} · Expira em ${formatDate(inv.expires_at)}`}
+                aside={
+                  <span
+                    className="hidden sm:inline-flex text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+                    style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
+                  >
+                    {ROLE_LABELS[inv.role] ?? inv.role}
+                  </span>
+                }
+                actionsLabel={`convite de ${inv.email}`}
+                actions={[
+                  { icon: 'mail', label: resendingId === inv.id ? 'Reenviando…' : 'Reenviar convite', onClick: () => handleResendInvite(inv), disabled: resendingId === inv.id },
+                  { icon: 'trash', label: 'Cancelar convite', tone: 'danger', onClick: () => setCancelTarget(inv), disabled: cancelling && cancelTarget?.id === inv.id },
+                ]}
+              />
+            ))}
+          </ul>
         </div>
       )}
 
@@ -426,6 +230,24 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
         onClose={() => { setPainelOpen(false); setPainelMember(null) }}
         member={painelMember}
         email={currentUserEmail}
+      />
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        onClose={() => { if (!removing) setRemoveTarget(null) }}
+        onConfirm={confirmRemove}
+        loading={removing}
+        title="Remover membro"
+        message={<p>Remover <strong>{removeTarget?.profiles?.name ?? 'este membro'}</strong> da empresa? Ele perde o acesso imediatamente.</p>}
+      />
+
+      <ConfirmDialog
+        open={!!cancelTarget}
+        onClose={() => { if (!cancelling) setCancelTarget(null) }}
+        onConfirm={confirmCancelInvite}
+        loading={cancelling}
+        title="Cancelar convite"
+        message={<p>Cancelar o convite enviado para <strong>{cancelTarget?.email}</strong>?</p>}
       />
     </>
   )

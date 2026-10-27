@@ -1,17 +1,18 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createCompanyAction, updateCompanyAction } from '../actions'
 import { companySchema, type CompanyData } from '@/lib/validations/company'
 import { Input } from '@/components/ui/input'
-import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/toast'
 import type { Company } from '../queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { Icon } from '@/components/ui/icon'
+import type { EmpresaPdfData } from './empresa-pdf'
 
 const UF_OPTIONS = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
@@ -39,7 +40,6 @@ const TABS = [
   { id: 'dados',       label: 'Dados da empresa',    fields: ['razao_social', 'cnpj', 'nome_fantasia', 'telefone', 'email'] },
   { id: 'endereco',    label: 'Endereço',            fields: ['cep', 'uf', 'cidade', 'logradouro', 'numero', 'bairro', 'complemento'] },
   { id: 'fiscal',      label: 'Dados fiscais',       fields: ['regime_tributario', 'inscricao_municipal', 'ie_situacao', 'inscricao_estadual'] },
-  { id: 'certificado', label: 'Certificado digital', fields: ['certificado_digital_senha'] },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -66,15 +66,11 @@ export function EmpresaForm({ company }: Props) {
   const [activeTab, setActiveTab]     = useState<TabId>('dados')
   const [isPending, startTransition]  = useTransition()
 
-  const certInputRef = useRef<HTMLInputElement>(null)
-  const [certName, setCertName] = useState<string | null>(
-    company?.certificado_digital_url ? 'Certificado já cadastrado' : null,
-  )
 
   const cnpjDisplay = company ? formatCNPJ(company.cnpj) : ''
   const cepDisplay  = company?.cep ? maskCep(company.cep) : ''
 
-  const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, setValue, getValues, watch, formState: { errors, isSubmitting } } =
     useForm<CompanyData>({
       resolver: zodResolver(companySchema),
       defaultValues: company
@@ -101,6 +97,57 @@ export function EmpresaForm({ company }: Props) {
     })
 
   const loading  = isSubmitting || isPending
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  // Exporta para PDF o que está na tela (inclusive alterações ainda não salvas)
+  async function handleExportPdf() {
+    if (!company) return
+    setPdfLoading(true)
+    try {
+      const [{ pdf }, { EmpresaPdf }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('./empresa-pdf'),
+      ])
+      const v = getValues()
+      const data: EmpresaPdfData = {
+        razao_social:        v.razao_social ?? '',
+        cnpj:                v.cnpj ?? '',
+        nome_fantasia:       v.nome_fantasia ?? '',
+        telefone:            v.telefone ?? '',
+        email:               v.email ?? '',
+        cep:                 v.cep ?? '',
+        uf:                  v.uf ?? '',
+        cidade:              v.cidade ?? '',
+        logradouro:          v.logradouro ?? '',
+        numero:              v.numero ?? '',
+        bairro:              v.bairro ?? '',
+        complemento:         v.complemento ?? '',
+        regime_tributario:   v.regime_tributario ?? '',
+        inscricao_municipal: v.inscricao_municipal ?? '',
+        ie_situacao:         v.ie_situacao ?? '',
+        inscricao_estadual:  v.inscricao_estadual ?? '',
+      }
+      // Cor principal da identidade visual (sempre em hex no tema)
+      const brand = getComputedStyle(document.documentElement).getPropertyValue('--color-brand').trim()
+      const accent = /^#[0-9a-f]{6}$/i.test(brand) ? brand : '#A88E5D'
+      const geradoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+      const render = (logoUrl: string | null) =>
+        pdf(<EmpresaPdf data={data} logoUrl={logoUrl} accent={accent} geradoEm={geradoEm} />).toBlob()
+
+      // Se a logo não carregar, gera o documento sem ela
+      const blob = await render(company.logo_url).catch(() => render(null))
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `dados-empresa-${(v.cnpj ?? '').replace(/\D/g, '') || 'empresa'}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Não foi possível gerar o PDF.')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   const tabHasError = (tab: (typeof TABS)[number]) => tab.fields.some((f) => f in errors)
 
@@ -108,10 +155,6 @@ export function EmpresaForm({ company }: Props) {
   function onInvalid(formErrors: typeof errors) {
     const tab = TABS.find((t) => t.fields.some((f) => f in formErrors))
     if (tab) setActiveTab(tab.id)
-  }
-
-  function handleCertChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setCertName(e.target.files?.[0]?.name ?? null)
   }
 
   async function handleCepBlur(cep: string) {
@@ -137,8 +180,6 @@ export function EmpresaForm({ company }: Props) {
     Object.entries(data).forEach(([k, v]) => {
       if (v !== undefined && v !== '') formData.set(k, String(v))
     })
-    const certFile = certInputRef.current?.files?.[0]
-    if (certFile) formData.set('certificado_file', certFile)
 
     startTransition(async () => {
       if (isEdit) {
@@ -181,7 +222,8 @@ export function EmpresaForm({ company }: Props) {
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-4">
         <div className="app-card p-6 flex flex-col gap-6">
 
-        {/* Abas */}
+        {/* Abas + exportar PDF (à direita) */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2" role="tablist">
           {TABS.map((tab) => {
             const active = activeTab === tab.id
@@ -207,6 +249,23 @@ export function EmpresaForm({ company }: Props) {
               </button>
             )
           })}
+        </div>
+        {isEdit && (
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={pdfLoading}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-colors hover:bg-[var(--color-brand-light)] shrink-0 disabled:opacity-60 disabled:cursor-wait"
+            style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
+          >
+            {pdfLoading ? (
+              <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+            ) : (
+              <Icon name="download" size={16} />
+            )}
+            {pdfLoading ? 'Gerando PDF…' : 'Exportar PDF'}
+          </button>
+        )}
         </div>
 
         {/* Dados da empresa */}
@@ -337,32 +396,6 @@ export function EmpresaForm({ company }: Props) {
           </div>
         </TabPanel>
 
-        {/* Certificado digital */}
-        <TabPanel active={activeTab === 'certificado'}>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Arquivo do certificado (.pfx / .p12)
-            </label>
-            <label
-              className="flex items-center gap-3 cursor-pointer h-10 rounded-lg border px-3 text-sm hover:bg-gray-50 transition-colors"
-              style={{ borderColor: 'var(--color-bg-surface)', color: certName ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
-            >
-              <span>📎</span>
-              <span className="truncate">{certName ?? 'Selecionar arquivo...'}</span>
-              <input ref={certInputRef} type="file" accept=".pfx,.p12,application/x-pkcs12"
-                className="hidden" onChange={handleCertChange} />
-            </label>
-          </div>
-
-          <PasswordInput
-            label={isEdit && company.certificado_digital_url
-              ? 'Nova senha do certificado (deixe em branco para manter)'
-              : 'Senha do certificado digital'}
-            placeholder="••••••••"
-            autoComplete="off"
-            {...register('certificado_digital_senha')}
-          />
-        </TabPanel>
         </div>
 
         {serverError && (

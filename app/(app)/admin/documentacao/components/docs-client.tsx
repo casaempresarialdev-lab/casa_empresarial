@@ -1,19 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@/components/ui/icon'
-import { IconButton } from '@/components/ui/icon-button'
+import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { AddButton } from '@/components/ui/add-button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
-import { TABLE_WRAPPER_CLASS, TABLE_HEAD_STYLE, TH_CLASS, ROW_CLASS, ROW_STYLE } from '@/components/ui/table-styles'
 import { toast } from '@/lib/toast'
 import { ModalDocument } from './modal-document'
-import { ModalViewer } from './modal-viewer'
-import { deleteDocumentAction, getSignedUrlAction } from '../actions'
-import type { Document } from '../queries'
+import { ModalFolder } from './modal-folder'
+import { ModalMove, type MoveTarget } from './modal-move'
+import { FileViewer, triggerDownload } from '@/components/ui/file-viewer'
+import { deleteDocumentAction, deleteFolderAction, getSignedUrlAction } from '../actions'
+import { folderParent, folderPath, folderSubtree } from '../folder-tree'
+import type { Document, DocumentFolder } from '../queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 
 // Mesmo critério do dashboard: "vencendo" = até 30 dias
@@ -39,12 +41,24 @@ function vencimentoStatus(vencimento: string | null, today: string) {
   return { label: 'Válido', bg: '#DCFCE7', color: '#15803D' }
 }
 
+// Conteúdo da pasta: "2 pastas · 3 documentos" / "Nenhum documento ainda"
+function conteudo(pastas: number, docs: number) {
+  const partes = [
+    pastas ? `${pastas} ${pastas === 1 ? 'pasta' : 'pastas'}` : null,
+    docs ? (docs === 1 ? '1 documento arquivado' : `${docs} documentos arquivados`) : null,
+  ].filter(Boolean)
+  return partes.length ? partes.join(' · ') : 'Nenhum documento ainda'
+}
+
 interface Props {
   documents: Document[]
+  folders: DocumentFolder[]
+  /** Erro ao ler as pastas (ex.: tabela ainda não criada) — mostra a lista de documentos sem pastas */
+  foldersError: string | null
   companyId: string
 }
 
-export function DocsClient({ documents, companyId }: Props) {
+export function DocsClient({ documents, folders, foldersError, companyId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
@@ -54,20 +68,53 @@ export function DocsClient({ documents, companyId }: Props) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Document | null>(null)
   const [infoTarget, setInfoTarget] = useState<Document | null>(null)
+  const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null)
+  // Pastas: pasta aberta (null = raiz), modal de criar/renomear e exclusão
+  const [currentId, setCurrentId] = useState<string | null>(null)
+  const [folderModalOpen, setFolderModalOpen] = useState(false)
+  const [editingFolder, setEditingFolder] = useState<DocumentFolder | null>(null)
+  const [confirmFolder, setConfirmFolder] = useState<DocumentFolder | null>(null)
+  const [deletingFolder, setDeletingFolder] = useState(false)
 
   const today = todayIso()
+  const usaPastas = !foldersError
+  const folderIds = new Set(folders.map((f) => f.id))
+  // Documento sem pasta (ou de pasta que não existe mais) fica na raiz (null)
+  const pastaDoDoc = (d: Document) => (d.folder_id && folderIds.has(d.folder_id) ? d.folder_id : null)
 
-  const filtered = documents.filter((d) => {
-    const q = search.toLowerCase()
-    return (
-      d.nome.toLowerCase().includes(q) ||
-      (d.descricao ?? '').toLowerCase().includes(q) ||
-      (d.observacao ?? '').toLowerCase().includes(q)
-    )
-  })
+  // Pasta aberta que deixou de existir (ex.: excluída) volta para a raiz
+  const current = folders.find((f) => f.id === currentId) ?? null
+  const caminho = folderPath(folders, current?.id ?? null)
+
+  const q = search.toLowerCase()
+  const matchDoc = (d: Document) =>
+    d.nome.toLowerCase().includes(q) ||
+    (d.descricao ?? '').toLowerCase().includes(q) ||
+    (d.observacao ?? '').toLowerCase().includes(q)
+
+  // Sem busca: conteúdo da pasta aberta. Com busca: pastas e documentos de todas as pastas
+  const visibleFolders = !usaPastas
+    ? []
+    : search
+      ? folders.filter((f) => f.nome.toLowerCase().includes(q))
+      : folders.filter((f) => folderParent(folders, f) === (current?.id ?? null))
+  const visibleDocs = !usaPastas
+    ? documents.filter(matchDoc)
+    : search
+      ? documents.filter(matchDoc)
+      : documents.filter((d) => pastaDoDoc(d) === (current?.id ?? null))
+
+  const nomeCaminho = (folderId: string | null) =>
+    folderId ? folderPath(folders, folderId).map((p) => p.nome).join(' / ') : 'Raiz'
+
+  function goTo(id: string | null) {
+    setCurrentId(id)
+    setSearch('')
+  }
 
   function openAdd() { setEditingDoc(null); setModalOpen(true) }
   function openEdit(d: Document) { setEditingDoc(d); setModalOpen(true) }
+  function openAddFolder() { setEditingFolder(null); setFolderModalOpen(true) }
 
   // Remoção confirmada no modal; o resultado aparece no toast (✓ / ✕)
   async function confirmDelete() {
@@ -85,8 +132,26 @@ export function DocsClient({ documents, companyId }: Props) {
     if (!('error' in result && result.error)) router.refresh()
   }
 
+  async function confirmDeleteFolder() {
+    const f = confirmFolder
+    if (!f) return
+    setDeletingFolder(true)
+    const result = await toast.promise(deleteFolderAction(f.id, companyId), {
+      loading: `Excluindo a pasta ${f.nome}…`,
+      success: `A pasta ${f.nome} foi excluída.`,
+      error: 'Não foi possível excluir a pasta.',
+    })
+    setDeletingFolder(false)
+    setConfirmFolder(null)
+    if (!result.error) {
+      // Estava dentro da pasta excluída: volta para a pasta de cima
+      if (current && folderSubtree(folders, f.id).has(current.id)) goTo(folderParent(folders, f))
+      router.refresh()
+    }
+  }
+
   // Download com o nome original do arquivo (link temporário com Content-Disposition: attachment)
-  async function handleDownload(d: Document) {
+  async function handleDownload(d: { id: string; nome: string }) {
     setDownloadingId(d.id)
     const result = await getSignedUrlAction(d.id, companyId, true)
     setDownloadingId(null)
@@ -94,11 +159,85 @@ export function DocsClient({ documents, companyId }: Props) {
       toast.error(result.error ?? 'Não foi possível baixar o documento.')
       return
     }
-    const a = window.document.createElement('a')
-    a.href = result.url
-    a.download = d.nome
-    a.click()
+    triggerDownload(result.url, d.nome)
   }
+
+  function renderFolder(f: DocumentFolder) {
+    const subpastas = folders.filter((x) => folderParent(folders, x) === f.id).length
+    const docs = documents.filter((d) => pastaDoDoc(d) === f.id).length
+    // Vencidos em qualquer nível dentro da pasta
+    const dentro = folderSubtree(folders, f.id)
+    const vencidos = documents.filter((d) => {
+      const p = pastaDoDoc(d)
+      return p && dentro.has(p) && vencimentoStatus(d.vencimento, today)?.label === 'Vencido'
+    }).length
+    return (
+      <ListItem
+        key={`f-${f.id}`}
+        icon="folder"
+        title={f.nome}
+        subtitle={search ? `${nomeCaminho(folderParent(folders, f))} · ${conteudo(subpastas, docs)}` : conteudo(subpastas, docs)}
+        onClick={() => goTo(f.id)}
+        aside={
+          <>
+            {vencidos > 0 && (
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>
+                {vencidos} {vencidos === 1 ? 'vencido' : 'vencidos'}
+              </span>
+            )}
+            {f.sistema && (
+              // Pasta padrão: não pode ser movida, renomeada nem excluída
+              <span
+                className="inline-flex items-center"
+                style={{ color: 'var(--color-text-muted)' }}
+                title="Pasta padrão do sistema: não pode ser movida, renomeada nem excluída"
+                aria-label="Pasta padrão"
+              >
+                <Icon name="lock" size={16} />
+              </span>
+            )}
+          </>
+        }
+        actionsLabel={f.nome}
+        actions={[
+          { icon: 'folder', label: 'Abrir', onClick: () => goTo(f.id) },
+          { icon: 'external', label: f.sistema ? 'Mover para… (pasta padrão)' : 'Mover para…', onClick: () => setMoveTarget({ kind: 'folder', folder: f }), disabled: f.sistema },
+          { icon: 'pencil', label: f.sistema ? 'Renomear (pasta padrão)' : 'Renomear', onClick: () => { setEditingFolder(f); setFolderModalOpen(true) }, disabled: f.sistema },
+          { icon: 'trash', label: f.sistema ? 'Excluir (pasta padrão)' : 'Excluir', tone: 'danger', onClick: () => setConfirmFolder(f), disabled: f.sistema },
+        ]}
+      />
+    )
+  }
+
+  function renderDoc(d: Document) {
+    const status = vencimentoStatus(d.vencimento, today)
+    const titulo = d.descricao || d.nome
+    const detalhes = [search && usaPastas ? nomeCaminho(pastaDoDoc(d)) : null, d.nome, d.vencimento ? `Vence em ${formatDate(d.vencimento)}` : null]
+    return (
+      <ListItem
+        key={`d-${d.id}`}
+        icon="file"
+        title={titulo}
+        subtitle={detalhes.filter(Boolean).join(' · ')}
+        aside={status && (
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ backgroundColor: status.bg, color: status.color }}>
+            {status.label}
+          </span>
+        )}
+        actionsLabel={titulo}
+        actions={[
+          { icon: 'eye', label: 'Visualizar', onClick: () => setViewTarget(d) },
+          { icon: 'download', label: 'Baixar', onClick: () => handleDownload(d), disabled: downloadingId === d.id },
+          { icon: 'info', label: d.observacao ? 'Observação' : 'Sem observação', onClick: () => setInfoTarget(d) },
+          ...(usaPastas ? [{ icon: 'external' as const, label: 'Mover para…', onClick: () => setMoveTarget({ kind: 'document', id: d.id, titulo, folderId: pastaDoDoc(d) }) }] : []),
+          { icon: 'pencil', label: 'Editar', onClick: () => openEdit(d) },
+          { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(d), disabled: deletingId === d.id },
+        ]}
+      />
+    )
+  }
+
+  const totalAqui = visibleFolders.length + visibleDocs.length
 
   return (
     <>
@@ -116,10 +255,58 @@ export function DocsClient({ documents, companyId }: Props) {
       </div>
 
       <div className="app-card p-5 flex flex-col gap-4">
-        {/* Barra do box: resumo + busca + adicionar */}
+        {foldersError && (
+          <p className="text-sm p-4 rounded-lg" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+            As pastas ainda não estão disponíveis: {foldersError}
+          </p>
+        )}
+
+        {/* Caminho das pastas: Raiz / Pasta / Subpasta (cada nível é clicável) */}
+        {usaPastas && current && (
+          <nav aria-label="Caminho da pasta" className="flex flex-wrap items-center gap-1 text-sm">
+            <button
+              type="button"
+              onClick={() => goTo(folderParent(folders, current))}
+              className="inline-flex items-center h-8 px-1.5 -ml-1.5 rounded-lg transition-colors hover:bg-gray-50"
+              style={{ color: 'var(--color-text-muted)' }}
+              aria-label="Voltar"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            <button type="button" onClick={() => goTo(null)} className="hover:underline" style={{ color: 'var(--color-text-muted)' }}>
+              Raiz
+            </button>
+            {caminho.map((p, i) => {
+              const last = i === caminho.length - 1
+              return (
+                <Fragment key={p.id}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>/</span>
+                  {last ? (
+                    <span className="flex items-center gap-1.5 font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+                      <span style={{ color: 'var(--color-brand)' }}><Icon name="folder" size={16} /></span>
+                      {p.nome}
+                    </span>
+                  ) : (
+                    <button type="button" onClick={() => goTo(p.id)} className="hover:underline" style={{ color: 'var(--color-text-muted)' }}>
+                      {p.nome}
+                    </button>
+                  )}
+                </Fragment>
+              )
+            })}
+          </nav>
+        )}
+
+        {/* Barra do box: resumo + busca + adicionar pasta / documento */}
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm font-semibold shrink-0" style={{ color: 'var(--color-sidebar-text)' }}>
-            {documents.length} {documents.length === 1 ? 'documento' : 'documentos'}
+            {search
+              ? `${totalAqui} ${totalAqui === 1 ? 'resultado' : 'resultados'}`
+              : usaPastas
+                ? conteudo(visibleFolders.length, visibleDocs.length).replace('Nenhum documento ainda', 'Vazia')
+                : `${documents.length} ${documents.length === 1 ? 'documento' : 'documentos'}`}
           </p>
           <div className="flex-1 min-w-[200px] flex items-center gap-2 h-9 px-3 rounded-lg border" style={{ borderColor: 'var(--color-card-border)' }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0" style={{ color: 'var(--color-text-muted)' }}>
@@ -128,92 +315,31 @@ export function DocsClient({ documents, companyId }: Props) {
             </svg>
             <input
               type="text"
-              placeholder="Pesquisar por documento, arquivo ou observação..."
+              placeholder={usaPastas ? 'Pesquisar pastas e documentos...' : 'Pesquisar por documento, arquivo ou observação...'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-0 bg-transparent text-sm outline-none"
               style={{ color: 'var(--color-text-primary)' }}
             />
           </div>
-          <AddButton onClick={openAdd} />
+          {usaPastas && <AddButton onClick={openAddFolder} label="Nova pasta" />}
+          <AddButton onClick={openAdd} label={usaPastas ? 'Documento' : 'Adicionar'} />
         </div>
 
-        <div className={TABLE_WRAPPER_CLASS}>
-          <table className="w-full min-w-[640px] text-sm">
-            <thead style={TABLE_HEAD_STYLE}>
-              <tr>
-                <th className={TH_CLASS}>Documento</th>
-                <th className={TH_CLASS}>Vencimento</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                    {search ? 'Nenhum documento encontrado para essa pesquisa.' : 'Nenhum documento enviado ainda.'}
-                  </td>
-                </tr>
-              )}
-              {filtered.map((d) => {
-                const status = vencimentoStatus(d.vencimento, today)
-                const titulo = d.descricao || d.nome
-                return (
-                  <tr key={d.id} className={ROW_CLASS} style={ROW_STYLE}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        {/* ⓘ abre a observação (mais apagado quando não há observação) */}
-                        <button
-                          type="button"
-                          onClick={() => setInfoTarget(d)}
-                          className="p-1 -ml-1 rounded-md transition-colors hover:bg-gray-100 shrink-0"
-                          style={{ color: d.observacao ? 'var(--color-brand)' : 'var(--color-text-muted)', opacity: d.observacao ? 1 : 0.5 }}
-                          title={d.observacao ? 'Ver observação' : 'Sem observação'}
-                          aria-label={`Observação de ${titulo}`}
-                        >
-                          <Icon name="info" size={16} />
-                        </button>
-                        <div className="min-w-0">
-                          <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{titulo}</p>
-                          <p className="flex items-center gap-1 text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
-                            <Icon name="file" size={12} />
-                            {d.nome}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {status && d.vencimento ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor: status.bg, color: status.color }}>
-                            {status.label}
-                          </span>
-                          <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(d.vencimento)}</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Sem vencimento</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end">
-                        <IconButton icon="eye" label={`Visualizar ${titulo}`} onClick={() => setViewTarget(d)} />
-                        <IconButton icon="download" label={`Baixar ${titulo}`} onClick={() => handleDownload(d)} disabled={downloadingId === d.id} />
-                        <IconButton icon="pencil" label={`Editar ${titulo}`} onClick={() => openEdit(d)} />
-                        <IconButton
-                          icon="trash"
-                          label={`Remover ${titulo}`}
-                          tone="danger"
-                          onClick={() => setConfirmTarget(d)}
-                          disabled={deletingId === d.id}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        {/* Pastas e documentos do nível atual (ou resultados da busca) */}
+        <ul className="flex flex-col gap-3">
+          {totalAqui === 0 && (
+            <ListEmpty>
+              {search
+                ? 'Nenhuma pasta ou documento encontrado para essa pesquisa.'
+                : !usaPastas
+                  ? 'Nenhum documento enviado ainda.'
+                  : current ? 'Esta pasta está vazia.' : 'Nenhuma pasta ou documento ainda.'}
+            </ListEmpty>
+          )}
+          {visibleFolders.map(renderFolder)}
+          {visibleDocs.map(renderDoc)}
+        </ul>
       </div>
 
       <ModalDocument
@@ -221,11 +347,24 @@ export function DocsClient({ documents, companyId }: Props) {
         onClose={() => { setModalOpen(false); setEditingDoc(null) }}
         companyId={companyId}
         document={editingDoc}
+        folders={folders}
+        defaultFolderId={current?.id ?? null}
       />
 
-      <ModalViewer
-        document={viewTarget}
+      <ModalFolder
+        open={folderModalOpen}
+        onClose={() => { setFolderModalOpen(false); setEditingFolder(null) }}
         companyId={companyId}
+        folder={editingFolder}
+        parentId={current?.id ?? null}
+        parentName={current?.nome ?? null}
+      />
+
+      <ModalMove target={moveTarget} onClose={() => setMoveTarget(null)} companyId={companyId} folders={folders} />
+
+      <FileViewer
+        file={viewTarget && { id: viewTarget.id, titulo: viewTarget.descricao || viewTarget.nome, nome: viewTarget.nome, tipo: viewTarget.tipo }}
+        getUrl={(id) => getSignedUrlAction(id, companyId)}
         onClose={() => setViewTarget(null)}
         onDownload={handleDownload}
         downloading={!!viewTarget && downloadingId === viewTarget.id}
@@ -259,6 +398,20 @@ export function DocsClient({ documents, companyId }: Props) {
         loading={!!deletingId}
         title="Remover documento"
         message={<p>Remover <strong>{confirmTarget ? confirmTarget.descricao || confirmTarget.nome : ''}</strong> da documentação?</p>}
+      />
+
+      <ConfirmDialog
+        open={!!confirmFolder}
+        onClose={() => { if (!deletingFolder) setConfirmFolder(null) }}
+        onConfirm={confirmDeleteFolder}
+        loading={deletingFolder}
+        title="Excluir pasta"
+        message={
+          <p>
+            Excluir a pasta <strong>{confirmFolder?.nome}</strong>? Nada é apagado: os documentos e as pastas dentro dela passam para{' '}
+            <strong>{confirmFolder ? nomeCaminho(folderParent(folders, confirmFolder)) : ''}</strong>.
+          </p>
+        }
       />
     </>
   )

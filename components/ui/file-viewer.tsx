@@ -1,11 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Modal } from '@/components/ui/modal'
-import { Button } from '@/components/ui/button'
-import { Icon } from '@/components/ui/icon'
-import { getSignedUrlAction } from '../actions'
-import type { Document } from '../queries'
+import { Modal } from './modal'
+import { Button } from './button'
+import { Icon } from './icon'
 
 type Kind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'other'
 
@@ -20,37 +18,48 @@ function kindOf(tipo: string | null, nome: string): Kind {
   return 'other'
 }
 
+export interface ViewerFile {
+  id: string
+  /** Título exibido no topo (ex.: descrição do documento) */
+  titulo: string
+  /** Nome original do arquivo */
+  nome: string
+  tipo: string | null
+}
+
 interface Props {
-  document: Document | null
-  companyId: string
+  file: ViewerFile | null
+  /** Gera o link temporário do arquivo para visualização */
+  getUrl: (id: string) => Promise<{ url?: string; error?: string }>
   onClose: () => void
-  onDownload: (doc: Document) => void
+  onDownload: (file: ViewerFile) => void
   downloading: boolean
 }
 
-// Visualizador do documento: busca um link temporário e mostra o arquivo conforme o tipo
-export function ModalViewer({ document: doc, companyId, onClose, onDownload, downloading }: Props) {
+// Visualizador de arquivo em modal: mostra PDF, imagem, vídeo, áudio e texto; os demais oferecem download
+export function FileViewer({ file, getUrl, onClose, onDownload, downloading }: Props) {
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!doc) return
+    if (!file) return
     let cancelled = false
     setUrl(null)
     setError(null)
-    getSignedUrlAction(doc.id, companyId).then((result) => {
+    getUrl(file.id).then((result) => {
       if (cancelled) return
-      if (result.error || !result.url) setError(result.error ?? 'Não foi possível abrir o documento.')
+      if (result.error || !result.url) setError(result.error ?? 'Não foi possível abrir o arquivo.')
       else setUrl(result.url)
     })
     return () => { cancelled = true }
-  }, [doc, companyId])
+    // getUrl costuma ser uma função inline: o efeito depende só do arquivo aberto
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file])
 
-  const kind = doc ? kindOf(doc.tipo, doc.nome) : 'other'
-  const titulo = doc ? doc.descricao || doc.nome : ''
+  const kind = file ? kindOf(file.tipo, file.nome) : 'other'
 
   return (
-    <Modal open={!!doc} onClose={onClose} title={titulo} description={doc?.nome} className="sm:max-w-5xl">
+    <Modal open={!!file} onClose={onClose} title={file?.titulo ?? ''} description={file?.nome} className="sm:max-w-5xl">
       <div className="flex flex-col gap-4">
         <div
           className="rounded-xl border flex items-center justify-center overflow-hidden min-h-[50vh]"
@@ -66,9 +75,9 @@ export function ModalViewer({ document: doc, companyId, onClose, onDownload, dow
             </svg>
           ) : kind === 'image' ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={url} alt={titulo} className="max-h-[70vh] max-w-full object-contain" />
+            <img src={url} alt={file?.titulo} className="max-h-[70vh] max-w-full object-contain" />
           ) : kind === 'pdf' || kind === 'text' ? (
-            <iframe src={url} title={titulo} className="w-full h-[70vh] bg-white" />
+            <iframe src={url} title={file?.titulo} className="w-full h-[70vh] bg-white" />
           ) : kind === 'video' ? (
             <video src={url} controls className="max-h-[70vh] max-w-full" />
           ) : kind === 'audio' ? (
@@ -89,8 +98,8 @@ export function ModalViewer({ document: doc, companyId, onClose, onDownload, dow
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Fechar</Button>
-          {doc && (
-            <Button type="button" onClick={() => onDownload(doc)} loading={downloading}>
+          {file && (
+            <Button type="button" onClick={() => onDownload(file)} loading={downloading}>
               <Icon name="download" size={16} />
               Baixar
             </Button>
@@ -99,4 +108,12 @@ export function ModalViewer({ document: doc, companyId, onClose, onDownload, dow
       </div>
     </Modal>
   )
+}
+
+/** Baixa um arquivo a partir de um link de download (Content-Disposition: attachment) */
+export function triggerDownload(url: string, nome: string) {
+  const a = window.document.createElement('a')
+  a.href = url
+  a.download = nome
+  a.click()
 }

@@ -8,23 +8,39 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Icon } from '@/components/ui/icon'
 
+// Papel do usuário na empresa (mesmos nomes da tela Usuários)
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Proprietário',
+  admin: 'Administrador',
+  member: 'Membro',
+  accountant: 'Contador',
+  colaborador: 'Colaborador',
+}
+
 interface UserMenuProps {
   userName?: string
+  userEmail?: string | null
   userAvatar?: string | null
-  companies?: { id: string; razao_social: string }[]
+  companies?: { id: string; razao_social: string; role?: string }[]
   /** Sidebar retraída no desktop: mostra só o avatar */
   compact?: boolean
   onNavigate?: () => void
 }
 
-export function UserMenu({ userName, userAvatar, companies = [], compact, onNavigate }: UserMenuProps) {
+export function UserMenu({ userName, userEmail, userAvatar, companies = [], compact, onNavigate }: UserMenuProps) {
   const router = useRouter()
   const activeCompanyId = useAppStore((s) => s.activeCompanyId)
   const setActiveCompany = useAppStore((s) => s.setActiveCompany)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [companiesOpen, setCompaniesOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const companyName = (companies.find((c) => c.id === activeCompanyId) ?? companies[0])?.razao_social
+  const activeCompany = companies.find((c) => c.id === activeCompanyId) ?? companies[0]
+  const companyName = activeCompany?.razao_social
+  const roleLabel = activeCompany?.role ? ROLE_LABELS[activeCompany.role] ?? activeCompany.role : null
+
+  // Ao fechar o menu, a lista de empresas também fecha
+  useEffect(() => { if (!menuOpen) setCompaniesOpen(false) }, [menuOpen])
 
   // Fecha o dropdown ao clicar fora
   useEffect(() => {
@@ -99,43 +115,100 @@ export function UserMenu({ userName, userAvatar, companies = [], compact, onNavi
         </svg>
       </button>
 
-      {/* Dropdown — abre para cima */}
+      {/* Dropdown — abre para cima: usuário, empresa, atalhos e sair */}
       {menuOpen && (
         <div
-          className="absolute left-0 bottom-full mb-2 w-52 rounded-xl border shadow-lg py-1 z-50"
+          className="absolute left-0 bottom-full mb-2 w-72 rounded-xl border shadow-lg z-50"
           style={{ backgroundColor: '#FFFFFF', borderColor: 'var(--color-bg-surface)' }}
         >
-          {/* Troca de empresa — só para quem tem mais de uma */}
-          {companies.length > 1 && (
-            <div className="border-b py-1" style={{ borderColor: 'var(--color-bg-surface)' }}>
-              <p className="px-4 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
-                EMPRESAS
+          {/* Usuário: foto, nome, papel na empresa ativa e e-mail */}
+          <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+            <div
+              className="w-11 h-11 rounded-full flex items-center justify-center text-base font-semibold shrink-0 overflow-hidden"
+              style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
+            >
+              {userAvatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={userAvatar} alt={userName} className="w-11 h-11 rounded-full object-cover" />
+              ) : (
+                userName?.charAt(0).toUpperCase() ?? '?'
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+                {userName}
+                {roleLabel && <span className="ml-1 font-semibold" style={{ color: 'var(--color-brand)' }}>[{roleLabel}]</span>}
               </p>
-              {companies.map((c) => {
-                const active = c.id === activeCompanyId
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => { setActiveCompany(c.id); setMenuOpen(false) }}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 transition-colors text-left"
-                    style={{ color: active ? 'var(--color-primary-darker)' : 'var(--color-sidebar-text)', fontWeight: active ? 600 : 400 }}
+              {userEmail && (
+                <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{userEmail}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Empresa ativa; com mais de uma, a seta abre a lista para trocar */}
+          {activeCompany && (
+            <div className="px-4 pb-3">
+              <p className="pb-1.5 text-[11px] font-semibold tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+                EMPRESA
+              </p>
+              <button
+                type="button"
+                onClick={() => setCompaniesOpen((v) => !v)}
+                disabled={companies.length < 2}
+                className="w-full flex items-center gap-2 h-10 px-3 rounded-lg bg-gray-50 text-sm text-left transition-colors enabled:hover:bg-gray-100 disabled:cursor-default"
+                style={{ color: 'var(--color-text-primary)' }}
+                aria-expanded={companiesOpen}
+              >
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--color-brand)' }} />
+                <span className="flex-1 truncate font-medium">{activeCompany.razao_social}</span>
+                {companies.length > 1 && (
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    className={cn('shrink-0 transition-transform duration-200', companiesOpen && 'rotate-180')}
+                    style={{ color: 'var(--color-text-muted)' }}
                   >
-                    <span className="flex-1 truncate">{c.razao_social}</span>
-                    {active && <span aria-hidden="true">✓</span>}
-                  </button>
-                )
-              })}
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                )}
+              </button>
+              {companiesOpen && (
+                <div className="mt-1 rounded-lg border py-1" style={{ borderColor: 'var(--color-bg-surface)' }}>
+                  {companies.map((c) => {
+                    const active = c.id === activeCompany.id
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => { setActiveCompany(c.id); setCompaniesOpen(false); setMenuOpen(false) }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 transition-colors text-left"
+                        style={{ color: active ? 'var(--color-brand)' : 'var(--color-sidebar-text)', fontWeight: active ? 600 : 400 }}
+                      >
+                        <span className="flex-1 truncate">{c.razao_social}</span>
+                        {active && <span aria-hidden="true">✓</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
-          <nav className="py-1">
+          <nav className="border-t py-2" style={{ borderColor: 'var(--color-bg-surface)' }}>
             <Link
-              href="/configuracoes"
+              href="/empresa"
               onClick={closeAll}
               className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
               style={{ color: 'var(--color-sidebar-text)' }}
             >
-              <Icon name="settings" size={16} /> Configurações
+              <Icon name="briefcase" size={16} /> Minha Empresa
+            </Link>
+            <Link
+              href="/admin/usuarios"
+              onClick={closeAll}
+              className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: 'var(--color-sidebar-text)' }}
+            >
+              <Icon name="users" size={16} /> Usuários
             </Link>
             <Link
               href="/meu-plano"
@@ -146,22 +219,22 @@ export function UserMenu({ userName, userAvatar, companies = [], compact, onNavi
               <Icon name="star" size={16} /> Meu Plano
             </Link>
             <Link
-              href="/admin/usuarios"
+              href="/configuracoes"
               onClick={closeAll}
               className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
               style={{ color: 'var(--color-sidebar-text)' }}
             >
-              <Icon name="users" size={16} /> Usuários
+              <Icon name="settings" size={16} /> Configurações
             </Link>
           </nav>
 
-          <div className="border-t py-1" style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <div className="border-t py-2" style={{ borderColor: 'var(--color-bg-surface)' }}>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-[var(--color-brand-light)] transition-colors text-left"
               style={{ color: 'var(--color-brand)' }}
             >
-              <Icon name="logout" size={16} /> Sair
+              <Icon name="logout" size={16} /> Sair da conta
             </button>
           </div>
         </div>
