@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Administrativo',
     icon: 'file',
     children: [
+      { label: 'Dashboard', href: '/admin' },
       { label: 'Quadro Societário', href: '/admin/quadro-societario' },
       { label: 'Documentação', href: '/admin/documentacao' },
       { label: 'Certificado digital', href: '/admin/certificado-digital' },
@@ -407,7 +408,11 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
                         style={{ borderColor: 'var(--color-bg-surface)' }}
                       >
                         {item.children.map((child) => {
-                          const active = pathname.startsWith(child.href)
+                          // Item mais específico que bate com o endereço (o Dashboard /admin não fica ativo em /admin/…)
+                          const ativo = item.children
+                            .filter((c) => pathname === c.href || pathname.startsWith(c.href + '/'))
+                            .sort((a, b) => b.href.length - a.href.length)[0]
+                          const active = ativo?.href === child.href
                           return (
                             <Link
                               key={child.href}
