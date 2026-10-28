@@ -210,9 +210,6 @@ export function FuncionariosClient({ employees, finalStageKey }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Colaboradores, prestadores e autônomos da empresa
-          </p>
         </div>
       </div>
 

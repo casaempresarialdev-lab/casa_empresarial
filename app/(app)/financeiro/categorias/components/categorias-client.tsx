@@ -167,9 +167,6 @@ export function CategoriasClient({ categories, companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Classifique receitas e despesas por categoria
-          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => openAdd('receita')}>+ Receita</Button>

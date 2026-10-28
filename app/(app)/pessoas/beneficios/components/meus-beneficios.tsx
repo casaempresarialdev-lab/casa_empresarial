@@ -22,9 +22,6 @@ export function MeusBeneficios({ employee, benefits }: Props) {
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Benefícios vinculados ao seu cadastro
-        </p>
       </div>
 
       {activeBenefits.length === 0 ? (

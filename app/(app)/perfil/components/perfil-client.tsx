@@ -146,9 +146,6 @@ export function PerfilClient({ perfil, email, abaInicial }: Props) {
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Seus dados pessoais e de acesso
-        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">

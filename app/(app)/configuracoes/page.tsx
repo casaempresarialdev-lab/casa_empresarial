@@ -27,7 +27,7 @@ export default async function ConfiguracoesPage() {
 
   return (
     <div className="w-full">
-      <PageTitle title="Configurações" description="Personalize a aparência da sua empresa no sistema" />
+      <PageTitle title="Configurações" />
 
       <ConfigIdentidadeVisual
         companyId={companyId}

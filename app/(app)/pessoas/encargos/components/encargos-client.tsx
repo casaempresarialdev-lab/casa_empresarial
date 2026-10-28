@@ -151,9 +151,6 @@ export function EncargosClient({ employees, aliquotas, companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Estimativa de custo patronal por funcionário
-          </p>
         </div>
         {employees.length > 0 && (
           <Button variant="ghost" onClick={handleExportCsv}>↓ Exportar custo CSV</Button>

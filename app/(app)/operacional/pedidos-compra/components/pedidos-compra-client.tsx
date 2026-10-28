@@ -212,9 +212,6 @@ export function PedidosCompraClient({ orders, contacts, products, companyId }: P
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Compras e reposição de estoque
-          </p>
         </div>
         <Button onClick={() => router.push('/operacional/pedidos-compra/novo')}>Adicionar</Button>
       </div>

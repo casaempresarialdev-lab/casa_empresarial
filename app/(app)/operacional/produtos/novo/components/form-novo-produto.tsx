@@ -111,9 +111,6 @@ export function FormNovoProduto({ companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            Cadastrar produto ou serviço no catálogo
-          </p>
         </div>
       </div>
 

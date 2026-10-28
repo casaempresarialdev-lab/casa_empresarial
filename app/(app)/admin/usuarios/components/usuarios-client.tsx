@@ -125,9 +125,6 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Membros com acesso a esta empresa
-        </p>
       </div>
 
       <div className="app-card p-5 flex flex-col gap-4">

@@ -26,10 +26,10 @@ interface Props {
   abaInicial?: Aba
 }
 
-type Aba = 'minhas' | 'compartilhadas'
+type Aba = 'todas' | 'minhas' | 'compartilhadas'
 type Revelavel = { id: string; sistema: string; login: string; url: string | null; observacao: string | null }
 
-export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial = 'minhas' }: Props) {
+export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial = 'todas' }: Props) {
   const router = useRouter()
   const [aba, setAba] = useState<Aba>(abaInicial)
   const [modalOpen, setModalOpen] = useState(false)
@@ -50,6 +50,11 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
   const minhasFiltradas = minhas.filter(bate)
   const compartilhadasFiltradas = compartilhadas.filter(bate)
   const compartilharCred = minhas.find((c) => c.id === compartilharId) ?? null
+  // Todas: minhas + compartilhadas comigo, em ordem alfabética
+  const todasFiltradas = [
+    ...minhasFiltradas.map((c) => ({ tipo: 'minha' as const, c })),
+    ...compartilhadasFiltradas.map((c) => ({ tipo: 'recebida' as const, c })),
+  ].sort((a, b) => a.c.sistema.localeCompare(b.c.sistema, 'pt-BR'))
 
   function openAdd() { setEditingCredential(null); setModalOpen(true) }
   // Editar pede o PIN ao salvar; sem PIN cadastrado, avisa antes
@@ -86,6 +91,62 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
     </div>
   )
 
+  const itemMinha = (c: Credential) => {
+    const n = c.compartilhamentos.length
+    return (
+      <ListItem
+        key={c.id}
+        // Mesmo tamanho da foto das compartilhadas, para os títulos alinharem em "Todas"
+        media={
+          <span className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+            <Icon name="lock" size={17} />
+          </span>
+        }
+        title={c.sistema}
+        subtitle={
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="font-mono text-xs truncate">{c.login}</span>
+            {n > 0 && (
+              <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+                Compartilhada com {n}
+              </span>
+            )}
+          </span>
+        }
+        aside={senhaAside(c)}
+        actionsLabel={c.sistema}
+        actions={[
+          ...(c.url ? [{ icon: 'external' as const, label: 'Abrir site', onClick: () => window.open(c.url!, '_blank', 'noopener,noreferrer') }] : []),
+          { icon: 'info', label: c.observacao ? 'Observação' : 'Sem observação', onClick: () => setInfoTarget(c) },
+          { icon: 'users', label: n ? `Compartilhar (${n})` : 'Compartilhar', onClick: () => exigirPin(() => setCompartilharId(c.id)) },
+          { icon: 'pencil', label: 'Editar', onClick: () => openEdit(c) },
+          { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => exigirPin(() => setConfirmTarget(c)), disabled: deletingId === c.id },
+        ]}
+      />
+    )
+  }
+
+  // Recebida: foto de quem compartilhou com o selo de compartilhamento (só visualização)
+  const itemRecebida = (c: CredencialCompartilhada) => (
+    <ListItem
+      key={c.id}
+      media={<FotoDono nome={c.dono_nome} avatar={c.dono_avatar} />}
+      title={c.sistema}
+      subtitle={
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="font-mono text-xs truncate">{c.login}</span>
+          <span className="shrink-0 text-xs">· de {c.dono_nome}</span>
+        </span>
+      }
+      aside={senhaAside(c)}
+      actionsLabel={c.sistema}
+      actions={[
+        ...(c.url ? [{ icon: 'external' as const, label: 'Abrir site', onClick: () => window.open(c.url!, '_blank', 'noopener,noreferrer') }] : []),
+        { icon: 'info', label: c.observacao ? 'Observação' : 'Sem observação', onClick: () => setInfoTarget(c) },
+      ]}
+    />
+  )
+
   const abaBtn = (id: Aba, label: string, n: number) => {
     const active = aba === id
     return (
@@ -115,9 +176,6 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Seus logins e senhas pessoais, guardados com criptografia. Ver ou compartilhar uma senha pede o seu PIN de segurança.
-        </p>
       </div>
 
       {/* Sem PIN: aviso fixo com atalho para cadastrar */}
@@ -134,11 +192,12 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
       <div className="app-card p-5 flex flex-col gap-4">
         {/* Duas partes do cofre */}
         <div className="flex flex-wrap gap-2" role="tablist">
+          {abaBtn('todas', 'Todas', minhas.length + compartilhadas.length)}
           {abaBtn('minhas', 'Minhas credenciais', minhas.length)}
           {abaBtn('compartilhadas', 'Compartilhadas comigo', compartilhadas.length)}
         </div>
 
-        {/* Busca + adicionar (só nas minhas) */}
+        {/* Busca + adicionar (não aparece nas compartilhadas) */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[200px] flex items-center gap-2 h-9 px-3 rounded-lg border" style={{ borderColor: 'var(--color-card-border)' }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0" style={{ color: 'var(--color-text-muted)' }}>
@@ -154,8 +213,18 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
               style={{ color: 'var(--color-text-primary)' }}
             />
           </div>
-          {aba === 'minhas' && <AddButton onClick={openAdd} />}
+          {aba !== 'compartilhadas' && <AddButton onClick={openAdd} />}
         </div>
+
+        {/* Todas: minhas + compartilhadas comigo */}
+        {aba === 'todas' && (
+          <ul className="flex flex-col gap-3">
+            {todasFiltradas.length === 0 && (
+              <ListEmpty>{search ? 'Nenhuma credencial encontrada para essa pesquisa.' : 'Nenhuma credencial no cofre ainda.'}</ListEmpty>
+            )}
+            {todasFiltradas.map((x) => x.tipo === 'minha' ? itemMinha(x.c) : itemRecebida(x.c))}
+          </ul>
+        )}
 
         {/* Minhas credenciais */}
         {aba === 'minhas' && (
@@ -163,35 +232,7 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
             {minhasFiltradas.length === 0 && (
               <ListEmpty>{search ? 'Nenhuma credencial encontrada para essa pesquisa.' : 'Nenhuma credencial cadastrada.'}</ListEmpty>
             )}
-            {minhasFiltradas.map((c) => {
-              const n = c.compartilhamentos.length
-              return (
-                <ListItem
-                  key={c.id}
-                  icon="lock"
-                  title={c.sistema}
-                  subtitle={
-                    <span className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-xs truncate">{c.login}</span>
-                      {n > 0 && (
-                        <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
-                          Compartilhada com {n}
-                        </span>
-                      )}
-                    </span>
-                  }
-                  aside={senhaAside(c)}
-                  actionsLabel={c.sistema}
-                  actions={[
-                    ...(c.url ? [{ icon: 'external' as const, label: 'Abrir site', onClick: () => window.open(c.url!, '_blank', 'noopener,noreferrer') }] : []),
-                    { icon: 'info', label: c.observacao ? 'Observação' : 'Sem observação', onClick: () => setInfoTarget(c) },
-                    { icon: 'users', label: n ? `Compartilhar (${n})` : 'Compartilhar', onClick: () => exigirPin(() => setCompartilharId(c.id)) },
-                    { icon: 'pencil', label: 'Editar', onClick: () => openEdit(c) },
-                    { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => exigirPin(() => setConfirmTarget(c)), disabled: deletingId === c.id },
-                  ]}
-                />
-              )
-            })}
+            {minhasFiltradas.map(itemMinha)}
           </ul>
         )}
 
@@ -201,25 +242,7 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
             {compartilhadasFiltradas.length === 0 && (
               <ListEmpty>{search ? 'Nenhuma credencial encontrada para essa pesquisa.' : 'Ninguém compartilhou credenciais com você ainda.'}</ListEmpty>
             )}
-            {compartilhadasFiltradas.map((c) => (
-              <ListItem
-                key={c.id}
-                icon="users"
-                title={c.sistema}
-                subtitle={
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-xs truncate">{c.login}</span>
-                    <span className="shrink-0 text-xs">· de {c.dono_nome}</span>
-                  </span>
-                }
-                aside={senhaAside(c)}
-                actionsLabel={c.sistema}
-                actions={[
-                  ...(c.url ? [{ icon: 'external' as const, label: 'Abrir site', onClick: () => window.open(c.url!, '_blank', 'noopener,noreferrer') }] : []),
-                  { icon: 'info', label: c.observacao ? 'Observação' : 'Sem observação', onClick: () => setInfoTarget(c) },
-                ]}
-              />
-            ))}
+            {compartilhadasFiltradas.map(itemRecebida)}
           </ul>
         )}
       </div>
@@ -275,5 +298,22 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
         onConfirmar={confirmDelete}
       />
     </>
+  )
+}
+
+// Foto de quem compartilhou (ou a inicial), com o selo de compartilhamento no canto
+function FotoDono({ nome, avatar }: { nome: string; avatar: string | null }) {
+  return (
+    <span className="relative shrink-0 w-9 h-9" title={`Compartilhada por ${nome}`}>
+      <span className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-sm font-bold" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+        {avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatar} alt={nome} className="w-full h-full object-cover" />
+        ) : nome.charAt(0).toUpperCase()}
+      </span>
+      <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ring-2 ring-white" style={{ backgroundColor: 'var(--color-brand)', color: '#fff' }}>
+        <Icon name="share" size={11} />
+      </span>
+    </span>
   )
 }

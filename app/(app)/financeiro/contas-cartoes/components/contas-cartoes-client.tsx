@@ -81,9 +81,6 @@ export function ContasCartoesClient({ bankAccounts, creditCards, companyId }: Pr
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Contas bancárias e cartões de crédito da empresa
-          </p>
         </div>
       </div>
 

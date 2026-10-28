@@ -80,9 +80,6 @@ export function PrestadoresClient({ providers, companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Profissionais e empresas contratadas
-          </p>
         </div>
         <Button onClick={openAdd}>Adicionar</Button>
       </div>

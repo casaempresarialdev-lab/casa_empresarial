@@ -53,7 +53,6 @@ export function SocioPage({ socio, companyId, outrasParticipacoes, abrirDocument
             <h1 className="text-3xl font-extrabold truncate" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
               {socio.nome}
             </h1>
-            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Editar sócio</p>
           </div>
         </div>
         <Breadcrumb current={socio.nome} />

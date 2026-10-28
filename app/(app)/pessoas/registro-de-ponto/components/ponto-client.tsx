@@ -585,9 +585,6 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Controle de entrada e saída dos colaboradores
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs"

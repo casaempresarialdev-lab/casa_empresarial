@@ -144,9 +144,6 @@ export function BeneficiosClient({ companyId, benefits, employees }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Catálogo de benefícios e atribuição por funcionário
-          </p>
         </div>
         {tab === 'catalogo' && (
           <Button onClick={() => { setEditing(null); setModalOpen(true) }}>Adicionar</Button>

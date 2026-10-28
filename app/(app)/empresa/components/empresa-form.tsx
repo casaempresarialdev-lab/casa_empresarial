@@ -261,9 +261,6 @@ export function EmpresaForm({ company, banks }: Props) {
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          {isEdit ? 'Edite os dados da sua empresa' : 'Cadastre os dados da sua empresa para começar a usar o sistema'}
-        </p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-4">

@@ -126,7 +126,6 @@ export function FormNovoPedidoVenda({ companyId, contacts, products }: Props) {
             <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Novo Pedido de Venda</h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Registrar venda para cliente</p>
         </div>
       </div>
 

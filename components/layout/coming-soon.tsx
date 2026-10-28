@@ -1,10 +1,11 @@
 import { PageTitle } from './page-title'
 
 // Tela de área ainda não construída, no layout padrão
-export function ComingSoon({ title, description }: { title: string; description?: string }) {
+// (description fica só como referência da área; o cabeçalho não mostra subtítulo)
+export function ComingSoon({ title }: { title: string; description?: string }) {
   return (
     <div className="w-full">
-      <PageTitle title={title} description={description} />
+      <PageTitle title={title} />
       <div className="app-card p-10 text-center">
         <p className="text-base font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-sidebar-text)' }}>
           Em breve

@@ -87,9 +87,6 @@ export function NotificacoesClient({ notificacoes, compartilhamentos }: { notifi
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Avisos dos seus eventos do calendário e senhas compartilhadas com você
-        </p>
       </div>
 
       <div className="app-card p-5 flex flex-col gap-5">

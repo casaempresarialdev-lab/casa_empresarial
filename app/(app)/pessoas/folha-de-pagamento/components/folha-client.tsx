@@ -266,9 +266,6 @@ export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, compan
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Visão de folha e custo da equipe — gerada a partir do cadastro de funcionários
-          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 border rounded-lg px-3 py-1.5" style={{ borderColor: 'var(--color-bg-surface)' }}>

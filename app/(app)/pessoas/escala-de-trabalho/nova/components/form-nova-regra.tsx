@@ -230,9 +230,6 @@ export function FormNovaRegra({ companyId, employees }: Props) {
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Defina o horário e os dias de trabalho do colaborador
-        </p>
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>

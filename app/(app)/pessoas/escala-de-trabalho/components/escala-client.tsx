@@ -292,9 +292,6 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Turnos e jornadas dos colaboradores
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)' }}>

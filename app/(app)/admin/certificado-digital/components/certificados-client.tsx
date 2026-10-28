@@ -112,9 +112,6 @@ export function CertificadosClient({ certificates, loadError, companyId, temPin 
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Certificados da empresa, com as senhas guardadas com criptografia
-        </p>
       </div>
 
       <div className="app-card p-5 flex flex-col gap-4">

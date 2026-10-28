@@ -264,9 +264,6 @@ export function PesquisasClient({ surveys, companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Pesquisas de satisfação e clima organizacional
-          </p>
         </div>
         <Button onClick={openAdd}>Adicionar</Button>
       </div>

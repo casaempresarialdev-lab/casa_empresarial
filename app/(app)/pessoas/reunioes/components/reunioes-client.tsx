@@ -85,9 +85,6 @@ export function ReunioesClient({ meetings, companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Agendamento e atas de reuniões da equipe
-          </p>
         </div>
         <Button onClick={openAdd}>Adicionar</Button>
       </div>

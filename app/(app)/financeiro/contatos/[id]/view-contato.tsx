@@ -72,26 +72,21 @@ export function ViewContato({ contact }: Props) {
             <path d="M11 14L6 9l5-5" />
           </svg>
         </button>
-        <div className="flex-1">
-          <div className="flex flex-1 min-w-0 items-center gap-3">
-            {/* Título e breadcrumb na mesma linha */}
-            <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-              <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-                {contact.nome}
-              </h1>
-              <Breadcrumb />
-            </div>
-            <span
-              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-              style={{
-                backgroundColor: contact.tipo === 'PJ' ? '#EBF5FB' : '#F0FFF4',
-                color: contact.tipo === 'PJ' ? '#2471A3' : '#1E8449',
-              }}
-            >
-              {contact.tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}
-            </span>
-          </div>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Contato</p>
+        {/* Título e tipo à esquerda; breadcrumb à direita, na mesma linha */}
+        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+            {contact.nome}
+          </h1>
+          <span
+            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+            style={{
+              backgroundColor: contact.tipo === 'PJ' ? '#EBF5FB' : '#F0FFF4',
+              color: contact.tipo === 'PJ' ? '#2471A3' : '#1E8449',
+            }}
+          >
+            {contact.tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}
+          </span>
+          <Breadcrumb />
         </div>
       </div>
 

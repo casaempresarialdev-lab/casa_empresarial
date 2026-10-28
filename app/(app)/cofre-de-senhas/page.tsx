@@ -15,7 +15,7 @@ export default async function CofreDeSenhasPage({ searchParams }: { searchParams
   return (
     <div className="w-full">
       {/* key: ao chegar por um link de notificação com outra aba, a tela reabre nela */}
-      <CredentialsClient key={aba ?? 'minhas'} minhas={cofre.minhas} compartilhadas={cofre.compartilhadas} temPin={cofre.temPin} abaInicial={aba === 'compartilhadas' ? 'compartilhadas' : 'minhas'} />
+      <CredentialsClient key={aba ?? 'todas'} minhas={cofre.minhas} compartilhadas={cofre.compartilhadas} temPin={cofre.temPin} abaInicial={aba === 'compartilhadas' || aba === 'minhas' ? aba : 'todas'} />
     </div>
   )
 }

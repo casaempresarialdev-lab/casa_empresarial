@@ -15,7 +15,11 @@ import { ModalDetalheEvento } from './modal-detalhe-evento'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const MAX_NO_DIA = 3 // eventos visíveis por dia no calendário (o resto vira "+N")
+const VISAO_KEY = 'calendario_visao' // última visão escolhida (mês/semana), só neste navegador
+
+type Visao = 'mes' | 'semana'
 
 const horaFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
 const diaLongoFormat = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -42,6 +46,20 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
   const [excluindo, setExcluindo] = useState(false)
   // Evento aberto no modal de detalhes
   const [detalhe, setDetalhe] = useState<Evento | null>(null)
+  const [visao, setVisao] = useState<Visao>('mes')
+
+  // Restaura a visão preferida depois de montar (evita diferença entre servidor e navegador)
+  useEffect(() => {
+    try {
+      const salva = localStorage.getItem(VISAO_KEY)
+      if (salva === 'mes' || salva === 'semana') setVisao(salva)
+    } catch { /* armazenamento indisponível: fica no mês */ }
+  }, [])
+
+  function trocarVisao(v: Visao) {
+    setVisao(v)
+    try { localStorage.setItem(VISAO_KEY, v) } catch { /* ignora */ }
+  }
 
   // Eventos agrupados por dia (no fuso do usuário)
   const porDia = useMemo(() => {
@@ -66,9 +84,23 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
   const inicioGrade = new Date(ano, mes, 1 - new Date(ano, mes, 1).getDay())
   const dias = Array.from({ length: 42 }, (_, i) => new Date(inicioGrade.getFullYear(), inicioGrade.getMonth(), inicioGrade.getDate() + i))
 
+  // Semana do dia selecionado (domingo a sábado)
+  const inicioSemana = new Date(selecionado.getFullYear(), selecionado.getMonth(), selecionado.getDate() - selecionado.getDay())
+  const diasSemana = Array.from({ length: 7 }, (_, i) => new Date(inicioSemana.getFullYear(), inicioSemana.getMonth(), inicioSemana.getDate() + i))
+  const fimSemana = diasSemana[6]
+  const tituloSemana = inicioSemana.getMonth() === fimSemana.getMonth()
+    ? `${inicioSemana.getDate()} – ${fimSemana.getDate()} ${MESES_CURTOS[fimSemana.getMonth()]} ${fimSemana.getFullYear()}`
+    : `${inicioSemana.getDate()} ${MESES_CURTOS[inicioSemana.getMonth()]}${inicioSemana.getFullYear() !== fimSemana.getFullYear() ? ` ${inicioSemana.getFullYear()}` : ''} – ${fimSemana.getDate()} ${MESES_CURTOS[fimSemana.getMonth()]} ${fimSemana.getFullYear()}`
+
   function irPara(d: Date) {
     setSelecionado(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
     setMesRef(new Date(d.getFullYear(), d.getMonth(), 1))
+  }
+
+  // Setas: no mês trocam o mês; na semana andam 7 dias a partir do dia selecionado
+  function navegar(direcao: -1 | 1) {
+    if (visao === 'mes') setMesRef(new Date(ano, mes + direcao, 1))
+    else irPara(new Date(selecionado.getFullYear(), selecionado.getMonth(), selecionado.getDate() + 7 * direcao))
   }
 
   // Notificação clicada: seleciona o dia do evento e abre o detalhe
@@ -134,6 +166,44 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
     />
   )
 
+  // Evento dentro do calendário: clique abre o detalhe (sem selecionar o dia por trás)
+  const chipEvento = (e: Evento, semana?: boolean) => (
+    <button
+      key={e.id}
+      type="button"
+      onClick={(ev) => { ev.stopPropagation(); setDetalhe(e) }}
+      onDoubleClick={(ev) => ev.stopPropagation()}
+      title={e.titulo}
+      className={cn(
+        'w-full text-left rounded px-1.5 py-0.5 text-[11px] font-medium cursor-pointer hover:brightness-95',
+        semana ? 'py-1 flex flex-col' : 'hidden sm:block truncate',
+        e.concluido && 'line-through opacity-50',
+      )}
+      style={ehAtrasado(e)
+        ? { backgroundColor: '#FEE2E2', color: '#B91C1C' }
+        : { backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
+    >
+      {semana ? (
+        <>
+          <span className="font-semibold opacity-80">{horaFormat.format(new Date(e.data_hora))}</span>
+          <span className="break-words line-clamp-3">{e.titulo}</span>
+        </>
+      ) : (
+        <>{horaFormat.format(new Date(e.data_hora))} {e.titulo}</>
+      )}
+    </button>
+  )
+
+  // Ações comuns às células de dia (mês e semana)
+  const propsDia = (d: Date) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: () => irPara(d),
+    onKeyDown: (ev: React.KeyboardEvent) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); irPara(d) } },
+    onDoubleClick: () => { irPara(d); novoEvento() },
+    title: 'Clique para ver os eventos · duplo clique para criar',
+  })
+
   return (
     // Coluna dos eventos um pouco mais larga; o calendário ocupa o restante
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_1fr] xl:grid-cols-[minmax(0,460px)_1fr] gap-4 items-start">
@@ -170,30 +240,80 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
         </div>
       </div>
 
-      {/* Direita: calendário do mês */}
+      {/* Direita: calendário (mês ou semana) */}
       <div className="app-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-1">
-            <button type="button" onClick={() => setMesRef(new Date(ano, mes - 1, 1))} aria-label="Mês anterior" className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100 cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
+            <button type="button" onClick={() => navegar(-1)} aria-label={visao === 'mes' ? 'Mês anterior' : 'Semana anterior'} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100 cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
               <Icon name="chevron-left" size={18} />
             </button>
             <h3 className="text-lg font-bold min-w-44 text-center" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-              {MESES[mes]} {ano}
+              {visao === 'mes' ? `${MESES[mes]} ${ano}` : tituloSemana}
             </h3>
-            <button type="button" onClick={() => setMesRef(new Date(ano, mes + 1, 1))} aria-label="Próximo mês" className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100 cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
+            <button type="button" onClick={() => navegar(1)} aria-label={visao === 'mes' ? 'Próximo mês' : 'Próxima semana'} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100 cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
               <Icon name="chevron-right" size={18} />
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => irPara(hoje)}
-            className="h-8 px-3 rounded-lg text-sm font-semibold border cursor-pointer hover:bg-[var(--color-brand-light)]"
-            style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
-          >
-            Hoje
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Alternar visão */}
+            <div role="group" aria-label="Visão do calendário" className="flex h-8 p-0.5 rounded-lg" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              {([['mes', 'Mês'], ['semana', 'Semana']] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => trocarVisao(v)}
+                  aria-pressed={visao === v}
+                  className={cn('px-3 rounded-md text-sm font-semibold cursor-pointer transition-colors', visao === v && 'bg-white shadow-sm')}
+                  style={{ color: visao === v ? 'var(--color-brand)' : 'var(--color-text-secondary)' }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => irPara(hoje)}
+              className="h-8 px-3 rounded-lg text-sm font-semibold border cursor-pointer hover:bg-[var(--color-brand-light)]"
+              style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
+            >
+              Hoje
+            </button>
+          </div>
         </div>
 
+        {visao === 'semana' ? (
+          // Semana: uma coluna por dia com todos os eventos (no celular, um dia por linha)
+          <div className="grid grid-cols-1 sm:grid-cols-7 gap-px rounded-xl overflow-hidden border" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-bg-surface)' }}>
+            {diasSemana.map((d) => {
+              const k = chaveDia(d)
+              const lista = porDia.get(k) ?? []
+              const ehHoje = k === chaveDia(hoje)
+              const ehSelecionado = k === chaveDia(selecionado)
+              return (
+                <div
+                  key={k}
+                  {...propsDia(d)}
+                  className={cn(
+                    'bg-white sm:min-h-80 p-2 flex flex-col gap-1.5 cursor-pointer transition-colors hover:bg-gray-50',
+                    ehSelecionado && 'ring-2 ring-inset ring-[var(--color-brand)]',
+                  )}
+                >
+                  <div className="flex sm:flex-col items-center gap-2 sm:gap-0.5 pb-1">
+                    <span className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>{SEMANA[d.getDay()]}</span>
+                    <span
+                      className={cn('w-8 h-8 rounded-full flex items-center justify-center text-sm', ehHoje ? 'font-bold' : 'font-semibold')}
+                      style={ehHoje ? { backgroundColor: 'var(--color-brand)', color: '#fff' } : { color: 'var(--color-text-primary)' }}
+                    >
+                      {d.getDate()}
+                    </span>
+                  </div>
+                  {lista.map((e) => chipEvento(e, true))}
+                  {lista.length === 0 && <span className="hidden sm:block text-[11px] text-center pt-2" style={{ color: '#C4C4C4' }}>—</span>}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
         <div className="grid grid-cols-7 gap-px rounded-xl overflow-hidden border" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-bg-surface)' }}>
           {SEMANA.map((s) => (
             <div key={s} className="bg-white py-2 text-center text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>{s}</div>
@@ -207,12 +327,7 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
             return (
               <div
                 key={k}
-                role="button"
-                tabIndex={0}
-                onClick={() => irPara(d)}
-                onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); irPara(d) } }}
-                onDoubleClick={() => { irPara(d); novoEvento() }}
-                title="Clique para ver os eventos · duplo clique para criar"
+                {...propsDia(d)}
                 className={cn(
                   'bg-white min-h-20 sm:min-h-24 p-1.5 flex flex-col items-stretch gap-1 text-left cursor-pointer transition-colors hover:bg-gray-50',
                   ehSelecionado && 'ring-2 ring-inset ring-[var(--color-brand)]',
@@ -226,25 +341,7 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
                 >
                   {d.getDate()}
                 </span>
-                {lista.slice(0, MAX_NO_DIA).map((e) => {
-                  const atrasado = ehAtrasado(e)
-                  return (
-                    // Clique no evento abre o detalhe (sem selecionar o dia por trás)
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={(ev) => { ev.stopPropagation(); setDetalhe(e) }}
-                      onDoubleClick={(ev) => ev.stopPropagation()}
-                      title={e.titulo}
-                      className={cn('hidden sm:block w-full text-left truncate rounded px-1.5 py-0.5 text-[11px] font-medium cursor-pointer hover:brightness-95', e.concluido && 'line-through opacity-50')}
-                      style={atrasado
-                        ? { backgroundColor: '#FEE2E2', color: '#B91C1C' }
-                        : { backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
-                    >
-                      {horaFormat.format(new Date(e.data_hora))} {e.titulo}
-                    </button>
-                  )
-                })}
+                {lista.slice(0, MAX_NO_DIA).map((e) => chipEvento(e))}
                 {lista.length > MAX_NO_DIA && (
                   <span className="hidden sm:block text-[11px] font-semibold px-1" style={{ color: 'var(--color-text-muted)' }}>
                     +{lista.length - MAX_NO_DIA}
@@ -256,6 +353,7 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
             )
           })}
         </div>
+        )}
       </div>
 
       <ModalDetalheEvento

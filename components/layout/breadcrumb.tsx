@@ -61,14 +61,14 @@ export function Breadcrumb({ current }: { current?: string } = {}) {
   if (crumbs.length === 0 || pathname === '/dashboard') return null
 
   return (
-    // basis-full: nos cabeçalhos (flex-wrap) o caminho desce para baixo do título, liberando o canto direito para a barra de ferramentas
-    <nav aria-label="Breadcrumb" className="basis-full">
-      <ol className="flex items-center gap-1.5 flex-wrap">
+    // Na linha do título, à direita; a partir de md recua a largura da barra de ferramentas (112px, solta no canto) menos o respiro do <main>
+    <nav aria-label="Breadcrumb" className="ml-auto md:mr-26">
+      <ol className="flex items-center justify-end gap-1.5 flex-wrap">
         <li>
           <Link
             href="/dashboard"
-            className="text-sm transition-colors hover:underline"
-            style={{ color: 'var(--color-text-muted)' }}
+            className="text-xs transition-colors hover:underline"
+            style={{ color: 'var(--color-brand)' }}
           >
             Início
           </Link>
@@ -77,19 +77,19 @@ export function Breadcrumb({ current }: { current?: string } = {}) {
           const isLast = i === crumbs.length - 1
           return (
             <li key={crumb.href} className="flex items-center gap-1.5">
-              <span style={{ color: 'var(--color-text-muted)' }} aria-hidden="true">/</span>
+              <span className="text-xs opacity-50" style={{ color: 'var(--color-brand)' }} aria-hidden="true">/</span>
               {isLast || NON_LINK_SEGMENTS.has(segments[i]) ? (
                 <span
-                  className="text-sm"
-                  style={{ color: isLast ? 'var(--color-text-primary)' : 'var(--color-text-muted)', fontWeight: isLast ? 500 : 400 }}
+                  className="text-xs"
+                  style={{ color: 'var(--color-brand)', fontWeight: isLast ? 600 : 400 }}
                 >
                   {crumb.label}
                 </span>
               ) : (
                 <Link
                   href={crumb.href}
-                  className="text-sm transition-colors hover:underline"
-                  style={{ color: 'var(--color-text-muted)' }}
+                  className="text-xs transition-colors hover:underline"
+                  style={{ color: 'var(--color-brand)' }}
                 >
                   {crumb.label}
                 </Link>

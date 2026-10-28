@@ -135,9 +135,6 @@ export function LancamentosClient({ transactions, tipo, companyId, categories, c
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Todos os {isRec ? 'recebimentos' : 'pagamentos'} da empresa
-          </p>
         </div>
         <Button onClick={() => { setEditing(null); setModalOpen(true) }}>
           + {isRec ? 'Recebimento' : 'Pagamento'}

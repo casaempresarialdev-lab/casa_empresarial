@@ -26,6 +26,7 @@ export type CredencialCompartilhada = {
   observacao: string | null
   /** Quem compartilhou */
   dono_nome: string
+  dono_avatar: string | null
   compartilhada_em: string
 }
 
@@ -66,12 +67,13 @@ export async function getCofre(profileId: string): Promise<Cofre> {
   }
   const recebidasRows = (recebidas ?? []) as unknown as Recebida[]
 
-  // Nomes de quem recebeu e de quem compartilhou, de uma vez
+  // Nomes (e fotos) de quem recebeu e de quem compartilhou, de uma vez
   const perfisIds = [...new Set([...(shares ?? []).map((s) => s.shared_with), ...recebidasRows.map((r) => r.owner_id)])]
   const { data: perfis } = perfisIds.length
-    ? await admin.from('profiles').select('id, name').in('id', perfisIds)
-    : { data: [] as { id: string; name: string }[] }
+    ? await admin.from('profiles').select('id, name, avatar_url').in('id', perfisIds)
+    : { data: [] as { id: string; name: string; avatar_url: string | null }[] }
   const nomePorId = new Map((perfis ?? []).map((p) => [p.id, p.name]))
+  const avatarPorId = new Map((perfis ?? []).map((p) => [p.id, p.avatar_url as string | null]))
 
   return {
     minhas: (minhas ?? []).map((c) => ({
@@ -85,6 +87,7 @@ export async function getCofre(profileId: string): Promise<Cofre> {
       .map((r) => ({
         ...r.credentials!,
         dono_nome: nomePorId.get(r.owner_id) ?? 'Outro usuário',
+        dono_avatar: avatarPorId.get(r.owner_id) ?? null,
         compartilhada_em: r.created_at,
       }))
       .sort((a, b) => a.sistema.localeCompare(b.sistema, 'pt-BR')),

@@ -161,9 +161,6 @@ export function SegurancaClient({ records, employees, companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            ASO, treinamentos, EPIs, incidentes e vacinações
-          </p>
         </div>
         <Button onClick={openAdd}>Adicionar</Button>
       </div>

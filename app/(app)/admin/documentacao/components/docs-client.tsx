@@ -249,9 +249,6 @@ export function DocsClient({ documents, folders, foldersError, companyId }: Prop
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Armazene e organize os documentos da empresa
-        </p>
       </div>
 
       <div className="app-card p-5 flex flex-col gap-4">

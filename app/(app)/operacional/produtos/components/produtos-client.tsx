@@ -164,9 +164,6 @@ export function ProdutosClient({ products, companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Catálogo de itens para venda
-          </p>
         </div>
         <Button onClick={() => router.push('/operacional/produtos/novo')}>Adicionar</Button>
       </div>

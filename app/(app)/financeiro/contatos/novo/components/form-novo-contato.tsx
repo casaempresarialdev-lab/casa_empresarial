@@ -106,9 +106,6 @@ export function FormNovoContato({ companyId }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            Cadastrar cliente ou fornecedor
-          </p>
         </div>
       </div>
 

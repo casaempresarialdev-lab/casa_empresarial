@@ -120,7 +120,6 @@ export function FormNovoPedidoCompra({ companyId, contacts, products }: Props) {
             <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Novo Pedido de Compra</h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Registrar compra e reposição de estoque</p>
         </div>
       </div>
 

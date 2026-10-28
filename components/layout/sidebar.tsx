@@ -10,8 +10,9 @@ import { SidebarClock } from './sidebar-clock'
 import { Icon, type IconName } from '@/components/ui/icon'
 
 
-type NavLeaf  = { label: string; href: string; icon: IconName; children?: never }
-type NavGroup = { label: string; href?: never; icon: IconName; children: { label: string; href: string }[] }
+type NavLeaf  = { label: string; href: string; icon: IconName; dashboard?: never; children?: never }
+/** dashboard: clicar no nome da área leva ao dashboard dela; a seta abre/fecha o submenu */
+type NavGroup = { label: string; href?: never; icon: IconName; dashboard?: string; children: { label: string; href: string }[] }
 type NavItem  = NavLeaf | NavGroup
 
 const NAV_ITEMS: NavItem[] = [
@@ -23,8 +24,8 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Administrativo',
     icon: 'file',
+    dashboard: '/admin',
     children: [
-      { label: 'Dashboard', href: '/admin' },
       { label: 'Quadro Societário', href: '/admin/quadro-societario' },
       { label: 'Documentação', href: '/admin/documentacao' },
       { label: 'Certificado digital', href: '/admin/certificado-digital' },
@@ -134,7 +135,7 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
   // Grupos abertos — o grupo da rota atual abre automaticamente
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
-    const active = navItems.find((i) => i.children?.some((c) => pathname.startsWith(c.href)))
+    const active = navItems.find((i) => i.dashboard === pathname || i.children?.some((c) => pathname.startsWith(c.href)))
     if (active) setOpenGroups((prev) => (prev.has(active.label) ? prev : new Set(prev).add(active.label)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
@@ -168,7 +169,10 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
     ? navItems
         .flatMap((item) =>
           item.children
-            ? item.children.map((c) => ({ ...c, group: item.label }))
+            ? [
+                ...(item.dashboard ? [{ label: `Dashboard ${item.label}`, href: item.dashboard, group: item.label }] : []),
+                ...item.children.map((c) => ({ ...c, group: item.label })),
+              ]
             : [{ label: item.label, href: item.href, group: null as string | null }],
         )
         .filter((r) => normalize(r.label).includes(normalize(query.trim())))
@@ -365,42 +369,88 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
                   )
                 }
 
-                const isGroupActive = item.children.some((c) => pathname.startsWith(c.href))
+                const naDashboard = !!item.dashboard && pathname === item.dashboard
+                const isGroupActive = naDashboard || item.children.some((c) => pathname.startsWith(c.href))
                 const isOpen = openGroups.has(item.label)
+
+                // Retraído no desktop: o clique expande a sidebar e abre o grupo
+                const expandirSeRetraido = () => {
+                  if (!expanded && window.matchMedia('(min-width: 768px)').matches) {
+                    setSidebarExpanded(true)
+                    setOpenGroups((prev) => new Set(prev).add(item.label))
+                    return true
+                  }
+                  return false
+                }
+
+                const seta = (
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    className={cn('shrink-0 transition-transform duration-200', isOpen && 'rotate-180')}
+                    style={{ color: naDashboard ? '#FFFFFF' : 'var(--color-text-muted)' }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                )
 
                 return (
                   <div key={item.label} className="mb-1">
-                    <button
-                      onClick={() => {
-                        // Retraído no desktop: expande a sidebar e abre o grupo
-                        if (!expanded && window.matchMedia('(min-width: 768px)').matches) {
-                          setSidebarExpanded(true)
-                          setOpenGroups((prev) => new Set(prev).add(item.label))
-                          return
-                        }
-                        toggleGroup(item.label)
-                      }}
-                      className={cn(
-                        'w-full flex items-center gap-3 px-3 h-11 rounded-xl text-[15px] font-semibold transition-colors hover:bg-gray-50',
-                        !expanded && 'md:justify-center md:px-0',
-                      )}
-                      style={{
-                        fontFamily: 'Manrope',
-                        color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-sidebar-text)',
-                      }}
-                      title={!expanded ? item.label : undefined}
-                      aria-expanded={isOpen}
-                    >
-                      <Icon name={item.icon} />
-                      <span className={cn('flex-1 truncate text-left', hideWhenCollapsed)}>{item.label}</span>
-                      <svg
-                        width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                        className={cn('shrink-0 transition-transform duration-200', isOpen && 'rotate-180', hideWhenCollapsed)}
-                        style={{ color: 'var(--color-text-muted)' }}
+                    {item.dashboard ? (
+                      // Área com dashboard: nome → dashboard; seta → abre/fecha o submenu
+                      <div
+                        className={cn(
+                          'flex items-center h-11 rounded-xl transition-colors',
+                          !naDashboard && 'hover:bg-gray-50',
+                        )}
+                        style={naDashboard ? { backgroundColor: 'var(--color-primary-dark)' } : undefined}
                       >
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </button>
+                        <Link
+                          href={item.dashboard}
+                          onClick={() => { expandirSeRetraido(); closeMobile() }}
+                          className={cn(
+                            'flex-1 min-w-0 h-full flex items-center gap-3 pl-3 text-[15px]',
+                            naDashboard ? 'font-bold' : 'font-semibold',
+                            !expanded && 'md:justify-center md:px-0',
+                          )}
+                          style={{
+                            fontFamily: 'Manrope',
+                            color: naDashboard ? '#FFFFFF' : isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-sidebar-text)',
+                          }}
+                          title={!expanded ? item.label : `Dashboard ${item.label}`}
+                        >
+                          <Icon name={item.icon} />
+                          <span className={cn('flex-1 truncate text-left', hideWhenCollapsed)}>{item.label}</span>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(item.label)}
+                          className={cn('h-full px-3 flex items-center rounded-r-xl cursor-pointer', !naDashboard && 'hover:bg-gray-100', hideWhenCollapsed)}
+                          aria-label={isOpen ? `Recolher ${item.label}` : `Expandir ${item.label}`}
+                          aria-expanded={isOpen}
+                        >
+                          {seta}
+                        </button>
+                      </div>
+                    ) : (
+                      // Área sem dashboard: a linha toda abre/fecha o submenu
+                      <button
+                        onClick={() => { if (!expandirSeRetraido()) toggleGroup(item.label) }}
+                        className={cn(
+                          'w-full flex items-center gap-3 px-3 h-11 rounded-xl text-[15px] font-semibold transition-colors hover:bg-gray-50',
+                          !expanded && 'md:justify-center md:px-0',
+                        )}
+                        style={{
+                          fontFamily: 'Manrope',
+                          color: isGroupActive ? 'var(--color-primary-darker)' : 'var(--color-sidebar-text)',
+                        }}
+                        title={!expanded ? item.label : undefined}
+                        aria-expanded={isOpen}
+                      >
+                        <Icon name={item.icon} />
+                        <span className={cn('flex-1 truncate text-left', hideWhenCollapsed)}>{item.label}</span>
+                        <span className={cn(hideWhenCollapsed)}>{seta}</span>
+                      </button>
+                    )}
 
                     {isOpen && (
                       <div

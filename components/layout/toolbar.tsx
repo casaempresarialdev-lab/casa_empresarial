@@ -272,9 +272,9 @@ export function Toolbar() {
   }
 
   return (
-    // Até telas médias: linha própria no topo. Telas largas (xl): no canto superior direito, na linha do título da página.
+    // Celular: linha própria no topo. A partir de md: solta no canto superior direito, na linha do título (sem ocupar espaço).
     // Encostada na borda direita da tela (sem arredondar à direita): -mr-6 / right-0 anulam o respiro do <main>.
-    <div className="flex justify-end -mr-6 mb-4 xl:mb-0 xl:mr-0 xl:absolute xl:top-5 xl:right-0 xl:z-30">
+    <div className="flex justify-end -mr-6 mb-4 md:mb-0 md:mr-0 md:absolute md:top-5 md:right-0 md:z-30">
       <div
         ref={barRef}
         className="relative h-12 flex items-center gap-1 rounded-l-full pl-3 pr-4 shadow-sm"

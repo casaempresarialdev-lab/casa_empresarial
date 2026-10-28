@@ -265,9 +265,6 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, stages
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Arraste os cards entre as etapas ou use as setas ← →
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" onClick={() => setManageOpen(true)}>⚙ Gerenciar colunas</Button>

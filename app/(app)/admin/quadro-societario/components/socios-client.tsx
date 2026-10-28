@@ -65,9 +65,6 @@ export function SociosClient({ socios, companyId }: Props) {
           </h1>
           <Breadcrumb />
         </div>
-        <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-          Sócios e participações da empresa
-        </p>
       </div>
 
       <div className="app-card p-5 flex flex-col gap-4">

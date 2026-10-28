@@ -61,9 +61,6 @@ export function FaturasClient({ invoices }: Props) {
             </h1>
             <Breadcrumb />
           </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Faturas mensais dos cartões de crédito
-          </p>
         </div>
       </div>
 

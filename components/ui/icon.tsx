@@ -1,6 +1,6 @@
 // Ícones em linha (estilo Lucide), herdam a cor do texto
 
-export type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user' | 'wallet' | 'card' | 'folder' | 'camera' | 'settings' | 'star' | 'logout' | 'plus' | 'pencil' | 'trash' | 'eye' | 'eye-off' | 'external' | 'info' | 'download' | 'lock' | 'shield' | 'mail' | 'bell' | 'maximize' | 'minimize' | 'calendar' | 'alarm' | 'chevron-left' | 'chevron-right' | 'check'
+export type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user' | 'wallet' | 'card' | 'folder' | 'camera' | 'settings' | 'star' | 'logout' | 'plus' | 'pencil' | 'trash' | 'eye' | 'eye-off' | 'external' | 'info' | 'download' | 'lock' | 'shield' | 'mail' | 'bell' | 'maximize' | 'minimize' | 'calendar' | 'alarm' | 'chevron-left' | 'chevron-right' | 'check' | 'share'
 
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
   grid: (
@@ -207,6 +207,15 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="10" />
       <path d="m8 12 3 3 5-6" />
+    </>
+  ),
+  share: (
+    <>
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="m8.6 13.5 6.8 4" />
+      <path d="m15.4 6.5-6.8 4" />
     </>
   ),
 }

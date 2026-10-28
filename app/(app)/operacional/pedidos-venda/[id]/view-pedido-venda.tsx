@@ -238,35 +238,32 @@ export function ViewPedidoVenda({ order, companyName, companyCnpj }: Props) {
             <path d="M11 14L6 9l5-5" />
           </svg>
         </button>
-        <div className="flex-1">
-          <div className="flex flex-1 min-w-0 items-center gap-3">
-            {/* Título e breadcrumb na mesma linha */}
-            <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-              <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-                Pedido #{String(order.numero).padStart(3, '0')}
-              </h1>
-              <Breadcrumb />
-            </div>
-            <span
-              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-              style={{ backgroundColor: colors.bg, color: colors.text }}
+        {/* Título e status à esquerda; PDF e breadcrumb à direita, na mesma linha */}
+        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+            Pedido #{String(order.numero).padStart(3, '0')}
+          </h1>
+          <span
+            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+            style={{ backgroundColor: colors.bg, color: colors.text }}
+          >
+            {STATUS_LABELS[order.status]}
+          </span>
+          <div className="ml-auto flex items-center gap-4">
+            <button
+              onClick={handleDownloadPDF}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              style={{ backgroundColor: 'var(--color-primary-darker)', color: 'white' }}
             >
-              {STATUS_LABELS[order.status]}
-            </span>
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7.5 10V2M4 7l3.5 3.5L11 7" />
+                <path d="M1 12h13" />
+              </svg>
+              Baixar PDF
+            </button>
+            <Breadcrumb />
           </div>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Pedido de Venda</p>
         </div>
-        <button
-          onClick={handleDownloadPDF}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          style={{ backgroundColor: 'var(--color-primary-darker)', color: 'white' }}
-        >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7.5 10V2M4 7l3.5 3.5L11 7" />
-            <path d="M1 12h13" />
-          </svg>
-          Baixar PDF
-        </button>
       </div>
 
       <div className="space-y-4">

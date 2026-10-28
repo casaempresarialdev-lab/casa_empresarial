@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@/components/ui/icon'
-import { IconButton } from '@/components/ui/icon-button'
+import { ActionMenu } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DocumentosFila, formatSize, type QueueItem } from './documentos-fila'
@@ -156,10 +156,16 @@ export function SocioDocumentos({ socioId, socioNome, companyId }: Props) {
                     {[d.nome !== titulo ? d.nome : null, formatSize(d.tamanho), formatDate(d.created_at)].filter(Boolean).join(' · ')}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <IconButton icon="eye" label={`Visualizar ${titulo}`} onClick={() => setViewTarget({ id: d.id, titulo, nome: d.nome, tipo: d.tipo })} />
-                  <IconButton icon="download" label={`Baixar ${titulo}`} onClick={() => handleDownload(d)} disabled={downloadingId === d.id} />
-                  <IconButton icon="trash" label={`Remover ${titulo}`} tone="danger" onClick={() => setConfirmTarget(d)} disabled={deletingId === d.id} />
+                {/* Ações no menu "..." padrão do sistema */}
+                <div className="shrink-0">
+                  <ActionMenu
+                    label={`Ações de ${titulo}`}
+                    items={[
+                      { icon: 'eye', label: 'Visualizar', onClick: () => setViewTarget({ id: d.id, titulo, nome: d.nome, tipo: d.tipo }) },
+                      { icon: 'download', label: 'Baixar', onClick: () => handleDownload(d), disabled: downloadingId === d.id },
+                      { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(d), disabled: deletingId === d.id },
+                    ]}
+                  />
                 </div>
               </li>
             )
