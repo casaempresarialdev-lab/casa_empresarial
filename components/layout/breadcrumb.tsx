@@ -61,9 +61,9 @@ export function Breadcrumb({ current }: { current?: string } = {}) {
   if (crumbs.length === 0 || pathname === '/dashboard') return null
 
   return (
-    // Na linha do título, à direita; a partir de md recua a largura da barra de ferramentas (112px, solta no canto) menos o respiro do <main>
-    <nav aria-label="Breadcrumb" className="ml-auto md:mr-26">
-      <ol className="flex items-center justify-end gap-1.5 flex-wrap">
+    // basis-full: nos cabeçalhos (flex-wrap) o caminho desce para a linha de baixo do título
+    <nav aria-label="Breadcrumb" className="basis-full">
+      <ol className="flex items-center gap-1.5 flex-wrap">
         <li>
           <Link
             href="/dashboard"

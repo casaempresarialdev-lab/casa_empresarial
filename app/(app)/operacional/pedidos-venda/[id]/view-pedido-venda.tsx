@@ -238,7 +238,7 @@ export function ViewPedidoVenda({ order, companyName, companyCnpj }: Props) {
             <path d="M11 14L6 9l5-5" />
           </svg>
         </button>
-        {/* Título e status à esquerda; PDF e breadcrumb à direita, na mesma linha */}
+        {/* Título, status e PDF (à direita, antes da barra de ferramentas); breadcrumb na linha de baixo */}
         <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
             Pedido #{String(order.numero).padStart(3, '0')}
@@ -249,7 +249,7 @@ export function ViewPedidoVenda({ order, companyName, companyCnpj }: Props) {
           >
             {STATUS_LABELS[order.status]}
           </span>
-          <div className="ml-auto flex items-center gap-4">
+          <div className="ml-auto md:mr-26 flex items-center gap-4">
             <button
               onClick={handleDownloadPDF}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -261,8 +261,8 @@ export function ViewPedidoVenda({ order, companyName, companyCnpj }: Props) {
               </svg>
               Baixar PDF
             </button>
-            <Breadcrumb />
           </div>
+          <Breadcrumb />
         </div>
       </div>
 

@@ -18,13 +18,15 @@ interface Props {
   evento: Evento | null
   /** Data já escolhida no calendário (novo evento) */
   dataInicial?: Date
+  /** Hora já escolhida (duplo clique num horário da visão semanal) */
+  horaInicial?: number | null
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const paraData = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const paraHora = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
 
-function valoresIniciais(l: Evento | null, dataInicial?: Date): EventoFormData {
+function valoresIniciais(l: Evento | null, dataInicial?: Date, horaInicial?: number | null): EventoFormData {
   if (l) {
     const d = new Date(l.data_hora)
     return {
@@ -32,10 +34,10 @@ function valoresIniciais(l: Evento | null, dataInicial?: Date): EventoFormData {
       notificar: l.notificar, antecedencia_min: l.antecedencia_min, notificar_email: l.notificar_email,
     }
   }
-  // Novo: no dia escolhido no calendário (ou hoje), na próxima hora cheia
+  // Novo: no dia escolhido no calendário (ou hoje), na hora escolhida ou na próxima hora cheia
   const agora = new Date()
   const d = dataInicial ? new Date(dataInicial) : new Date()
-  d.setHours(agora.getHours() + 1, 0, 0, 0)
+  d.setHours(horaInicial ?? agora.getHours() + 1, 0, 0, 0)
   return { titulo: '', descricao: '', data: paraData(d), hora: paraHora(d), notificar: true, antecedencia_min: 15, notificar_email: false }
 }
 
@@ -46,14 +48,14 @@ function pedirPermissaoNavegador() {
   }
 }
 
-export function ModalEvento({ open, onClose, evento, dataInicial }: Props) {
+export function ModalEvento({ open, onClose, evento, dataInicial, horaInicial }: Props) {
   const router = useRouter()
   const isEditing = !!evento
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } =
-    useForm<EventoFormData>({ resolver: zodResolver(eventoFormSchema), defaultValues: valoresIniciais(evento, dataInicial) })
+    useForm<EventoFormData>({ resolver: zodResolver(eventoFormSchema), defaultValues: valoresIniciais(evento, dataInicial, horaInicial) })
 
-  useEffect(() => { if (open) reset(valoresIniciais(evento, dataInicial)) }, [open, evento, dataInicial, reset])
+  useEffect(() => { if (open) reset(valoresIniciais(evento, dataInicial, horaInicial)) }, [open, evento, dataInicial, horaInicial, reset])
 
   const notificar = watch('notificar')
 

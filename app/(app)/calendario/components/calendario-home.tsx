@@ -12,6 +12,7 @@ import { concluirEventoAction, excluirEventoAction } from '../actions'
 import type { Evento } from '../queries'
 import { ModalEvento } from './modal-evento'
 import { ModalDetalheEvento } from './modal-detalhe-evento'
+import { SemanaHorarios } from './semana-horarios'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -47,6 +48,7 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
   // Evento aberto no modal de detalhes
   const [detalhe, setDetalhe] = useState<Evento | null>(null)
   const [visao, setVisao] = useState<Visao>('mes')
+  const [horaNova, setHoraNova] = useState<number | null>(null)
 
   // Restaura a visão preferida depois de montar (evita diferença entre servidor e navegador)
   useEffect(() => {
@@ -121,7 +123,8 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
     if (eventoAbertoId) router.replace('/dashboard', { scroll: false })
   }
 
-  function novoEvento() { setEditando(null); setModalOpen(true) }
+  // hora: vinda de um duplo clique na grade da semana (sem ela, o modal sugere a próxima hora cheia)
+  function novoEvento(hora: number | null = null) { setHoraNova(hora); setEditando(null); setModalOpen(true) }
 
   async function alternarConcluido(e: Evento) {
     const r = await concluirEventoAction(e.id, !e.concluido)
@@ -167,34 +170,23 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
   )
 
   // Evento dentro do calendário: clique abre o detalhe (sem selecionar o dia por trás)
-  const chipEvento = (e: Evento, semana?: boolean) => (
+  const chipEvento = (e: Evento) => (
     <button
       key={e.id}
       type="button"
       onClick={(ev) => { ev.stopPropagation(); setDetalhe(e) }}
       onDoubleClick={(ev) => ev.stopPropagation()}
       title={e.titulo}
-      className={cn(
-        'w-full text-left rounded px-1.5 py-0.5 text-[11px] font-medium cursor-pointer hover:brightness-95',
-        semana ? 'py-1 flex flex-col' : 'hidden sm:block truncate',
-        e.concluido && 'line-through opacity-50',
-      )}
+      className={cn('hidden sm:block w-full text-left truncate rounded px-1.5 py-0.5 text-[11px] font-medium cursor-pointer hover:brightness-95', e.concluido && 'line-through opacity-50')}
       style={ehAtrasado(e)
         ? { backgroundColor: '#FEE2E2', color: '#B91C1C' }
         : { backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
     >
-      {semana ? (
-        <>
-          <span className="font-semibold opacity-80">{horaFormat.format(new Date(e.data_hora))}</span>
-          <span className="break-words line-clamp-3">{e.titulo}</span>
-        </>
-      ) : (
-        <>{horaFormat.format(new Date(e.data_hora))} {e.titulo}</>
-      )}
+      {horaFormat.format(new Date(e.data_hora))} {e.titulo}
     </button>
   )
 
-  // Ações comuns às células de dia (mês e semana)
+  // Ações das células de dia do mês
   const propsDia = (d: Date) => ({
     role: 'button' as const,
     tabIndex: 0,
@@ -219,7 +211,7 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
                 {capitalizar(diaLongoFormat.format(selecionado))}
               </p>
             </div>
-            <AddButton onClick={novoEvento} />
+            <AddButton onClick={() => novoEvento()} />
           </div>
           {doDia.length === 0
             ? <p className="text-sm py-4 text-center" style={{ color: 'var(--color-text-muted)' }}>Nenhum evento neste dia.</p>
@@ -282,37 +274,15 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
         </div>
 
         {visao === 'semana' ? (
-          // Semana: uma coluna por dia com todos os eventos (no celular, um dia por linha)
-          <div className="grid grid-cols-1 sm:grid-cols-7 gap-px rounded-xl overflow-hidden border" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-bg-surface)' }}>
-            {diasSemana.map((d) => {
-              const k = chaveDia(d)
-              const lista = porDia.get(k) ?? []
-              const ehHoje = k === chaveDia(hoje)
-              const ehSelecionado = k === chaveDia(selecionado)
-              return (
-                <div
-                  key={k}
-                  {...propsDia(d)}
-                  className={cn(
-                    'bg-white sm:min-h-80 p-2 flex flex-col gap-1.5 cursor-pointer transition-colors hover:bg-gray-50',
-                    ehSelecionado && 'ring-2 ring-inset ring-[var(--color-brand)]',
-                  )}
-                >
-                  <div className="flex sm:flex-col items-center gap-2 sm:gap-0.5 pb-1">
-                    <span className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>{SEMANA[d.getDay()]}</span>
-                    <span
-                      className={cn('w-8 h-8 rounded-full flex items-center justify-center text-sm', ehHoje ? 'font-bold' : 'font-semibold')}
-                      style={ehHoje ? { backgroundColor: 'var(--color-brand)', color: '#fff' } : { color: 'var(--color-text-primary)' }}
-                    >
-                      {d.getDate()}
-                    </span>
-                  </div>
-                  {lista.map((e) => chipEvento(e, true))}
-                  {lista.length === 0 && <span className="hidden sm:block text-[11px] text-center pt-2" style={{ color: '#C4C4C4' }}>—</span>}
-                </div>
-              )
-            })}
-          </div>
+          <SemanaHorarios
+            dias={diasSemana}
+            porDia={porDia}
+            selecionado={selecionado}
+            ehAtrasado={ehAtrasado}
+            onSelecionarDia={irPara}
+            onNovo={(d, hora) => { irPara(d); novoEvento(hora) }}
+            onAbrir={setDetalhe}
+          />
         ) : (
         <div className="grid grid-cols-7 gap-px rounded-xl overflow-hidden border" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-bg-surface)' }}>
           {SEMANA.map((s) => (
@@ -364,7 +334,7 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
         onExcluir={(e) => { fecharDetalhe(); setExcluirTarget(e) }}
       />
 
-      <ModalEvento open={modalOpen} onClose={() => setModalOpen(false)} evento={editando} dataInicial={selecionado} />
+      <ModalEvento open={modalOpen} onClose={() => setModalOpen(false)} evento={editando} dataInicial={selecionado} horaInicial={horaNova} />
 
       <ConfirmDialog
         open={!!excluirTarget}
