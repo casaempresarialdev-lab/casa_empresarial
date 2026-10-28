@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Icon } from '@/components/ui/icon'
-import { ActionMenu } from '@/components/ui/action-menu'
+import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DocumentosFila, formatSize, type QueueItem } from './documentos-fila'
@@ -137,41 +136,28 @@ export function SocioDocumentos({ socioId, socioNome, companyId }: Props) {
       </div>
 
       {/* Lista */}
-      {docs === null ? (
-        <p className="text-sm py-4 text-center" style={{ color: 'var(--color-text-muted)' }}>Carregando documentos…</p>
-      ) : docs.length === 0 ? (
-        <p className="text-sm py-4 text-center" style={{ color: 'var(--color-text-muted)' }}>Nenhum documento enviado para este sócio.</p>
-      ) : (
-        <ul className="rounded-xl border divide-y overflow-hidden" style={{ borderColor: 'var(--color-card-border)' }}>
-          {docs.map((d) => {
-            const titulo = d.descricao || d.nome
-            return (
-              <li key={d.id} className="flex items-center gap-3 px-3 py-2.5" style={{ borderColor: 'var(--color-card-border)' }}>
-                <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
-                  <Icon name="file" size={18} />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{titulo}</p>
-                  <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
-                    {[d.nome !== titulo ? d.nome : null, formatSize(d.tamanho), formatDate(d.created_at)].filter(Boolean).join(' · ')}
-                  </p>
-                </div>
-                {/* Ações no menu "..." padrão do sistema */}
-                <div className="shrink-0">
-                  <ActionMenu
-                    label={`Ações de ${titulo}`}
-                    items={[
-                      { icon: 'eye', label: 'Visualizar', onClick: () => setViewTarget({ id: d.id, titulo, nome: d.nome, tipo: d.tipo }) },
-                      { icon: 'download', label: 'Baixar', onClick: () => handleDownload(d), disabled: downloadingId === d.id },
-                      { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(d), disabled: deletingId === d.id },
-                    ]}
-                  />
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      {/* Mesmo padrão da lista da Documentação: cartões com ícone, título, detalhes e menu "..." */}
+      <ul className="flex flex-col gap-3">
+        {docs === null && <ListEmpty>Carregando documentos…</ListEmpty>}
+        {docs?.length === 0 && <ListEmpty>Nenhum documento enviado para este sócio.</ListEmpty>}
+        {docs?.map((d) => {
+          const titulo = d.descricao || d.nome
+          return (
+            <ListItem
+              key={d.id}
+              icon="file"
+              title={titulo}
+              subtitle={[d.nome !== titulo ? d.nome : null, formatSize(d.tamanho), `Enviado em ${formatDate(d.created_at)}`].filter(Boolean).join(' · ')}
+              actionsLabel={titulo}
+              actions={[
+                { icon: 'eye', label: 'Visualizar', onClick: () => setViewTarget({ id: d.id, titulo, nome: d.nome, tipo: d.tipo }) },
+                { icon: 'download', label: 'Baixar', onClick: () => handleDownload(d), disabled: downloadingId === d.id },
+                { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(d), disabled: deletingId === d.id },
+              ]}
+            />
+          )
+        })}
+      </ul>
 
       <FileViewer
         file={viewTarget}
