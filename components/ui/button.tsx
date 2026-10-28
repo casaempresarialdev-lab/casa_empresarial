@@ -10,7 +10,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', loading, disabled, children, ...props }, ref) => {
+  ({ className, variant = 'primary', size = 'md', loading, disabled, children, style, ...props }, ref) => {
     const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed'
 
     const variants = {
@@ -42,8 +42,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(base, variants[variant], sizes[size], className)}
-        style={variantStyles[variant]}
         {...props}
+        // Cores da variante + style recebido (que só sobrescreve o que define; style={undefined} não apaga as cores)
+        style={{ ...variantStyles[variant], ...style }}
       >
         {loading && (
           <svg className="animate-spin h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24">
