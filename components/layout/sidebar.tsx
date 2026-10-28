@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { UserMenu } from './user-menu'
+import { SidebarClock } from './sidebar-clock'
 import { Icon, type IconName } from '@/components/ui/icon'
 
 
@@ -24,7 +25,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'file',
     children: [
       { label: 'Quadro Societário', href: '/admin/quadro-societario' },
-      { label: 'Cofre de senhas', href: '/admin/logins-senhas' },
       { label: 'Documentação', href: '/admin/documentacao' },
       { label: 'Certificado digital', href: '/admin/certificado-digital' },
     ],
@@ -436,8 +436,9 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
           )}
         </nav>
 
-        {/* Usuário */}
+        {/* Data/hora e usuário */}
         <div className={cn('mx-3 mb-3 pt-3 border-t', !expanded && 'md:mx-2')} style={{ borderColor: 'var(--color-bg-surface)' }}>
+          <SidebarClock compact={!expanded} />
           <UserMenu
             userName={userName}
             userEmail={userEmail}

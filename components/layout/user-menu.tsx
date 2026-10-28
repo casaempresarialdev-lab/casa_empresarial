@@ -195,12 +195,29 @@ export function UserMenu({ userName, userEmail, userAvatar, companies = [], comp
 
           <nav className="border-t py-2" style={{ borderColor: 'var(--color-bg-surface)' }}>
             <Link
+              href="/perfil"
+              onClick={closeAll}
+              className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: 'var(--color-sidebar-text)' }}
+            >
+              <Icon name="user" size={16} /> Meu Perfil
+            </Link>
+            <Link
               href="/empresa"
               onClick={closeAll}
               className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
               style={{ color: 'var(--color-sidebar-text)' }}
             >
               <Icon name="briefcase" size={16} /> Minha Empresa
+            </Link>
+            {/* Cofre pessoal do usuário (vale em qualquer empresa) */}
+            <Link
+              href="/cofre-de-senhas"
+              onClick={closeAll}
+              className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: 'var(--color-sidebar-text)' }}
+            >
+              <Icon name="lock" size={16} /> Cofre de senhas
             </Link>
             <Link
               href="/admin/usuarios"

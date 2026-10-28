@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { Modal } from '@/components/ui/modal'
+import { useState, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/toast'
-import { createSocioAction, updateSocioAction } from '../actions'
+import { createSocioAction, updateSocioAction, uploadSocioDocumentAction } from '../actions'
 import type { Socio } from '../queries'
+import { DocumentosFila, type QueueItem } from './documentos-fila'
+import { FotoPicker } from '@/components/ui/foto-picker'
 
 const UF_OPTIONS = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
@@ -28,23 +28,34 @@ function maskCep(value: string) {
   return d.length > 5 ? `${d.slice(0,5)}-${d.slice(5)}` : d
 }
 
+// Etapas com campos do formulário; no cadastro vêm depois Documentos e Foto (opcionais)
+const FORM_STEPS = ['Dados pessoais', 'Participação', 'Endereço']
+const CREATE_STEPS = [...FORM_STEPS, 'Documentos', 'Foto']
+const LAST_FORM_STEP = FORM_STEPS.length - 1
+const DOCS_STEP = FORM_STEPS.length
+const FOTO_STEP = DOCS_STEP + 1
+
+/** Aba extra da edição, fora do formulário (ex.: Documentos, que salvam na hora) */
+export type ExtraTab = { label: string; content: React.ReactNode }
+
 interface Props {
-  open: boolean
-  onClose: () => void
   companyId: string
   socio: Socio | null
   /** Soma da participação dos outros sócios (limita este sócio a 100% no total) */
   outrasParticipacoes: number
+  extraTabs?: ExtraTab[]
+  /** Aba aberta ao entrar (na edição; índices das extras vêm depois das etapas) */
+  initialTab?: number
+  onCancel: () => void
+  onSaved: () => void
 }
 
-const STEPS = ['Dados pessoais', 'Participação', 'Endereço'] as const
-const LAST_STEP = STEPS.length - 1
-
 // Indicador de etapas: número (ou ✓ quando concluída) + nome, ligados por uma linha
-function Stepper({ step }: { step: number }) {
+function Stepper({ labels, step }: { labels: string[]; step: number }) {
+  const last = labels.length - 1
   return (
     <ol className="flex items-center gap-2 mb-6">
-      {STEPS.map((label, i) => {
+      {labels.map((label, i) => {
         const done = i < step
         const current = i === step
         return (
@@ -63,7 +74,7 @@ function Stepper({ step }: { step: number }) {
             >
               {label}
             </span>
-            {i < LAST_STEP && (
+            {i < last && (
               <span className="flex-1 h-px min-w-4" style={{ backgroundColor: done ? 'var(--color-brand)' : 'var(--color-card-border)' }} />
             )}
           </li>
@@ -74,10 +85,10 @@ function Stepper({ step }: { step: number }) {
 }
 
 // Na edição as etapas viram abas clicáveis (não precisa passar por todas para salvar)
-function Tabs({ step, onSelect }: { step: number; onSelect: (i: number) => void }) {
+function Tabs({ labels, step, onSelect }: { labels: string[]; step: number; onSelect: (i: number) => void }) {
   return (
     <div className="flex flex-wrap gap-2 mb-6" role="tablist">
-      {STEPS.map((label, i) => {
+      {labels.map((label, i) => {
         const active = i === step
         return (
           <button
@@ -102,43 +113,41 @@ function Tabs({ step, onSelect }: { step: number; onSelect: (i: number) => void 
 
 const formatPct = (n: number) => `${n.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
 
-export function ModalSocio({ open, onClose, companyId, socio, outrasParticipacoes }: Props) {
-  const router = useRouter()
+// Formulário do sócio: etapas no cadastro (novo/), abas na edição ([id]/)
+export function SocioForm({ companyId, socio, outrasParticipacoes, extraTabs = [], initialTab = 0, onCancel, onSaved }: Props) {
   const isEditing = !!socio
   const disponivel = Math.max(0, Math.round((100 - outrasParticipacoes) * 100) / 100)
 
   const formRef = useRef<HTMLFormElement>(null)
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(isEditing ? initialTab : 0)
   // Campos destacados com borda vermelha (o aviso vai no toast)
   const [invalid, setInvalid] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
-  const [cpf, setCpf] = useState('')
-  const [administrador, setAdministrador] = useState(false)
-  const [cep, setCep] = useState('')
-  const [uf, setUf] = useState('')
-  const [cidade, setCidade] = useState('')
-  const [logradouro, setLogradouro] = useState('')
-  const [bairro, setBairro] = useState('')
+  const [cpf, setCpf] = useState(socio?.cpf ? formatCpf(socio.cpf) : '')
+  const [administrador, setAdministrador] = useState(socio?.administrador ?? false)
+  const [cep, setCep] = useState(socio?.cep ? maskCep(socio.cep) : '')
+  const [uf, setUf] = useState(socio?.uf ?? '')
+  const [cidade, setCidade] = useState(socio?.cidade ?? '')
+  const [logradouro, setLogradouro] = useState(socio?.logradouro ?? '')
+  const [bairro, setBairro] = useState(socio?.bairro ?? '')
   const [cepLoading, setCepLoading] = useState(false)
+  // Cadastro: documentos escolhidos na última etapa, enviados depois que o sócio é criado
+  const [docsQueue, setDocsQueue] = useState<QueueItem[]>([])
+  // Cadastro: foto escolhida na etapa Foto (vai junto com o cadastro)
+  const [fotoFile, setFotoFile] = useState<File | null>(null)
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (open) {
-      setCpf(socio?.cpf ? formatCpf(socio.cpf) : '')
-      setAdministrador(socio?.administrador ?? false)
-      setCep(socio?.cep ? maskCep(socio.cep) : '')
-      setUf(socio?.uf ?? '')
-      setCidade(socio?.cidade ?? '')
-      setLogradouro(socio?.logradouro ?? '')
-      setBairro(socio?.bairro ?? '')
-      setInvalid(new Set())
-      setStep(0)
-    }
-  }, [open, socio])
+  // Última etapa do cadastro é a da foto; na edição, a última aba do formulário
+  const lastStep = isEditing ? LAST_FORM_STEP : FOTO_STEP
+
+  // Aba extra aberta (índices depois das etapas do formulário)
+  const extraIndex = step - FORM_STEPS.length
+  const onExtraTab = isEditing && extraIndex >= 0
 
   const field = (name: string) => (formRef.current?.elements.namedItem(name) as HTMLInputElement | null)?.value ?? ''
 
   // Campos obrigatórios de cada etapa
-  const REQUIRED: Record<number, string[]> = { 0: ['nome'], 1: [], 2: [] }
+  const REQUIRED: Record<number, string[]> = { 0: ['nome'], 1: [], 2: [], 3: [], 4: [] }
 
   type Problem = { step: number; fields: string[]; message: string }
 
@@ -165,7 +174,7 @@ export function ModalSocio({ open, onClose, companyId, socio, outrasParticipacoe
 
   // Primeira etapa com problema (para levar a pessoa até ela)
   function validateAll(): Problem | null {
-    for (let i = 0; i <= LAST_STEP; i++) {
+    for (let i = 0; i <= LAST_FORM_STEP; i++) {
       const problem = validateStep(i)
       if (problem) return problem
     }
@@ -193,7 +202,7 @@ export function ModalSocio({ open, onClose, companyId, socio, outrasParticipacoe
     const problem = validateStep(step)
     if (problem) { reportProblem(problem); return }
     setInvalid(new Set())
-    setStep((s) => Math.min(LAST_STEP, s + 1))
+    setStep((s) => Math.min(lastStep, s + 1))
   }
 
   function goBack() {
@@ -220,7 +229,7 @@ export function ModalSocio({ open, onClose, companyId, socio, outrasParticipacoe
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     // Cadastro: Enter nas etapas intermediárias avança em vez de salvar. Edição: salva de qualquer aba.
-    if (!isEditing && step < LAST_STEP) { goNext(); return }
+    if (!isEditing && step < lastStep) { goNext(); return }
     const problem = validateAll()
     if (problem) { reportProblem(problem); return }
     setInvalid(new Set())
@@ -229,8 +238,9 @@ export function ModalSocio({ open, onClose, companyId, socio, outrasParticipacoe
     const fd = new FormData(e.currentTarget)
     fd.set('cpf', cpf)
     fd.set('administrador', String(administrador))
+    if (!isEditing && fotoFile) fd.set('foto_file', fotoFile)
 
-    // Resultado do servidor no toast (✓ / ✕); com erro, o modal continua aberto
+    // Resultado do servidor no toast (✓ / ✕); com erro, continua no formulário
     const nome = fd.get('nome') as string
     const result = await toast.promise(
       isEditing ? updateSocioAction(socio!.id, fd) : createSocioAction(companyId, fd),
@@ -241,11 +251,36 @@ export function ModalSocio({ open, onClose, companyId, socio, outrasParticipacoe
       },
     )
 
-    setLoading(false)
-    if (!('error' in result)) {
-      onClose()
-      router.refresh()
+    if ('error' in result) { setLoading(false); return }
+    // Sócio criado, mas a foto falhou: avisa (dá para enviar depois em "Alterar foto")
+    if ('fotoErro' in result && result.fotoErro) toast.error(`A foto não foi salva: ${result.fotoErro}`)
+
+    // Sócio criado: envia os documentos escolhidos (falha aqui não desfaz o cadastro)
+    const socioId = 'id' in result && typeof result.id === 'string' ? result.id : null
+    if (!isEditing && socioId && docsQueue.length) {
+      const n = docsQueue.length
+      await toast.promise(sendDocs(socioId), {
+        loading: n === 1 ? 'Enviando documento…' : `Enviando ${n} documentos…`,
+        success: n === 1 ? 'Documento enviado.' : `${n} documentos enviados.`,
+        error: 'Alguns documentos não foram enviados. Envie novamente pela aba Documentos do sócio.',
+      })
     }
+
+    setLoading(false)
+    onSaved()
+  }
+
+  async function sendDocs(socioId: string) {
+    let falhas = 0
+    for (const item of docsQueue) {
+      const fd = new FormData()
+      fd.set('file', item.file)
+      fd.set('descricao', item.descricao)
+      const r = await uploadSocioDocumentAction(socioId, companyId, fd)
+      if ('error' in r) falhas++
+    }
+    if (falhas) return { error: `${falhas} de ${docsQueue.length} documentos não foram enviados.` }
+    return { success: true }
   }
 
   const fieldCls = 'h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]'
@@ -253,18 +288,13 @@ export function ModalSocio({ open, onClose, companyId, socio, outrasParticipacoe
   const labelSty = { color: 'var(--color-text-secondary)' }
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={isEditing ? 'Editar sócio' : 'Novo sócio'}
-      className="sm:max-w-2xl"
-    >
+    <>
       {isEditing
-        ? <Tabs step={step} onSelect={(i) => setStep(i)} />
-        : <Stepper step={step} />}
+        ? <Tabs labels={[...FORM_STEPS, ...extraTabs.map((t) => t.label)]} step={step} onSelect={(i) => setStep(i)} />
+        : <Stepper labels={CREATE_STEPS} step={step} />}
 
       {/* Todas as etapas ficam no mesmo formulário (só escondidas), para não perder o que foi digitado */}
-      <form ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <form ref={formRef} onSubmit={handleSubmit} noValidate className={onExtraTab ? 'hidden' : 'flex flex-col gap-4'}>
 
         {/* ── 1. Dados pessoais ── */}
         <div className={step === 0 ? 'flex flex-col gap-4' : 'hidden'}>
@@ -417,18 +447,46 @@ export function ModalSocio({ open, onClose, companyId, socio, outrasParticipacoe
           </div>
         </div>
 
+        {/* ── 4. Documentos (só no cadastro, opcional) ── */}
+        {!isEditing && (
+          <div className={step === DOCS_STEP ? 'flex flex-col gap-3' : 'hidden'}>
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              Opcional: adicione os documentos do sócio agora ou depois, pela aba Documentos.
+            </p>
+            <DocumentosFila queue={docsQueue} onChange={setDocsQueue} disabled={loading} />
+          </div>
+        )}
+
+        {/* ── 5. Foto (só no cadastro, opcional) ── */}
+        {!isEditing && (
+          <div className={step === FOTO_STEP ? 'flex flex-col gap-4' : 'hidden'}>
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              Opcional: adicione uma foto do sócio agora ou depois, em &quot;Alterar foto&quot; na lista.
+            </p>
+            <FotoPicker
+              preview={fotoPreview}
+              onPick={(file) => { setFotoFile(file); setFotoPreview(URL.createObjectURL(file)) }}
+              onRemove={() => { setFotoFile(null); setFotoPreview(null) }}
+              alt="Foto do sócio"
+            />
+          </div>
+        )}
+
 
         <div className="flex items-center justify-between gap-2 pt-2">
-          <Button type="button" variant="secondary" onClick={isEditing || step === 0 ? onClose : goBack}>
+          <Button type="button" variant="secondary" onClick={isEditing || step === 0 ? onCancel : goBack}>
             {isEditing || step === 0 ? 'Cancelar' : 'Voltar'}
           </Button>
-          {!isEditing && step < LAST_STEP ? (
+          {!isEditing && step < lastStep ? (
             <Button key="next" type="button" onClick={goNext}>Avançar</Button>
           ) : (
             <Button key="submit" type="submit" loading={loading}>{isEditing ? 'Salvar' : 'Adicionar'}</Button>
           )}
         </div>
       </form>
-    </Modal>
+
+      {/* Abas extras (fora do formulário) */}
+      {onExtraTab && extraTabs[extraIndex]?.content}
+    </>
   )
 }

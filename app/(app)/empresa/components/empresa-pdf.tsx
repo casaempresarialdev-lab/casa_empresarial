@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import type { CompanyBankData } from '@/lib/validations/company'
 
 // Dados da tela Minha Empresa (valores atuais do formulário)
 export type EmpresaPdfData = {
@@ -18,6 +19,7 @@ export type EmpresaPdfData = {
   inscricao_municipal: string
   ie_situacao: string
   inscricao_estadual: string
+  bancos: CompanyBankData[]
 }
 
 interface Props {
@@ -91,6 +93,19 @@ const IE_SITUACAO: Record<string, string> = {
   contribuinte: 'Contribuinte do ICMS',
 }
 
+const TIPO_CONTA: Record<string, string> = {
+  corrente: 'Conta Corrente',
+  poupanca: 'Poupança',
+  pagamento: 'Conta Pagamento',
+}
+
+const PIX_TIPO: Record<string, string> = {
+  cnpj: 'CNPJ',
+  email: 'E-mail',
+  telefone: 'Telefone',
+  aleatoria: 'Chave aleatória',
+}
+
 type Field = { label: string; value: string; full?: boolean }
 
 function Section({ title, fields, accent }: { title: string; fields: Field[]; accent: string }) {
@@ -149,6 +164,22 @@ export function EmpresaPdf({ data, logoUrl, accent, geradoEm }: Props) {
           { label: 'IE — Situação', value: IE_SITUACAO[data.ie_situacao] ?? '' },
           { label: 'IE — Número', value: data.inscricao_estadual },
         ]} />
+
+        {data.bancos.map((b, i) => (
+          <Section
+            key={i}
+            accent={accent}
+            title={`Dados bancários — ${b.banco || `Banco ${i + 1}`}${b.principal ? ' (principal)' : ''}`}
+            fields={[
+              { label: 'Banco', value: b.banco },
+              { label: 'Tipo de conta', value: TIPO_CONTA[b.tipo_conta ?? ''] ?? '' },
+              { label: 'Agência', value: b.agencia ?? '' },
+              { label: 'Conta', value: [b.conta, b.digito].filter(Boolean).join('-') },
+              { label: 'Tipo de chave PIX', value: PIX_TIPO[b.pix_tipo ?? ''] ?? '' },
+              { label: 'Chave PIX', value: b.pix_tipo ? b.pix_chave ?? '' : '' },
+            ]}
+          />
+        ))}
 
         <View style={s.footer} fixed>
           <Text>{data.razao_social}</Text>

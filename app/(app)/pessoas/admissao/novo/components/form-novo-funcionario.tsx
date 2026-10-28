@@ -208,6 +208,7 @@ export function FormNovoFuncionario({ companyId, companyBenefits }: Props) {
       const acessoResult = await grantSystemAccessAction(result.employeeId, companyId)
       if ('error' in acessoResult) acessoMsg = acessoResult.error ?? null
       else if ('warning' in acessoResult) acessoMsg = acessoResult.warning ?? null
+      else if ('notice' in acessoResult) acessoMsg = acessoResult.notice ?? null // ex.: já tinha conta
     }
 
     setLoading(false)

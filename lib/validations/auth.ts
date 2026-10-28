@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-function isValidCpf(digits: string): boolean {
+export function isValidCpf(digits: string): boolean {
   if (/^(\d)\1+$/.test(digits)) return false
   let sum = 0
   for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i)
@@ -13,6 +13,20 @@ function isValidCpf(digits: string): boolean {
   if (r >= 10) r = 0
   return r === parseInt(digits[10])
 }
+
+// Regras da senha segura — usadas na validação e na lista que o usuário vê sendo checada enquanto digita
+export const REGRAS_SENHA: { id: string; label: string; test: (s: string) => boolean }[] = [
+  { id: 'tamanho',   label: 'No mínimo 8 caracteres', test: (s) => s.length >= 8 },
+  { id: 'maiuscula', label: 'Uma letra maiúscula',    test: (s) => /[A-Z]/.test(s) },
+  { id: 'minuscula', label: 'Uma letra minúscula',    test: (s) => /[a-z]/.test(s) },
+  { id: 'numero',    label: 'Um número',              test: (s) => /[0-9]/.test(s) },
+  { id: 'simbolo',   label: 'Um símbolo (!@#$%…)',    test: (s) => /[^A-Za-z0-9\s]/.test(s) },
+]
+
+export const senhaForte = z.string().superRefine((s, ctx) => {
+  const falta = REGRAS_SENHA.find((r) => !r.test(s))
+  if (falta) ctx.addIssue({ code: 'custom', message: `A senha precisa ter: ${falta.label.toLowerCase()}` })
+})
 
 export const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -70,6 +84,27 @@ export const novaSenhaSchema = z
     path: ['confirmPassword'],
   })
 
+// Aceite do convite: a pessoa convidada cria a conta (nome, CPF e senha) pelo link do e-mail
+export const aceitarConviteSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Nome deve ter pelo menos 2 caracteres').max(100),
+    cpf: z.string()
+      .min(1, 'CPF é obrigatório')
+      .refine((v) => v.replace(/\D/g, '').length === 11, 'CPF deve ter 11 dígitos')
+      .refine((v) => isValidCpf(v.replace(/\D/g, '')), 'CPF inválido'),
+    password: z
+      .string()
+      .min(8, 'Senha deve ter pelo menos 8 caracteres')
+      .regex(/[A-Z]/, 'Deve conter pelo menos uma letra maiúscula')
+      .regex(/[0-9]/, 'Deve conter pelo menos um número'),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'As senhas não conferem',
+    path: ['confirmPassword'],
+  })
+
+export type AceitarConviteData = z.infer<typeof aceitarConviteSchema>
 export type LoginData = z.infer<typeof loginSchema>
 export type CadastroPasso1Data = z.infer<typeof cadastroPasso1Schema>
 export type CadastroPasso2Data = z.infer<typeof cadastroPasso2Schema>

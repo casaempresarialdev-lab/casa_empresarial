@@ -101,9 +101,8 @@ export async function createSocioAction(companyId: string, formData: FormData) {
   if (error) return { error: error.message }
   const fotoErro = await saveFoto(admin, companyId, criado.id, formData)
   revalidatePath('/admin/quadro-societario')
-  // O sócio foi criado mesmo se a foto falhar: avisa sem perder o cadastro
-  if (fotoErro) return { error: `Sócio cadastrado, mas a foto não foi salva: ${fotoErro}` }
-  return { success: true }
+  // O sócio foi criado mesmo se a foto falhar: devolve o aviso sem tratar como erro (evita cadastro duplicado)
+  return { success: true, id: criado.id as string, fotoErro }
 }
 
 export async function updateSocioAction(socioId: string, formData: FormData) {

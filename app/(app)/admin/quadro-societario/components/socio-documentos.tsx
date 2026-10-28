@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { FileDropZone } from '@/components/ui/file-drop-zone'
+import { DocumentosFila, formatSize, type QueueItem } from './documentos-fila'
 import { FileViewer, triggerDownload, type ViewerFile } from '@/components/ui/file-viewer'
 import { toast } from '@/lib/toast'
 import {
@@ -18,23 +17,9 @@ import {
   type SocioDocument,
 } from '../actions'
 
-const MAX_DOC_BYTES = 50 * 1024 * 1024
-
-function formatSize(bytes: number | null) {
-  if (!bytes) return ''
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
-  return `${(bytes / 1024 / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB`
-}
-
 function formatDate(iso: string) {
   const [y, m, d] = iso.split('T')[0].split('-')
   return `${d}/${m}/${y}`
-}
-
-interface QueueItem {
-  key: string
-  file: File
-  descricao: string
 }
 
 interface Props {
@@ -63,17 +48,6 @@ export function SocioDocumentos({ socioId, socioNome, companyId }: Props) {
   }, [socioId, companyId])
 
   useEffect(() => { load() }, [load])
-
-  function addFiles(files: File[]) {
-    setQueue((prev) => [
-      ...prev,
-      ...files.map((f) => ({ key: `${f.name}-${f.size}-${f.lastModified}-${Math.random()}`, file: f, descricao: f.name.replace(/\.[^/.]+$/, '') })),
-    ])
-  }
-
-  function updateItem(key: string, descricao: string) {
-    setQueue((prev) => prev.map((q) => (q.key === key ? { ...q, descricao } : q)))
-  }
 
   // Envia um por vez; os que falharem continuam na fila para tentar de novo
   async function sendAll(items: QueueItem[]) {
@@ -146,40 +120,10 @@ export function SocioDocumentos({ socioId, socioNome, companyId }: Props) {
     <div className="flex flex-col gap-4">
       {/* Envio */}
       <div className="flex flex-col gap-3">
-        <FileDropZone
-          onFiles={addFiles}
-          maxBytes={MAX_DOC_BYTES}
-          hint="RG, CNH, comprovante de residência… (vários de uma vez)"
-        />
+        {/* Arquivos a enviar: descrição editável (Enter envia todos) */}
+        <DocumentosFila queue={queue} onChange={setQueue} disabled={uploading} onEnter={handleUpload} />
         {queue.length > 0 && (
           <div className="flex flex-col gap-3">
-            {/* Arquivos a enviar: descrição editável (Enter envia todos) */}
-            <ul className="flex flex-col gap-2">
-              {queue.map((q) => (
-                <li key={q.key} className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <Input
-                      aria-label={`Descrição de ${q.file.name}`}
-                      value={q.descricao}
-                      onChange={(e) => updateItem(q.key, e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUpload() } }}
-                      placeholder="Descrição (ex: RG, Comprovante de residência)"
-                      disabled={uploading}
-                    />
-                    <p className="text-xs mt-1 truncate" style={{ color: 'var(--color-text-muted)' }}>
-                      {q.file.name} · {formatSize(q.file.size)}
-                    </p>
-                  </div>
-                  <IconButton
-                    icon="trash"
-                    label={`Tirar ${q.file.name} da lista`}
-                    tone="danger"
-                    onClick={() => setQueue((prev) => prev.filter((x) => x.key !== q.key))}
-                    disabled={uploading}
-                  />
-                </li>
-              ))}
-            </ul>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setQueue([])} disabled={uploading}>
                 Cancelar

@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { AppStoreInitializer } from '@/components/layout/app-store-initializer'
 import { AppShell } from '@/components/layout/app-shell'
 import { PageTransition } from '@/components/layout/page-transition'
+import { Toolbar } from '@/components/layout/toolbar'
 import { Toaster } from '@/components/ui/toaster'
 import { ThemeSync } from '@/components/layout/theme-sync'
 import { themeCssVars } from '@/lib/theme'
@@ -90,7 +91,9 @@ export default async function AppLayout({
           companies={companies}
         />
         <AppShell>
-          <main className="flex-1 p-6 pt-16 md:pt-6">
+          <main className="relative flex-1 p-6 pt-16 md:pt-6">
+            {/* Barra de ferramentas: igual em todas as telas, fora da transição de página (em telas largas fica na linha do título) */}
+            <Toolbar />
             <PageTransition>{children}</PageTransition>
           </main>
         </AppShell>

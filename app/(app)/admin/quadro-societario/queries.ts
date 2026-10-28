@@ -27,6 +27,25 @@ export type Socio = {
   documentos?: number
 }
 
+export async function getSocioById(id: string, companyId: string): Promise<Socio | null> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('socios')
+    .select('*')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (error || !data) return null
+  const socio = data as Socio
+  let foto_url: string | null = null
+  if (socio.foto_path) {
+    const { data: signed } = await admin.storage.from('documentos').createSignedUrl(socio.foto_path, 3600)
+    foto_url = signed?.signedUrl ?? null
+  }
+  return { ...socio, foto_url }
+}
+
 export async function getSocios(companyId: string): Promise<Socio[]> {
   const admin = createAdminClient()
   const [{ data, error }, { data: docs }] = await Promise.all([

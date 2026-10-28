@@ -99,13 +99,17 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
 
   async function handleResendInvite(inv: Invitation) {
     setResendingId(inv.id)
-    // Erros do servidor aparecem no próprio toast (✕)
-    await toast.promise(resendInvitationAction(inv.id, companyId), {
+    // Erros do servidor aparecem no próprio toast (✕) — inclusive quando o e-mail não saiu
+    const envio = resendInvitationAction(inv.id, companyId).then((r) =>
+      'emailEnviado' in r && r.emailEnviado === false ? { error: r.notice } : r,
+    )
+    await toast.promise(envio, {
       loading: `Reenviando convite para ${inv.email}…`,
-      success: `Convite reenviado para ${inv.email}.`,
+      success: (r) => ('notice' in r && r.notice) || `Convite reenviado para ${inv.email}.`,
       error: 'Erro ao reenviar convite.',
     })
     setResendingId(null)
+    router.refresh() // a pessoa pode ter entrado direto na empresa
   }
 
   const active = members.filter((m) => m.status === 'active')

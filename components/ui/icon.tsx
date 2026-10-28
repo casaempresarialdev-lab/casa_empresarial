@@ -1,6 +1,6 @@
 // Ícones em linha (estilo Lucide), herdam a cor do texto
 
-export type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user' | 'wallet' | 'card' | 'folder' | 'camera' | 'settings' | 'star' | 'logout' | 'plus' | 'pencil' | 'trash' | 'eye' | 'eye-off' | 'external' | 'info' | 'download' | 'lock' | 'shield' | 'mail'
+export type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user' | 'wallet' | 'card' | 'folder' | 'camera' | 'settings' | 'star' | 'logout' | 'plus' | 'pencil' | 'trash' | 'eye' | 'eye-off' | 'external' | 'info' | 'download' | 'lock' | 'shield' | 'mail' | 'bell' | 'maximize' | 'minimize' | 'calendar' | 'alarm' | 'chevron-left' | 'chevron-right' | 'check'
 
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
   grid: (
@@ -161,6 +161,52 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="2" y="4" width="20" height="16" rx="2" />
       <path d="m22 7-10 6L2 7" />
+    </>
+  ),
+  bell: (
+    <>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </>
+  ),
+  maximize: (
+    <>
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </>
+  ),
+  minimize: (
+    <>
+      <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+      <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+      <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+      <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </>
+  ),
+  alarm: (
+    <>
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2 2" />
+      <path d="M5 3 2 6" />
+      <path d="m22 6-3-3" />
+    </>
+  ),
+  'chevron-left': <polyline points="15 18 9 12 15 6" />,
+  'chevron-right': <polyline points="9 18 15 12 9 6" />,
+  check: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m8 12 3 3 5-6" />
     </>
   ),
 }

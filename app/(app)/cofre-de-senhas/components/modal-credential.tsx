@@ -13,11 +13,10 @@ import type { Credential } from '../queries'
 interface Props {
   open: boolean
   onClose: () => void
-  companyId: string
   credential: Credential | null
 }
 
-export function ModalCredential({ open, onClose, companyId, credential }: Props) {
+export function ModalCredential({ open, onClose, credential }: Props) {
   const router = useRouter()
   const isEditing = !!credential
 
@@ -63,7 +62,7 @@ export function ModalCredential({ open, onClose, companyId, credential }: Props)
     const sistema = fd.get('sistema') as string
     // Resultado do servidor no toast (✓ / ✕); com erro, o modal continua aberto
     const result = await toast.promise(
-      isEditing ? updateCredentialAction(credential!.id, companyId, fd) : createCredentialAction(companyId, fd),
+      isEditing ? updateCredentialAction(credential!.id, fd) : createCredentialAction(fd),
       {
         loading: isEditing ? 'Salvando credencial…' : 'Guardando credencial no cofre…',
         success: isEditing ? `Credencial de ${sistema} atualizada.` : `Credencial de ${sistema} guardada no cofre.`,

@@ -11,7 +11,9 @@ const ROUTE_LABELS: Record<string, string> = {
   admin: 'Administrativo',
   usuarios: 'Usuários',
   'quadro-societario': 'Quadro Societário',
-  'logins-senhas': 'Cofre de senhas',
+  'cofre-de-senhas': 'Cofre de senhas',
+  lembretes: 'Lembretes',
+  notificacoes: 'Notificações',
   documentacao: 'Documentação',
   'certificado-digital': 'Certificado digital',
   financeiro: 'Financeiro',
@@ -45,20 +47,22 @@ const ROUTE_LABELS: Record<string, string> = {
   perfil: 'Meu Perfil',
 }
 
-export function Breadcrumb() {
+/** current: nome para o último item (ex.: o nome do registro no lugar do id da URL) */
+export function Breadcrumb({ current }: { current?: string } = {}) {
   const pathname = usePathname()
   const segments = pathname.split('/').filter(Boolean)
 
   type Crumb = { label: string; href: string }
   const crumbs: Crumb[] = segments.map((seg, i) => ({
-    label: ROUTE_LABELS[seg] ?? seg,
+    label: (current && i === segments.length - 1 ? current : ROUTE_LABELS[seg]) ?? seg,
     href: '/' + segments.slice(0, i + 1).join('/'),
   }))
 
   if (crumbs.length === 0 || pathname === '/dashboard') return null
 
   return (
-    <nav aria-label="Breadcrumb">
+    // basis-full: nos cabeçalhos (flex-wrap) o caminho desce para baixo do título, liberando o canto direito para a barra de ferramentas
+    <nav aria-label="Breadcrumb" className="basis-full">
       <ol className="flex items-center gap-1.5 flex-wrap">
         <li>
           <Link

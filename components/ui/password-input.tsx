@@ -7,12 +7,39 @@ interface PasswordInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEle
   label?: string
   error?: string
   hint?: string
+  /**
+   * Evita o preenchimento e a caixa de sugestões do navegador/gerenciador de senhas (ex.: confirmar identidade, nova senha).
+   * Onde há suporte (Chrome, Edge, Safari…), o campo vira texto comum mascarado por CSS (-webkit-text-security):
+   * sem type="password" o navegador não o trata como senha e não abre a caixa de sugestões.
+   * Sem suporte, continua senha com proteções: só leitura até a 1ª interação, autocomplete "new-password"/"off"
+   * e marcadores que os gerenciadores (1Password, LastPass, Bitwarden, Dashlane) respeitam.
+   * (O name não é trocado: o react-hook-form precisa dele para ler o campo.)
+   */
+  semAutocompletar?: boolean
 }
 
+// Máscara por CSS disponível? (os modais só montam no navegador, então dá para checar na hora)
+const suportaMascaraCss = () =>
+  typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('-webkit-text-security', 'disc')
+
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
-  ({ className, label, error, hint, id, ...props }, ref) => {
+  ({ className, label, error, hint, id, semAutocompletar, autoComplete, name, onFocus, readOnly, ...props }, ref) => {
     const [show, setShow] = useState(false)
+    const [liberado, setLiberado] = useState(false)
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
+
+    const [mascaraCss] = useState(() => !!semAutocompletar && suportaMascaraCss())
+
+    const marcadores = { 'data-lpignore': 'true', 'data-1p-ignore': 'true', 'data-bwignore': 'true', 'data-form-type': 'other' }
+    const antiAutofill = !semAutocompletar
+      ? { autoComplete, readOnly }
+      : mascaraCss
+        // Texto comum mascarado: sem sugestões de senha, sem correção/maiúscula automática do teclado
+        ? { autoComplete: 'off', readOnly, autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false, ...marcadores }
+        : { autoComplete: autoComplete === 'new-password' ? 'new-password' : 'off', readOnly: readOnly || !liberado, ...marcadores }
+    // Só a versão "senha de verdade" precisa liberar o campo na 1ª interação
+    const travaAteInteragir = !!semAutocompletar && !mascaraCss && !liberado
+    const liberar = (el: HTMLInputElement) => { el.readOnly = false; setLiberado(true) }
 
     return (
       <div className="flex flex-col gap-1">
@@ -25,7 +52,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           <input
             ref={ref}
             id={inputId}
-            type={show ? 'text' : 'password'}
+            type={show || mascaraCss ? 'text' : 'password'}
             className={cn(
               'h-10 w-full rounded-lg border px-3 pr-10 text-sm transition-colors',
               'focus:outline-none focus:ring-2',
@@ -38,8 +65,17 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
               borderColor: error ? undefined : 'var(--color-bg-surface)',
               backgroundColor: '#fff',
               color: 'var(--color-text-primary)',
+              ...(mascaraCss && { WebkitTextSecurity: show ? 'none' : 'disc' }),
             }}
             {...props}
+            {...antiAutofill}
+            name={name}
+            onFocus={onFocus}
+            // Libera na primeira interação de verdade (tecla, clique, colar) — não no foco, que o autoFocus dispara sozinho.
+            // Tira o readOnly direto no elemento para a própria tecla/colagem já valer.
+            onKeyDown={(e) => { if (travaAteInteragir) liberar(e.currentTarget); props.onKeyDown?.(e) }}
+            onPointerDown={(e) => { if (travaAteInteragir) liberar(e.currentTarget); props.onPointerDown?.(e) }}
+            onPaste={(e) => { if (travaAteInteragir) liberar(e.currentTarget); props.onPaste?.(e) }}
           />
           <button
             type="button"

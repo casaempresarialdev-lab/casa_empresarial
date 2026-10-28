@@ -24,6 +24,20 @@ function validCNPJ(cnpj: string): boolean {
   return parseInt(c[12]) === d1 && parseInt(c[13]) === d2
 }
 
+// Um banco dos dados bancários da empresa
+export const companyBankSchema = z.object({
+  banco: z.string().trim().min(1, 'Informe o banco'),
+  tipo_conta: z.enum(['corrente', 'poupanca', 'pagamento']).optional().or(z.literal('')),
+  agencia: z.string().optional(),
+  conta: z.string().optional(),
+  digito: z.string().optional(),
+  pix_tipo: z.enum(['cnpj', 'email', 'telefone', 'aleatoria']).optional().or(z.literal('')),
+  pix_chave: z.string().optional(),
+  principal: z.boolean().optional(),
+})
+
+export type CompanyBankData = z.infer<typeof companyBankSchema>
+
 export const companySchema = z.object({
   cnpj: z
     .string()
@@ -52,6 +66,8 @@ export const companySchema = z.object({
   bairro: z.string().optional(),
   numero: z.string().optional(),
   complemento: z.string().optional(),
+  // Dados bancários (opcional, vários bancos)
+  bancos: z.array(companyBankSchema).optional(),
 })
 
 export type CompanyData = z.infer<typeof companySchema>

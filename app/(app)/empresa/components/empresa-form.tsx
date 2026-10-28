@@ -2,14 +2,14 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
+import { useFieldArray, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createCompanyAction, updateCompanyAction } from '../actions'
-import { companySchema, type CompanyData } from '@/lib/validations/company'
+import { companySchema, type CompanyData, type CompanyBankData } from '@/lib/validations/company'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/toast'
-import type { Company } from '../queries'
+import type { Company, CompanyBank } from '../queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { Icon } from '@/components/ui/icon'
 import type { EmpresaPdfData } from './empresa-pdf'
@@ -40,9 +40,33 @@ const TABS = [
   { id: 'dados',       label: 'Dados da empresa',    fields: ['razao_social', 'cnpj', 'nome_fantasia', 'telefone', 'email'] },
   { id: 'endereco',    label: 'Endereço',            fields: ['cep', 'uf', 'cidade', 'logradouro', 'numero', 'bairro', 'complemento'] },
   { id: 'fiscal',      label: 'Dados fiscais',       fields: ['regime_tributario', 'inscricao_municipal', 'ie_situacao', 'inscricao_estadual'] },
+  { id: 'bancos',      label: 'Dados bancários',     fields: ['bancos'] },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
+
+// Sugestões para o campo Banco (pode digitar qualquer outro)
+const BANCOS_SUGERIDOS = [
+  'Banco do Brasil', 'Bradesco', 'Caixa Econômica Federal', 'Itaú', 'Santander', 'Nubank', 'Inter',
+  'C6 Bank', 'BTG Pactual', 'Sicoob', 'Sicredi', 'Banrisul', 'Mercado Pago', 'PagBank', 'Cora', 'Stone', 'Asaas',
+]
+
+const NOVO_BANCO: CompanyBankData = {
+  banco: '', tipo_conta: '', agencia: '', conta: '', digito: '', pix_tipo: '', pix_chave: '', principal: false,
+}
+
+function bankToForm(b: CompanyBank): CompanyBankData {
+  return {
+    banco:      b.banco,
+    tipo_conta: b.tipo_conta ?? '',
+    agencia:    b.agencia ?? '',
+    conta:      b.conta ?? '',
+    digito:     b.digito ?? '',
+    pix_tipo:   b.pix_tipo ?? '',
+    pix_chave:  b.pix_chave ?? '',
+    principal:  b.principal,
+  }
+}
 
 // Conteúdo de uma aba: fica montado mesmo escondido, para os campos não perderem o valor
 function TabPanel({ active, children }: { active: boolean; children: React.ReactNode }) {
@@ -55,9 +79,10 @@ function Req() {
 
 interface Props {
   company: Company | null
+  banks: CompanyBank[]
 }
 
-export function EmpresaForm({ company }: Props) {
+export function EmpresaForm({ company, banks }: Props) {
   const isEdit = !!company
   const router = useRouter()
 
@@ -70,7 +95,7 @@ export function EmpresaForm({ company }: Props) {
   const cnpjDisplay = company ? formatCNPJ(company.cnpj) : ''
   const cepDisplay  = company?.cep ? maskCep(company.cep) : ''
 
-  const { register, handleSubmit, setValue, getValues, watch, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, setValue, getValues, watch, control, formState: { errors, isSubmitting } } =
     useForm<CompanyData>({
       resolver: zodResolver(companySchema),
       defaultValues: company
@@ -92,9 +117,25 @@ export function EmpresaForm({ company }: Props) {
             bairro:                    company.bairro ?? '',
             numero:                    company.numero ?? '',
             complemento:               company.complemento ?? '',
+            bancos:                    banks.map(bankToForm),
           }
-        : { cor_primaria: '#C19A6B' },
+        : { cor_primaria: '#C19A6B', bancos: [] },
     })
+
+  const { fields: bancoFields, append: appendBanco, remove: removeBanco } = useFieldArray({ control, name: 'bancos' })
+  const bancos = watch('bancos') ?? []
+
+  // Só um banco pode ser o principal
+  function setPrincipal(index: number) {
+    bancos.forEach((_, i) => setValue(`bancos.${i}.principal`, i === index, { shouldDirty: true }))
+  }
+
+  // Removeu o principal: o primeiro que sobrar passa a ser o principal
+  function handleRemoveBanco(index: number) {
+    const eraPrincipal = !!bancos[index]?.principal
+    removeBanco(index)
+    if (eraPrincipal && bancos.length > 1) setValue('bancos.0.principal', true, { shouldDirty: true })
+  }
 
   const loading  = isSubmitting || isPending
   const [pdfLoading, setPdfLoading] = useState(false)
@@ -126,6 +167,7 @@ export function EmpresaForm({ company }: Props) {
         inscricao_municipal: v.inscricao_municipal ?? '',
         ie_situacao:         v.ie_situacao ?? '',
         inscricao_estadual:  v.inscricao_estadual ?? '',
+        bancos:              v.bancos ?? [],
       }
       // Cor principal da identidade visual (sempre em hex no tema)
       const brand = getComputedStyle(document.documentElement).getPropertyValue('--color-brand').trim()
@@ -177,9 +219,12 @@ export function EmpresaForm({ company }: Props) {
   async function onSubmit(data: CompanyData) {
     setServerError(null)
     const formData = new FormData()
-    Object.entries(data).forEach(([k, v]) => {
+    const { bancos: bancosData, ...rest } = data
+    Object.entries(rest).forEach(([k, v]) => {
       if (v !== undefined && v !== '') formData.set(k, String(v))
     })
+    // Lista inteira (mesmo vazia), para remoções também serem salvas
+    formData.set('bancos', JSON.stringify(bancosData ?? []))
 
     startTransition(async () => {
       if (isEdit) {
@@ -191,11 +236,13 @@ export function EmpresaForm({ company }: Props) {
         })
       } else {
         const result = await createCompanyAction(formData)
-        if (result?.error) {
-          setServerError(result.error)
-        } else if (result?.companyId) {
+        if (result?.companyId) {
+          // Empresa criada; se só os bancos falharam, avisa e segue
+          if (result.error) toast.error(result.error)
           document.cookie = `active_company_id=${result.companyId}; path=/; max-age=31536000; SameSite=Lax`
           router.push('/dashboard')
+        } else if (result?.error) {
+          setServerError(result.error)
         }
       }
     })
@@ -393,6 +440,117 @@ export function EmpresaForm({ company }: Props) {
             </div>
             <Input label="IE — Número" type="text" placeholder="000.000.000.000"
               {...register('inscricao_estadual')} />
+          </div>
+        </TabPanel>
+
+        {/* Dados bancários — vários bancos */}
+        <TabPanel active={activeTab === 'bancos'}>
+          <datalist id="bancos-sugeridos">
+            {BANCOS_SUGERIDOS.map((b) => <option key={b} value={b} />)}
+          </datalist>
+
+          {bancoFields.length === 0 && (
+            <div className="rounded-xl border border-dashed py-10 px-4 text-center" style={{ borderColor: 'var(--color-bg-surface)' }}>
+              <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nenhum banco cadastrado</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                Adicione as contas bancárias da empresa. Você pode cadastrar mais de um banco.
+              </p>
+            </div>
+          )}
+
+          {bancoFields.map((field, i) => {
+            const principal = !!bancos[i]?.principal
+            return (
+              <div
+                key={field.id}
+                className="rounded-xl border p-4 flex flex-col gap-4"
+                style={{ borderColor: principal ? 'var(--color-brand)' : 'var(--color-bg-surface)' }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+                      {bancos[i]?.banco?.trim() || `Banco ${i + 1}`}
+                    </span>
+                    {principal && (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: 'var(--color-brand)' }}>
+                        Principal
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {!principal && (
+                      <button
+                        type="button"
+                        onClick={() => setPrincipal(i)}
+                        className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium transition-colors hover:bg-[var(--color-brand-light)] cursor-pointer"
+                        style={{ color: 'var(--color-brand)' }}
+                      >
+                        <Icon name="star" size={14} />
+                        Tornar principal
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBanco(i)}
+                      aria-label="Remover banco"
+                      title="Remover banco"
+                      className="inline-flex items-center justify-center h-8 w-8 rounded-lg transition-colors hover:bg-red-50 cursor-pointer"
+                      style={{ color: 'var(--color-error)' }}
+                    >
+                      <Icon name="trash" size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label={<>Banco <Req /></>} type="text" placeholder="Ex: Itaú, Nubank, Sicoob..."
+                    list="bancos-sugeridos" error={errors.bancos?.[i]?.banco?.message}
+                    {...register(`bancos.${i}.banco`)} />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Tipo de conta</label>
+                    <select className={selectCls} style={selectSty} {...register(`bancos.${i}.tipo_conta`)}>
+                      <option value="">Selecione...</option>
+                      <option value="corrente">Conta Corrente</option>
+                      <option value="poupanca">Poupança</option>
+                      <option value="pagamento">Conta Pagamento</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-[1fr_1.5fr_0.6fr] gap-3">
+                  <Input label="Agência" type="text" placeholder="0000" inputMode="numeric" {...register(`bancos.${i}.agencia`)} />
+                  <Input label="Conta" type="text" placeholder="00000000" inputMode="numeric" {...register(`bancos.${i}.conta`)} />
+                  <Input label="Dígito" type="text" placeholder="0" maxLength={2} {...register(`bancos.${i}.digito`)} />
+                </div>
+
+                <div className="grid grid-cols-[1fr_2fr] gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Tipo de chave PIX</label>
+                    <select className={selectCls} style={selectSty} {...register(`bancos.${i}.pix_tipo`)}>
+                      <option value="">Sem PIX</option>
+                      <option value="cnpj">CNPJ</option>
+                      <option value="email">E-mail</option>
+                      <option value="telefone">Telefone</option>
+                      <option value="aleatoria">Chave aleatória</option>
+                    </select>
+                  </div>
+                  <Input label="Chave PIX" type="text" placeholder={bancos[i]?.pix_tipo ? 'Chave PIX' : 'Escolha o tipo de chave'}
+                    {...register(`bancos.${i}.pix_chave`)} />
+                </div>
+              </div>
+            )
+          })}
+
+          <div>
+            <button
+              type="button"
+              onClick={() => appendBanco({ ...NOVO_BANCO, principal: bancoFields.length === 0 })}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-dashed text-sm font-medium transition-colors hover:bg-[var(--color-brand-light)] cursor-pointer"
+              style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
+            >
+              <Icon name="plus" size={16} />
+              Adicionar banco
+            </button>
           </div>
         </TabPanel>
 

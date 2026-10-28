@@ -8,7 +8,11 @@ const AUTH_ONLY_ROUTES = ['/login', '/esqueci-senha', '/nova-senha']
 const ONBOARDING_ROUTES = ['/cadastro/passo-2', '/cadastro/termos']
 
 // Acessível para todos (autenticado ou não)
-const PUBLIC_ROUTES = ['/cadastro/passo-1', '/auth/callback', '/registrar-ponto', '/auto-cadastro', '/pesquisa']
+// /api/cron: rotinas agendadas da Vercel (protegidas pelo CRON_SECRET na própria rota)
+const PUBLIC_ROUTES = ['/cadastro/passo-1', '/auth/callback', '/registrar-ponto', '/auto-cadastro', '/pesquisa', '/convite', '/api/cron']
+
+// Segunda etapa do login para contas com autenticação em 2 fatores
+const MFA_ROUTE = '/verificar-2fa'
 
 // Rotas PDV — autenticação dupla com cookie pdv_session
 const PDV_ROUTES = ['/operacional/frente-de-caixa']
@@ -47,9 +51,25 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
+  // 2 fatores: conta com app autenticador que ainda não confirmou o código nesta sessão
+  let needsMfa = false
+  if (user) {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    needsMfa = aal?.nextLevel === 'aal2' && aal.currentLevel !== 'aal2'
+  }
+  const toMfa = () => NextResponse.redirect(new URL(MFA_ROUTE, request.url))
+
+  // Tela do código: só para quem fez login e ainda precisa confirmar
+  if (pathname === MFA_ROUTE) {
+    if (!user) return NextResponse.redirect(new URL('/login', request.url))
+    if (!needsMfa) return NextResponse.redirect(new URL('/dashboard', request.url))
+    return response
+  }
+
   // Rotas PDV
   if (PDV_ROUTES.some(r => pathname.startsWith(r))) {
     if (!user) return NextResponse.redirect(new URL('/login', request.url))
+    if (needsMfa) return toMfa()
     const pdvSession = request.cookies.get('pdv_session')
     const isLoginPage = pathname === '/operacional/frente-de-caixa/login'
     if (!pdvSession && !isLoginPage)
@@ -66,18 +86,20 @@ export async function middleware(request: NextRequest) {
 
   // Redireciona autenticados para fora das telas de auth puras
   if (AUTH_ONLY_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/'))) {
-    if (user) return NextResponse.redirect(new URL('/dashboard', request.url))
+    if (user) return needsMfa ? toMfa() : NextResponse.redirect(new URL('/dashboard', request.url))
     return response
   }
 
   // Onboarding: precisa estar autenticado mas não redireciona para /dashboard
   if (ONBOARDING_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/'))) {
     if (!user) return NextResponse.redirect(new URL('/login', request.url))
+    if (needsMfa) return toMfa()
     return response
   }
 
-  // Todas as outras rotas: requer autenticação
+  // Todas as outras rotas: requer autenticação (e o código do app, se a conta tiver 2FA)
   if (!user) return NextResponse.redirect(new URL('/login', request.url))
+  if (needsMfa) return toMfa()
 
   // Colaborador: acesso restrito às rotas liberadas + à própria página em /pessoas/funcionarios
   const role = request.cookies.get('active_company_role')?.value

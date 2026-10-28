@@ -2,8 +2,48 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { companySchema } from '@/lib/validations/company'
+import { companySchema, companyBankSchema } from '@/lib/validations/company'
 import { encrypt } from '@/lib/crypto'
+import { z } from 'zod'
+
+// Bancos chegam como JSON no campo "bancos" (lista inteira da aba Dados bancários)
+function parseBancos(formData: FormData) {
+  const raw = formData.get('bancos')
+  if (typeof raw !== 'string') return { bancos: undefined }
+  let json: unknown
+  try { json = JSON.parse(raw) } catch { return { error: 'Dados bancários inválidos.' } }
+  const parsed = z.array(companyBankSchema).safeParse(json)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  return { bancos: parsed.data }
+}
+
+// Substitui os bancos da empresa pela lista enviada; só um pode ser o principal
+async function saveBancos(
+  admin: ReturnType<typeof createAdminClient>,
+  companyId: string,
+  bancos: z.infer<typeof companyBankSchema>[],
+) {
+  const { error: delError } = await admin.from('company_bank_details').delete().eq('company_id', companyId)
+  if (delError) return delError.message
+  if (bancos.length === 0) return null
+
+  const principalIdx = bancos.findIndex((b) => b.principal)
+  const { error } = await admin.from('company_bank_details').insert(
+    bancos.map((b, i) => ({
+      company_id: companyId,
+      banco:      b.banco.trim(),
+      tipo_conta: b.tipo_conta || null,
+      agencia:    b.agencia?.trim() || null,
+      conta:      b.conta?.trim() || null,
+      digito:     b.digito?.trim() || null,
+      pix_tipo:   b.pix_tipo || null,
+      pix_chave:  (b.pix_tipo && b.pix_chave?.trim()) || null,
+      principal:  i === principalIdx,
+      ordem:      i,
+    })),
+  )
+  return error?.message ?? null
+}
 
 export async function createCompanyAction(formData: FormData) {
   const supabase = await createClient()
@@ -33,6 +73,9 @@ export async function createCompanyAction(formData: FormData) {
 
   const parsed = companySchema.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  const bancosResult = parseBancos(formData)
+  if (bancosResult.error) return { error: bancosResult.error }
 
   const admin = createAdminClient()
 
@@ -84,6 +127,11 @@ export async function createCompanyAction(formData: FormData) {
 
   await uploadLogoAndCert(admin, company.id, formData)
 
+  if (bancosResult.bancos) {
+    const bancosError = await saveBancos(admin, company.id, bancosResult.bancos)
+    if (bancosError) return { companyId: company.id, error: `Empresa criada, mas houve erro ao salvar os dados bancários: ${bancosError}` }
+  }
+
   return { companyId: company.id }
 }
 
@@ -117,6 +165,9 @@ export async function updateCompanyAction(companyId: string, formData: FormData)
   const parsed = updateSchema.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
+  const bancosResult = parseBancos(formData)
+  if (bancosResult.error) return { error: bancosResult.error }
+
   const admin = createAdminClient()
 
   const certSenhaEnc = parsed.data.certificado_digital_senha
@@ -148,6 +199,11 @@ export async function updateCompanyAction(companyId: string, formData: FormData)
   if (updateError) return { error: `Erro ao atualizar empresa: ${updateError.message}` }
 
   await uploadLogoAndCert(admin, companyId, formData)
+
+  if (bancosResult.bancos) {
+    const bancosError = await saveBancos(admin, companyId, bancosResult.bancos)
+    if (bancosError) return { error: `Erro ao salvar dados bancários: ${bancosError}` }
+  }
 
   revalidatePath('/empresa')
   return {}

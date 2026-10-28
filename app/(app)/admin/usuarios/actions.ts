@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { findUserIdByEmail, adicionarContaExistente, enviarConvite } from '@/lib/invitations'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -17,80 +18,26 @@ async function getAppUrl() {
   return `${proto}://${host}`
 }
 
-export async function addMemberAction(
-  companyId: string,
-  cpf: string,
-  role: string,
-  avatarFile?: File | null,
-) {
-  const user = await getAuthUser()
-  if (!user) return { error: 'Não autenticado' }
-
-  const admin = createAdminClient()
-  const normalized = cpf.replace(/\D/g, '')
-
-  if (normalized.length !== 11) return { error: 'CPF inválido.' }
-
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('id, name')
-    .eq('cpf', normalized)
-    .single()
-
-  if (!profile) return { error: 'Usuário não encontrado. Use a aba "Convidar" para enviar um convite por e-mail.' }
-
-  const { data: existing } = await admin
-    .from('company_members')
-    .select('id, status')
-    .eq('company_id', companyId)
-    .eq('profile_id', profile.id)
-    .maybeSingle()
-
-  if (existing) {
-    if (existing.status === 'active') return { error: 'Este usuário já é membro desta empresa.' }
-    const { error } = await admin
-      .from('company_members')
-      .update({ status: 'active', role })
-      .eq('id', existing.id)
-    if (error) return { error: error.message }
-  } else {
-    const { error } = await admin.from('company_members').insert({
-      company_id: companyId,
-      profile_id: profile.id,
-      role,
-      status: 'active',
-    })
-    if (error) return { error: error.message }
-  }
-
-  if (avatarFile && avatarFile.size > 0) {
-    const ext = avatarFile.name.split('.').pop() ?? 'jpg'
-    const path = `${profile.id}/avatar.${ext}`
-    const arrayBuffer = await avatarFile.arrayBuffer()
-    const { error: uploadErr } = await admin.storage
-      .from('avatars')
-      .upload(path, arrayBuffer, { contentType: avatarFile.type, upsert: true })
-    if (!uploadErr) {
-      const { data: urlData } = admin.storage.from('avatars').getPublicUrl(path)
-      await admin.from('profiles').update({ avatar_url: `${urlData.publicUrl}?t=${Date.now()}` }).eq('id', profile.id)
-    }
-  }
-
-  revalidatePath('/admin/usuarios')
-  return { success: true }
-}
-
 export async function inviteUserAction(
   companyId: string,
   email: string,
   role: string,
-  avatarFile?: File | null,
 ) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
   const normalizedEmail = email.trim().toLowerCase()
   const admin = createAdminClient()
+
+  const appUrl = await getAppUrl()
+
+  // Já tem conta: entra direto na empresa (não há senha a criar)
+  const existingUserId = await findUserIdByEmail(admin, normalizedEmail)
+  if (existingUserId) {
+    const r = await adicionarContaExistente(admin, { companyId, profileId: existingUserId, email: normalizedEmail, role, appUrl })
+    revalidatePath('/admin/usuarios')
+    return r
+  }
 
   // Verifica convite pendente já existente
   const { data: existing } = await admin
@@ -114,35 +61,10 @@ export async function inviteUserAction(
 
   if (dbErr || !inv) return { error: dbErr?.message ?? 'Erro ao criar convite.' }
 
-  // Faz upload do avatar e salva URL no convite
-  let avatarUrl: string | null = null
-  if (avatarFile && avatarFile.size > 0) {
-    const ext = avatarFile.name.split('.').pop() ?? 'jpg'
-    const path = `invitations/${inv.id}/avatar.${ext}`
-    const arrayBuffer = await avatarFile.arrayBuffer()
-    const { error: uploadErr } = await admin.storage
-      .from('avatars')
-      .upload(path, arrayBuffer, { contentType: avatarFile.type, upsert: true })
-    if (!uploadErr) {
-      const { data: urlData } = admin.storage.from('avatars').getPublicUrl(path)
-      avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`
-      await admin.from('invitations').update({ avatar_url: avatarUrl }).eq('id', inv.id)
-    }
-  }
-
-  // Envia convite via Supabase Auth (cria usuário em estado "invited" + dispara e-mail)
-  const appUrl = await getAppUrl()
-  const { error: emailErr } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-    redirectTo: `${appUrl}/auth/callback`,
-    data: { company_id: companyId, role, ...(avatarUrl && { avatar_url: avatarUrl }) },
-  })
-
-  if (emailErr) {
-    return { warning: `Convite registrado, mas o e-mail não pôde ser enviado: ${emailErr.message}` }
-  }
-
+  // E-mail com link único para criar a senha (SMTP do sistema)
+  const result = await enviarConvite(admin, inv.id, appUrl)
   revalidatePath('/admin/usuarios')
-  return { success: true }
+  return result
 }
 
 export async function resendInvitationAction(invitationId: string, companyId: string) {
@@ -153,7 +75,7 @@ export async function resendInvitationAction(invitationId: string, companyId: st
 
   const { data: inv } = await admin
     .from('invitations')
-    .select('email, role, avatar_url')
+    .select('id, email, role, employee_id')
     .eq('id', invitationId)
     .eq('company_id', companyId)
     .eq('status', 'pending')
@@ -162,14 +84,23 @@ export async function resendInvitationAction(invitationId: string, companyId: st
   if (!inv) return { error: 'Convite não encontrado.' }
 
   const appUrl = await getAppUrl()
-  const { error } = await admin.auth.admin.inviteUserByEmail(inv.email, {
-    redirectTo: `${appUrl}/auth/callback`,
-    data: { company_id: companyId, role: inv.role, ...(inv.avatar_url && { avatar_url: inv.avatar_url }) },
-  })
 
-  if (error) return { error: error.message }
+  // A pessoa criou conta depois do convite: entra direto na empresa
+  const existingUserId = await findUserIdByEmail(admin, inv.email)
+  if (existingUserId) {
+    const r = await adicionarContaExistente(admin, {
+      companyId, profileId: existingUserId, email: inv.email, role: inv.role, employeeId: inv.employee_id, appUrl,
+    })
+    revalidatePath('/admin/usuarios')
+    return r
+  }
+
+  // Novo link (o anterior deixa de valer) e novo e-mail
+  const result = await enviarConvite(admin, inv.id, appUrl)
   revalidatePath('/admin/usuarios')
-  return { success: true }
+  // No reenvio, e-mail que não saiu é falha (✕ no toast)
+  if ('warning' in result) return { error: result.warning }
+  return result
 }
 
 export async function cancelInvitationAction(invitationId: string, companyId: string) {
@@ -179,7 +110,7 @@ export async function cancelInvitationAction(invitationId: string, companyId: st
   const admin = createAdminClient()
   const { error } = await admin
     .from('invitations')
-    .update({ status: 'cancelled' })
+    .update({ status: 'cancelled', token_hash: null }) // o link do e-mail deixa de valer
     .eq('id', invitationId)
     .eq('company_id', companyId)
 

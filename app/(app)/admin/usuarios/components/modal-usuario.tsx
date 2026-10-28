@@ -6,8 +6,10 @@ import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { addMemberAction, updateMemberRoleAction, inviteUserAction, updateMemberProfileAction } from '../actions'
+import { Icon } from '@/components/ui/icon'
+import { updateMemberRoleAction, inviteUserAction, updateMemberProfileAction } from '../actions'
 import type { MemberWithProfile } from '../queries'
+import { toast } from '@/lib/toast'
 
 const ROLE_OPTIONS = [
   { value: 'admin',      label: 'Administrador' },
@@ -36,16 +38,9 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
   const isEditing = !!member
   const isOwner = currentUserRole === 'owner'
 
-  // ── Modo adição ──
-  const [tab, setTab] = useState<'cpf' | 'invite'>('cpf')
-  const [cpf, setCpf] = useState('')
+  // ── Modo adição: só e-mail e perfil de acesso; depois do envio, tela de confirmação ──
   const [email, setEmail] = useState('')
-  const [addAvatarFile, setAddAvatarFile] = useState<File | null>(null)
-  const [addAvatarPreview, setAddAvatarPreview] = useState<string | null>(null)
-  const addFileRef = useRef<HTMLInputElement>(null)
-  const inviteFileRef = useRef<HTMLInputElement>(null)
-  const [inviteAvatarFile, setInviteAvatarFile] = useState<File | null>(null)
-  const [inviteAvatarPreview, setInviteAvatarPreview] = useState<string | null>(null)
+  const [enviado, setEnviado] = useState<{ titulo: string; texto: string } | null>(null)
 
   // ── Modo edição ──
   const [role, setRole] = useState('member')
@@ -67,13 +62,8 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
 
   useEffect(() => {
     if (open) {
-      setTab('cpf')
-      setCpf('')
       setEmail('')
-      setAddAvatarFile(null)
-      setAddAvatarPreview(null)
-      setInviteAvatarFile(null)
-      setInviteAvatarPreview(null)
+      setEnviado(null)
       setRole(member?.role ?? 'member')
       setName(member?.profiles?.name ?? '')
       setAvatarPreview(member?.profiles?.avatar_url ?? null)
@@ -103,7 +93,7 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
     setSuccessMsg('')
     setLoading(true)
 
-    let result: { error?: string; success?: boolean; warning?: string; avatar_url?: string }
+    let result: { error?: string; success?: boolean; warning?: string; notice?: string; emailEnviado?: boolean; contaExistente?: boolean; avatar_url?: string }
 
     if (isEditing) {
       if (isOwner) {
@@ -115,10 +105,8 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
       } else {
         result = await updateMemberRoleAction(member!.id, role)
       }
-    } else if (tab === 'cpf') {
-      result = await addMemberAction(companyId, cpf, role, addAvatarFile)
     } else {
-      result = await inviteUserAction(companyId, email, role, inviteAvatarFile)
+      result = await inviteUserAction(companyId, email, role)
     }
 
     setLoading(false)
@@ -131,6 +119,20 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
     if ('error' in result && result.error) {
       setError(result.error)
       return
+    }
+
+    // Adição: e-mail saiu → confirmação no próprio modal
+    if (!isEditing && 'emailEnviado' in result && result.emailEnviado) {
+      setEnviado('contaExistente' in result && result.contaExistente
+        ? { titulo: 'Acesso liberado', texto: `${email.trim()} já tinha conta e foi adicionado(a) à empresa. Enviamos um e-mail avisando.` }
+        : { titulo: 'E-mail enviado', texto: `Enviamos o convite de acesso para ${email.trim()}. O link para cadastrar a senha vale por 7 dias.` })
+      router.refresh()
+      return
+    }
+    // Resultado exato do e-mail: ✓ quando saiu, ✕ quando não saiu (o acesso pode ter sido liberado mesmo assim)
+    if ('notice' in result && result.notice) {
+      if (result.emailEnviado) toast(result.notice)
+      else toast.error(result.notice)
     }
 
     onClose()
@@ -147,143 +149,37 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
     <Modal
       open={open}
       onClose={onClose}
-      title={isEditing ? 'Editar membro' : 'Adicionar membro'}
+      title={isEditing ? 'Editar membro' : 'Adicionar usuário'}
       description={isEditing ? (member?.profiles?.name ?? '') : undefined}
     >
+      {/* ── Confirmação depois do envio ── */}
+      {enviado ? (
+        <div className="flex flex-col items-center text-center gap-3 py-2">
+          <span className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+            <Icon name="mail" size={30} />
+          </span>
+          <h3 className="text-lg font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{enviado.titulo}</h3>
+          <p className="text-sm max-w-xs" style={{ color: 'var(--color-text-muted)' }}>{enviado.texto}</p>
+          <div className="flex gap-2 pt-4">
+            <Button type="button" variant="secondary" onClick={() => { setEnviado(null); setEmail('') }}>Convidar outro</Button>
+            <Button type="button" onClick={onClose}>Fechar</Button>
+          </div>
+        </div>
+      ) : (
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
 
-        {/* ── Abas — só no modo adição ── */}
+        {/* ── Modo adição: e-mail que recebe o convite ── */}
         {!isEditing && (
-          <div className="flex rounded-lg p-1" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            {(['cpf', 'invite'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => { setTab(t); setError('') }}
-                className="flex-1 py-1.5 text-sm rounded-md transition-all font-medium"
-                style={tab === t
-                  ? { backgroundColor: 'white', color: 'var(--color-text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
-                  : { color: 'var(--color-text-muted)' }
-                }
-              >
-                {t === 'cpf' ? 'Buscar por CPF' : 'Convidar por e-mail'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {!isEditing && tab === 'cpf' && (
-          <>
-            {/* Avatar upload */}
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <div
-                  className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden shrink-0"
-                  style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
-                >
-                  {addAvatarPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={addAvatarPreview} alt="Foto" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xl font-bold">👤</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => addFileRef.current?.click()}
-                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs border-2 border-white"
-                  style={{ backgroundColor: 'var(--color-primary)' }}
-                  title="Selecionar foto"
-                >
-                  ✏️
-                </button>
-              </div>
-              <div>
-                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Foto do usuário</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                  {addAvatarPreview ? 'Foto selecionada' : 'Opcional — JPG, PNG ou WebP'}
-                </p>
-              </div>
-              <input
-                ref={addFileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (!f) return
-                  setAddAvatarFile(f)
-                  setAddAvatarPreview(URL.createObjectURL(f))
-                }}
-              />
-            </div>
-
-            <Input
-              label="CPF do usuário"
-              placeholder="000.000.000-00"
-              value={cpf}
-              onChange={(e) => setCpf(formatCpf(e.target.value))}
-              required
-            />
-          </>
-        )}
-
-        {!isEditing && tab === 'invite' && (
-          <>
-            {/* Avatar para convite */}
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <div
-                  className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden shrink-0"
-                  style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-darker)' }}
-                >
-                  {inviteAvatarPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={inviteAvatarPreview} alt="Foto" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xl font-bold">👤</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => inviteFileRef.current?.click()}
-                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs border-2 border-white"
-                  style={{ backgroundColor: 'var(--color-primary)' }}
-                  title="Selecionar foto"
-                >
-                  ✏️
-                </button>
-              </div>
-              <div>
-                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Foto do usuário</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                  {inviteAvatarPreview ? 'Foto selecionada' : 'Opcional — JPG, PNG ou WebP'}
-                </p>
-              </div>
-              <input
-                ref={inviteFileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (!f) return
-                  setInviteAvatarFile(f)
-                  setInviteAvatarPreview(URL.createObjectURL(f))
-                }}
-              />
-            </div>
-
-            <Input
-              label="E-mail do usuário"
-              type="email"
-              placeholder="usuario@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              hint="O usuário receberá um e-mail com o link para criar a conta"
-              required
-            />
-          </>
+          <Input
+            label="E-mail"
+            type="email"
+            placeholder="usuario@email.com"
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            hint="Enviaremos um convite com o link para a pessoa cadastrar a senha."
+            required
+          />
         )}
 
         {/* ── Modo edição ── */}
@@ -403,10 +299,10 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
           </>
         )}
 
-        {/* ── Função no modo adição ── */}
+        {/* ── Perfil de acesso no modo adição ── */}
         {!isEditing && (
           <Select
-            label="Função"
+            label="Perfil de acesso"
             options={roleOptions}
             value={role}
             onChange={(e) => setRole(e.target.value)}
@@ -427,10 +323,11 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button type="submit" loading={loading} disabled={isEditing && !isOwner && member?.role !== 'owner'}>
-            {isEditing ? 'Salvar' : tab === 'invite' ? 'Enviar convite' : 'Adicionar'}
+            {isEditing ? 'Salvar' : 'Enviar convite'}
           </Button>
         </div>
       </form>
+      )}
     </Modal>
   )
 }

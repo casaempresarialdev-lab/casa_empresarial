@@ -6,9 +6,7 @@ import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { AddButton } from '@/components/ui/add-button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/lib/toast'
-import { ModalSocio } from './modal-socio'
 import { ModalSocioFoto } from './modal-socio-foto'
-import { ModalSocioDocumentos } from './modal-socio-documentos'
 import { deleteSocioAction } from '../actions'
 import type { Socio } from '../queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
@@ -31,15 +29,14 @@ function formatPercent(value: number | null) {
 
 export function SociosClient({ socios, companyId }: Props) {
   const router = useRouter()
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editingSocio, setEditingSocio] = useState<Socio | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Socio | null>(null)
   const [fotoTarget, setFotoTarget] = useState<Socio | null>(null)
-  const [docsTarget, setDocsTarget] = useState<Socio | null>(null)
 
-  function openAdd() { setEditingSocio(null); setModalOpen(true) }
-  function openEdit(s: Socio) { setEditingSocio(s); setModalOpen(true) }
+  // Edição e documentos ficam na página do sócio
+  function openEdit(s: Socio, aba?: 'documentos') {
+    router.push(`/admin/quadro-societario/${s.id}${aba ? `?aba=${aba}` : ''}`)
+  }
 
   // Remoção confirmada no modal; o resultado aparece no toast (✓ / ✕)
   async function confirmDelete() {
@@ -57,8 +54,6 @@ export function SociosClient({ socios, companyId }: Props) {
   }
 
   const totalParticipacao = socios.reduce((sum, s) => sum + Number(s.participacao ?? 0), 0)
-  // Participação já usada pelos outros sócios (o editado fica de fora)
-  const outrasParticipacoes = totalParticipacao - Number(editingSocio?.participacao ?? 0)
 
   return (
     <>
@@ -84,7 +79,7 @@ export function SociosClient({ socios, companyId }: Props) {
               <span style={{ color: 'var(--color-text-muted)' }}> · {formatPercent(totalParticipacao)} de participação distribuída</span>
             )}
           </p>
-          <AddButton onClick={openAdd} />
+          <AddButton onClick={() => router.push('/admin/quadro-societario/novo')} />
         </div>
 
         <ul className="flex flex-col gap-3">
@@ -106,29 +101,44 @@ export function SociosClient({ socios, companyId }: Props) {
                   )}
                 </span>
               }
-              title={s.nome}
-              subtitle={[s.cargo, s.cpf ? `CPF ${cpfMask(s.cpf)}` : null, s.administrador ? 'Administrador' : null].filter(Boolean).join(' · ') || 'Sem cargo informado'}
-              aside={
-                // Percentual + barra proporcional
-                <div className="flex items-center gap-2">
-                  {s.participacao !== null && (
-                    <span className="hidden sm:block h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-brand-light)' }}>
-                      <span
-                        className="block h-full rounded-full"
-                        style={{ width: `${Math.min(100, Number(s.participacao))}%`, backgroundColor: 'var(--color-brand)' }}
-                      />
+              title={
+                <>
+                  {s.nome}
+                  {s.administrador && (
+                    <span
+                      className="ml-2 align-middle inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white"
+                      style={{ backgroundColor: 'var(--color-brand)', fontFamily: 'Inter' }}
+                    >
+                      Sócio administrador
                     </span>
                   )}
-                  <span className="text-sm font-semibold w-14 text-right" style={{ color: 'var(--color-text-primary)' }}>
-                    {formatPercent(s.participacao)}
-                  </span>
+                </>
+              }
+              subtitle={[s.cargo, s.cpf ? `CPF ${cpfMask(s.cpf)}` : null].filter(Boolean).join(' · ') || 'Sem cargo informado'}
+              aside={
+                // Rótulo discreto + percentual e barra proporcional
+                <div className="flex flex-col items-start gap-1">
+                  <span className="text-[11px] leading-none" style={{ color: 'var(--color-text-muted)' }}>Participação</span>
+                  <div className="flex items-center gap-2">
+                    {s.participacao !== null && (
+                      <span className="hidden sm:block h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-brand-light)' }}>
+                        <span
+                          className="block h-full rounded-full"
+                          style={{ width: `${Math.min(100, Number(s.participacao))}%`, backgroundColor: 'var(--color-brand)' }}
+                        />
+                      </span>
+                    )}
+                    <span className="text-sm font-semibold w-14 text-right" style={{ color: 'var(--color-text-primary)' }}>
+                      {formatPercent(s.participacao)}
+                    </span>
+                  </div>
                 </div>
               }
               actionsLabel={s.nome}
               actions={[
                 { icon: 'pencil', label: 'Editar', onClick: () => openEdit(s) },
-                { icon: 'camera', label: 'Foto', onClick: () => setFotoTarget(s) },
-                { icon: 'folder', label: s.documentos ? `Documentos (${s.documentos})` : 'Documentos', onClick: () => setDocsTarget(s) },
+                { icon: 'camera', label: 'Alterar foto', onClick: () => setFotoTarget(s) },
+                { icon: 'folder', label: s.documentos ? `Documentos (${s.documentos})` : 'Documentos', onClick: () => openEdit(s, 'documentos') },
                 { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(s), disabled: deletingId === s.id },
               ]}
             />
@@ -136,17 +146,7 @@ export function SociosClient({ socios, companyId }: Props) {
         </ul>
       </div>
 
-      <ModalSocio
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        socio={editingSocio}
-        outrasParticipacoes={outrasParticipacoes}
-      />
-
       <ModalSocioFoto open={!!fotoTarget} onClose={() => setFotoTarget(null)} companyId={companyId} socio={fotoTarget} />
-
-      <ModalSocioDocumentos open={!!docsTarget} onClose={() => setDocsTarget(null)} companyId={companyId} socio={docsTarget} />
 
       <ConfirmDialog
         open={!!confirmTarget}

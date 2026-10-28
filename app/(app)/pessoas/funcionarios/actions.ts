@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { getFinalStageKey } from '../admissao/queries'
+import { findUserIdByEmail, adicionarContaExistente, enviarConvite } from '@/lib/invitations'
 
 async function getAppUrl() {
   const hdrs = await headers()
@@ -295,6 +296,17 @@ export async function grantSystemAccessAction(employeeId: string, companyId: str
   if (employee.profile_id) return { error: 'Este funcionário já tem acesso ao sistema.' }
 
   const normalizedEmail = employee.email.trim().toLowerCase()
+  const appUrl = await getAppUrl()
+
+  // Já tem conta: entra direto como colaborador e o cadastro do funcionário passa a ser dela
+  const existingUserId = await findUserIdByEmail(admin, normalizedEmail)
+  if (existingUserId) {
+    const r = await adicionarContaExistente(admin, {
+      companyId, profileId: existingUserId, email: normalizedEmail, role: 'colaborador', employeeId, appUrl,
+    })
+    revalidatePath(`/pessoas/funcionarios/${employeeId}`)
+    return r
+  }
 
   const { data: existingInvite } = await admin
     .from('invitations')
@@ -317,18 +329,10 @@ export async function grantSystemAccessAction(employeeId: string, companyId: str
 
   if (dbErr || !inv) return { error: dbErr?.message ?? 'Erro ao criar convite.' }
 
-  const appUrl = await getAppUrl()
-  const { error: emailErr } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-    redirectTo: `${appUrl}/auth/callback`,
-    data: { company_id: companyId, role: 'colaborador' },
-  })
-
-  if (emailErr) {
-    return { warning: `Convite registrado, mas o e-mail não pôde ser enviado: ${emailErr.message}` }
-  }
-
+  // E-mail com link único para criar a senha (SMTP do sistema)
+  const result = await enviarConvite(admin, inv.id, appUrl)
   revalidatePath(`/pessoas/funcionarios/${employeeId}`)
-  return { success: true }
+  return result
 }
 
 // Auto-edição do colaborador — só os campos de dados pessoais/contato.
