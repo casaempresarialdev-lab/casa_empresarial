@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { enviarAvisosEventos } from '@/lib/eventos-email'
 
-// Rotina agendada (Vercel Cron, a cada 5 min — ver vercel.json): envia por e-mail os avisos dos eventos do calendário
+// Rotina agendada: envia por e-mail os avisos dos eventos do calendário. Chamada a cada 5 min pelo Supabase
+// (pg_cron — migration 20261028000070) e uma vez por dia pela Vercel (vercel.json; o plano Hobby só permite diário),
 // de todos os usuários, mesmo com o sistema fechado. Com o sistema aberto, o próprio sistema já envia
 // (resumoNotificacoesAction); a reserva em lib/eventos-email.ts evita e-mail duplicado.
 // Protegida pelo CRON_SECRET: a Vercel envia "Authorization: Bearer <CRON_SECRET>".
