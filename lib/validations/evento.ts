@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+// Eventos do calendário (pessoais do usuário). Aviso opcional antes do horário.
+
 // Antecedência do aviso, em minutos (0 = no horário)
 export const ANTECEDENCIAS = [
   { value: 0,    label: 'No horário' },
@@ -10,7 +12,7 @@ export const ANTECEDENCIAS = [
   { value: 1440, label: '1 dia antes' },
 ] as const
 
-export const lembreteSchema = z.object({
+export const eventoSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o título').max(120),
   descricao: z.string().max(1000).optional(),
   /** Data e hora em ISO (convertidas do fuso do usuário no navegador) */
@@ -20,10 +22,10 @@ export const lembreteSchema = z.object({
   notificar_email: z.boolean(),
 })
 
-export type LembreteData = z.infer<typeof lembreteSchema>
+export type EventoData = z.infer<typeof eventoSchema>
 
 // Formulário da tela: data e hora em campos separados (juntados no fuso do usuário antes de enviar)
-export const lembreteFormSchema = z.object({
+export const eventoFormSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o título').max(120),
   descricao: z.string().max(1000).optional(),
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data'),
@@ -33,4 +35,4 @@ export const lembreteFormSchema = z.object({
   notificar_email: z.boolean(),
 })
 
-export type LembreteFormData = z.infer<typeof lembreteFormSchema>
+export type EventoFormData = z.infer<typeof eventoFormSchema>

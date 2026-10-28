@@ -38,9 +38,13 @@ export async function createCredentialAction(formData: FormData) {
   return { success: true }
 }
 
-export async function updateCredentialAction(credentialId: string, formData: FormData) {
+// Editar e remover exigem o PIN de segurança (conferido aqui)
+export async function updateCredentialAction(credentialId: string, formData: FormData, pin: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+
+  const check = await verifySecurityPin(user.id, pin)
+  if (!check.ok) return { error: check.error }
 
   const admin = createAdminClient()
 
@@ -67,9 +71,12 @@ export async function updateCredentialAction(credentialId: string, formData: For
   return { success: true }
 }
 
-export async function deleteCredentialAction(credentialId: string) {
+export async function deleteCredentialAction(credentialId: string, pin: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+
+  const check = await verifySecurityPin(user.id, pin)
+  if (!check.ok) return { error: check.error }
 
   const admin = createAdminClient()
   const { error } = await admin

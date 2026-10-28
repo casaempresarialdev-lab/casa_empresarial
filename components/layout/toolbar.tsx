@@ -4,15 +4,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Icon, type IconName } from '@/components/ui/icon'
-import { resumoLembretesAction, concluirLembreteAction, marcarAvisosVistosAction, type ResumoNotificacoes } from '@/app/(app)/lembretes/actions'
-import type { Lembrete } from '@/app/(app)/lembretes/queries'
+import { resumoNotificacoesAction, concluirEventoAction, marcarAvisosVistosAction, type ResumoNotificacoes } from '@/app/(app)/calendario/actions'
+import type { Evento } from '@/app/(app)/calendario/queries'
 import type { AvisoCompartilhamento } from '@/app/(app)/cofre-de-senhas/queries'
 
-export const LINK_LEMBRETES = '/lembretes'
+/** Eventos ficam no calendário da página inicial */
+export const LINK_CALENDARIO = '/dashboard'
+/** Link que abre o próprio evento no calendário (modal de detalhes) */
+export const linkEvento = (id: string) => `${LINK_CALENDARIO}?evento=${id}`
 export const LINK_COMPARTILHADAS = '/cofre-de-senhas?aba=compartilhadas'
 
 // Barra de ferramentas da área logada (cor primária), no canto superior direito, encostada na borda da tela.
-// Esquerda: Lembretes (leva à página) e Calendário. Direita: notificações (avisos de lembretes) e tela cheia.
+// Só notificações (avisos de eventos do calendário e senhas compartilhadas) e tela cheia.
 
 type Painel = 'notificacoes' | null
 
@@ -75,16 +78,16 @@ function Vazio({ icon, texto }: { icon: IconName; texto: string }) {
 const quandoFormat = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 const quando = (iso: string) => { const t = quandoFormat.format(new Date(iso)); return t.charAt(0).toUpperCase() + t.slice(1) }
 
-const AVISADOS_KEY = 'lembretes_avisados'
+const AVISADOS_KEY = 'lembretes_avisados' // nome mantido: não repete avisos já mostrados
 const CONSULTA_MS = 60_000
 
-// Separa os avisos que ainda não foram mostrados (uma vez por lembrete; só os das últimas 24h)
+// Separa os avisos que ainda não foram mostrados (uma vez por evento; só os das últimas 24h)
 // e dispara também a notificação do navegador, se permitida
-function avisosNovos(avisos: Lembrete[]): Lembrete[] {
+function avisosNovos(avisos: Evento[]): Evento[] {
   let vistos: string[] = []
   try { vistos = JSON.parse(localStorage.getItem(AVISADOS_KEY) ?? '[]') } catch {}
   const limite = Date.now() - 24 * 60 * 60 * 1000
-  const novos: Lembrete[] = []
+  const novos: Evento[] = []
   for (const l of avisos) {
     if (vistos.includes(l.id)) continue
     vistos.push(l.id)
@@ -92,7 +95,11 @@ function avisosNovos(avisos: Lembrete[]): Lembrete[] {
     if (aviso < limite) continue
     novos.push(l)
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      try { new Notification('Lembrete: ' + l.titulo, { body: quando(l.data_hora), tag: 'lembrete-' + l.id }) } catch {}
+      try {
+        const n = new Notification('Evento: ' + l.titulo, { body: quando(l.data_hora), tag: 'evento-' + l.id })
+        // Clique na notificação do navegador: volta para o sistema com o evento aberto
+        n.onclick = () => { window.focus(); window.location.href = linkEvento(l.id); n.close() }
+      } catch {}
     }
   }
   try { localStorage.setItem(AVISADOS_KEY, JSON.stringify(vistos.slice(-200))) } catch {}
@@ -100,7 +107,7 @@ function avisosNovos(avisos: Lembrete[]): Lembrete[] {
 }
 
 // Cartão de aviso no canto da tela (fica até fechar): Concluir ou Ver
-function CartaoAviso({ l, onFechar, onConcluir }: { l: Lembrete; onFechar: () => void; onConcluir: () => void }) {
+function CartaoAviso({ l, onFechar, onConcluir }: { l: Evento; onFechar: () => void; onConcluir: () => void }) {
   return (
     <div role="alert" className="animate-enter w-80 max-w-[calc(100vw-2rem)] rounded-2xl border shadow-xl p-4 flex gap-3" style={{ backgroundColor: '#fff', borderColor: 'var(--color-brand)' }}>
       <span className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bell-ring" style={{ backgroundColor: 'var(--color-brand)', color: '#fff' }}>
@@ -108,21 +115,21 @@ function CartaoAviso({ l, onFechar, onConcluir }: { l: Lembrete; onFechar: () =>
       </span>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-brand)' }}>Lembrete</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-brand)' }}>Evento</p>
           <button type="button" onClick={onFechar} aria-label="Fechar aviso" className="-mt-1 -mr-1 w-6 h-6 rounded-full flex items-center justify-center hover:bg-gray-100 cursor-pointer text-lg leading-none" style={{ color: 'var(--color-text-muted)' }}>×</button>
         </div>
         <p className="text-sm font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{l.titulo}</p>
         <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{quando(l.data_hora)}</p>
         <div className="flex gap-2 mt-3">
           <button type="button" onClick={onConcluir} className="h-8 px-3 rounded-lg text-xs font-semibold text-white cursor-pointer" style={{ backgroundColor: 'var(--color-brand)' }}>Concluir</button>
-          <Link href="/lembretes" onClick={onFechar} className="h-8 px-3 rounded-lg text-xs font-semibold border flex items-center" style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}>Ver</Link>
+          <Link href={linkEvento(l.id)} onClick={onFechar} className="h-8 px-3 rounded-lg text-xs font-semibold border flex items-center" style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}>Ver</Link>
         </div>
       </div>
     </div>
   )
 }
 
-// Cada notificação é um link: lembrete → página de lembretes; compartilhamento → cofre (Compartilhadas comigo)
+// Cada notificação é um link: evento → calendário da página inicial; compartilhamento → cofre (Compartilhadas comigo)
 function LinhaNotificacao({ icon, titulo, detalhe, href, onNavegar, novo, acao }: {
   icon: IconName; titulo: string; detalhe: string; href: string; onNavegar: () => void; novo?: boolean; acao?: React.ReactNode
 }) {
@@ -143,12 +150,12 @@ function LinhaNotificacao({ icon, titulo, detalhe, href, onNavegar, novo, acao }
   )
 }
 
-type ItemNotificacao = { tipo: 'lembrete'; data: number; l: Lembrete } | { tipo: 'compartilhamento'; data: number; c: AvisoCompartilhamento }
+type ItemNotificacao = { tipo: 'evento'; data: number; l: Evento } | { tipo: 'compartilhamento'; data: number; c: AvisoCompartilhamento }
 
-// Lembretes e compartilhamentos numa lista só, mais recentes primeiro
-function juntarNotificacoes(avisos: Lembrete[], compartilhamentos: AvisoCompartilhamento[]): ItemNotificacao[] {
+// Eventos e compartilhamentos numa lista só, mais recentes primeiro
+function juntarNotificacoes(avisos: Evento[], compartilhamentos: AvisoCompartilhamento[]): ItemNotificacao[] {
   return [
-    ...avisos.map((l) => ({ tipo: 'lembrete' as const, data: new Date(l.data_hora).getTime() - l.antecedencia_min * 60_000, l })),
+    ...avisos.map((l) => ({ tipo: 'evento' as const, data: new Date(l.data_hora).getTime() - l.antecedencia_min * 60_000, l })),
     ...compartilhamentos.map((c) => ({ tipo: 'compartilhamento' as const, data: new Date(c.created_at).getTime(), c })),
   ].sort((a, b) => b.data - a.data)
 }
@@ -169,14 +176,14 @@ export function Toolbar() {
   const [fase, setFase] = useState<Fase>('carregando')
   const barRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
-  const [resumo, setResumo] = useState<ResumoNotificacoes>({ proximos: [], avisos: [], compartilhamentos: [], naoVistos: 0, proximoAvisoEm: null })
+  const [resumo, setResumo] = useState<ResumoNotificacoes>({ avisos: [], compartilhamentos: [], naoVistos: 0, proximoAvisoEm: null })
   // Avisos que acabaram de chegar: cartão no canto da tela até a pessoa fechar
-  const [cartoes, setCartoes] = useState<Lembrete[]>([])
+  const [cartoes, setCartoes] = useState<Evento[]>([])
 
-  // Lembretes: consulta ao abrir, a cada minuto e ao trocar de tela; avisos novos viram cartão + notificação do navegador
-  const atualizarLembretes = useCallback(async () => {
+  // Notificações: consulta ao abrir, a cada minuto e ao trocar de tela; avisos novos viram cartão + notificação do navegador
+  const atualizarNotificacoes = useCallback(async () => {
     try {
-      const r = await resumoLembretesAction()
+      const r = await resumoNotificacoesAction()
       setResumo(r)
       const novos = avisosNovos(r.avisos)
       if (novos.length) setCartoes((prev) => [...prev, ...novos.filter((n) => !prev.some((p) => p.id === n.id))])
@@ -184,24 +191,24 @@ export function Toolbar() {
   }, [])
 
   useEffect(() => {
-    atualizarLembretes()
-    const id = setInterval(atualizarLembretes, CONSULTA_MS)
+    atualizarNotificacoes()
+    const id = setInterval(atualizarNotificacoes, CONSULTA_MS)
     return () => clearInterval(id)
-  }, [atualizarLembretes, pathname])
+  }, [atualizarNotificacoes, pathname])
 
   // No minuto exato do próximo aviso, consulta de novo (não espera a próxima rodada de 1 minuto)
   useEffect(() => {
     if (!resumo.proximoAvisoEm) return
     const espera = new Date(resumo.proximoAvisoEm).getTime() - Date.now() + 1000
     if (espera > CONSULTA_MS) return
-    const id = setTimeout(atualizarLembretes, Math.max(0, espera))
+    const id = setTimeout(atualizarNotificacoes, Math.max(0, espera))
     return () => clearTimeout(id)
-  }, [resumo.proximoAvisoEm, atualizarLembretes])
+  }, [resumo.proximoAvisoEm, atualizarNotificacoes])
 
-  async function concluirAviso(l: Lembrete) {
+  async function concluirAviso(l: Evento) {
     setCartoes((prev) => prev.filter((c) => c.id !== l.id))
-    await concluirLembreteAction(l.id, true)
-    atualizarLembretes()
+    await concluirEventoAction(l.id, true)
+    atualizarNotificacoes()
   }
 
   // Espera a página terminar de carregar (com um mínimo de tempo) e abre a barra
@@ -270,7 +277,7 @@ export function Toolbar() {
     <div className="flex justify-end -mr-6 mb-4 xl:mb-0 xl:mr-0 xl:absolute xl:top-5 xl:right-0 xl:z-30">
       <div
         ref={barRef}
-        className="relative h-12 flex items-center gap-1 rounded-l-full pl-2 pr-4 shadow-sm"
+        className="relative h-12 flex items-center gap-1 rounded-l-full pl-3 pr-4 shadow-sm"
         style={{
           backgroundColor: 'var(--color-brand)',
           // Pronto: sem recorte (os painéis suspensos precisam sair da barra)
@@ -290,18 +297,7 @@ export function Toolbar() {
           <span className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
         </span>
 
-        {/* Ferramentas (esquerda) */}
-        <div style={entrada(4)}>
-          <ToolButton icon="alarm" label="Lembretes" comTexto href="/lembretes" active={pathname === '/lembretes'} />
-        </div>
-        {/* Calendário: sem função por enquanto */}
-        <div style={entrada(3)}>
-          <ToolButton icon="calendar" label="Calendário" comTexto />
-        </div>
-
-        <span className="w-px h-6 mx-2 bg-white/30" aria-hidden style={entrada(2)} />
-
-        {/* Direita: notificações e tela cheia */}
+        {/* Notificações e tela cheia */}
         <div className="relative" style={entrada(1)}>
           <ToolButton icon="bell" label="Notificações" onClick={abrirNotificacoes} active={painel === 'notificacoes'} badge={badge} balancar={cartoes.length > 0} />
           {painel === 'notificacoes' && (
@@ -310,13 +306,13 @@ export function Toolbar() {
                 ? <Vazio icon="bell" texto="Nenhuma notificação por enquanto." />
                 : (
                   <ul className="flex flex-col max-h-72 overflow-y-auto -mx-1.5">
-                    {juntarNotificacoes(resumo.avisos, resumo.compartilhamentos).map((n) => n.tipo === 'lembrete' ? (
+                    {juntarNotificacoes(resumo.avisos, resumo.compartilhamentos).map((n) => n.tipo === 'evento' ? (
                       <LinhaNotificacao
                         key={'l-' + n.l.id}
-                        icon="alarm"
+                        icon="calendar"
                         titulo={n.l.titulo}
-                        detalhe={'Lembrete · ' + quando(n.l.data_hora)}
-                        href={LINK_LEMBRETES}
+                        detalhe={'Evento · ' + quando(n.l.data_hora)}
+                        href={linkEvento(n.l.id)}
                         onNavegar={() => setPainel(null)}
                         novo={!n.l.aviso_visto_em}
                         acao={
@@ -354,7 +350,7 @@ export function Toolbar() {
         </div>
       </div>
 
-      {/* Avisos de lembretes que acabaram de chegar (fora da barra, para não serem cortados pelo recorte da entrada) */}
+      {/* Avisos de eventos que acabaram de chegar (fora da barra, para não serem cortados pelo recorte da entrada) */}
       {cartoes.length > 0 && (
         <div className="fixed right-4 bottom-4 z-[60] flex flex-col-reverse gap-2" aria-live="assertive">
           {cartoes.map((l) => (

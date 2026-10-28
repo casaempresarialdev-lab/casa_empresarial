@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { toast } from '@/lib/toast'
+import { PinGate } from '@/components/ui/pin-gate'
 import { createCredentialAction, updateCredentialAction } from '../actions'
 import type { Credential } from '../queries'
 
@@ -25,11 +26,14 @@ export function ModalCredential({ open, onClose, credential }: Props) {
   // Campos destacados com borda vermelha (o aviso vai no toast)
   const [invalid, setInvalid] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
+  // Edição: PIN conferido na etapa inicial (enviado de novo ao salvar, o servidor confere outra vez)
+  const [pin, setPin] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
       setShowPassword(false)
       setInvalid(new Set())
+      setPin(null)
     }
   }, [open, credential])
 
@@ -56,20 +60,19 @@ export function ModalCredential({ open, onClose, credential }: Props) {
       return
     }
     setInvalid(new Set())
-    setLoading(true)
 
     const fd = new FormData(e.currentTarget)
+    setLoading(true)
     const sistema = fd.get('sistema') as string
     // Resultado do servidor no toast (✓ / ✕); com erro, o modal continua aberto
     const result = await toast.promise(
-      isEditing ? updateCredentialAction(credential!.id, fd) : createCredentialAction(fd),
+      isEditing ? updateCredentialAction(credential!.id, fd, pin ?? '') : createCredentialAction(fd),
       {
         loading: isEditing ? 'Salvando credencial…' : 'Guardando credencial no cofre…',
         success: isEditing ? `Credencial de ${sistema} atualizada.` : `Credencial de ${sistema} guardada no cofre.`,
         error: 'Não foi possível salvar a credencial.',
       },
     )
-
     setLoading(false)
     if (!('error' in result)) {
       onClose()
@@ -85,6 +88,13 @@ export function ModalCredential({ open, onClose, credential }: Props) {
       description="Os dados são criptografados antes de salvar"
       className="sm:max-w-2xl"
     >
+      {/* Edição: primeiro o PIN, depois desliza para o formulário */}
+      <PinGate
+        ativo={isEditing}
+        pin={pin}
+        onLiberado={setPin}
+        descricao={<>Informe o seu PIN de segurança para editar a credencial de <strong style={{ color: 'var(--color-text-primary)' }}>{credential?.sistema}</strong>.</>}
+      >
       <form ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
@@ -157,6 +167,7 @@ export function ModalCredential({ open, onClose, credential }: Props) {
           <Button type="submit" loading={loading}>{isEditing ? 'Salvar' : 'Adicionar'}</Button>
         </div>
       </form>
+      </PinGate>
     </Modal>
   )
 }

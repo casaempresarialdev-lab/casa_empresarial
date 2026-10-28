@@ -23,6 +23,13 @@ function pinConfere(pin: string, stored: string): boolean {
 
 export type PinCheck = { ok: true } | { ok: false; error: string }
 
+/** Se o usuário já cadastrou o PIN (para a tela avisar antes de pedir) */
+export async function temPinCadastrado(profileId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  const { data } = await admin.from('profiles').select('*').eq('id', profileId).maybeSingle()
+  return !!(data as { security_pin_hash?: string | null } | null)?.security_pin_hash
+}
+
 /** Confere o PIN do usuário, com bloqueio temporário após várias falhas seguidas */
 export async function verifySecurityPin(profileId: string, pin: string): Promise<PinCheck> {
   const admin = createAdminClient()

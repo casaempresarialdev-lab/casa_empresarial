@@ -8,6 +8,7 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { Button } from '@/components/ui/button'
 import { FileDropZone } from '@/components/ui/file-drop-zone'
 import { toast } from '@/lib/toast'
+import { PinGate } from '@/components/ui/pin-gate'
 import { createCertificateAction, updateCertificateAction } from '../actions'
 import type { Certificate } from '../queries'
 
@@ -30,6 +31,8 @@ export function ModalCertificado({ open, onClose, companyId, certificate }: Prop
   // Campos destacados com borda vermelha (o aviso vai no toast)
   const [invalid, setInvalid] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
+  // Edição: PIN conferido na etapa inicial (enviado de novo ao salvar, o servidor confere outra vez)
+  const [pin, setPin] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -37,6 +40,7 @@ export function ModalCertificado({ open, onClose, companyId, certificate }: Prop
       setFile(null)
       setSenha('')
       setInvalid(new Set())
+      setPin(null)
     }
   }, [open, certificate])
 
@@ -80,7 +84,7 @@ export function ModalCertificado({ open, onClose, companyId, certificate }: Prop
     setLoading(true)
     // Resultado do servidor no toast (✓ / ✕); com erro, o modal continua aberto
     const result = await toast.promise(
-      isEditing ? updateCertificateAction(certificate!.id, companyId, fd) : createCertificateAction(companyId, fd),
+      isEditing ? updateCertificateAction(certificate!.id, companyId, fd, pin ?? '') : createCertificateAction(companyId, fd),
       {
         loading: isEditing ? 'Salvando certificado…' : 'Enviando certificado…',
         success: isEditing ? `${identificacao} foi atualizado.` : `${identificacao} foi adicionado aos certificados.`,
@@ -102,6 +106,13 @@ export function ModalCertificado({ open, onClose, companyId, certificate }: Prop
       description={isEditing ? certificate?.nome_arquivo : 'Envie o arquivo .pfx / .p12 e a senha do certificado'}
       className="sm:max-w-2xl"
     >
+      {/* Edição: primeiro o PIN, depois desliza para o formulário */}
+      <PinGate
+        ativo={isEditing}
+        pin={pin}
+        onLiberado={setPin}
+        descricao={<>Informe o seu PIN de segurança para editar o certificado <strong style={{ color: 'var(--color-text-primary)' }}>{certificate?.identificacao}</strong>.</>}
+      >
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <Input
           label="Identificação *"
@@ -138,6 +149,7 @@ export function ModalCertificado({ open, onClose, companyId, certificate }: Prop
           <Button type="submit" loading={loading}>{isEditing ? 'Salvar' : 'Adicionar'}</Button>
         </div>
       </form>
+      </PinGate>
     </Modal>
   )
 }

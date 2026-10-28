@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/server'
 
-export type Lembrete = {
+// Eventos do calendário: pessoais do usuário (tabela "reminders", criada quando eram lembretes)
+
+export type Evento = {
   id: string
   titulo: string
   descricao: string | null
@@ -16,32 +18,37 @@ export type Lembrete = {
 }
 
 // '*': tolera colunas novas ainda não criadas no banco (ex.: aviso_visto_em)
-export const LEMBRETE_COLS = '*'
+export const EVENTO_COLS = '*'
 
-// Lembretes pessoais do usuário, em ordem de data
-export async function getLembretes(profileId: string): Promise<Lembrete[]> {
+/** Hora em que o aviso do evento deve chegar (data/hora menos a antecedência) */
+export const horaAviso = (e: Pick<Evento, 'data_hora' | 'antecedencia_min'>) =>
+  new Date(e.data_hora).getTime() - e.antecedencia_min * 60_000
+
+// Eventos do usuário, em ordem de data (para o calendário da página inicial)
+export async function getEventos(profileId: string): Promise<Evento[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('reminders')
-    .select(LEMBRETE_COLS)
+    .select(EVENTO_COLS)
     .eq('profile_id', profileId)
     .order('data_hora', { ascending: true })
-  if (error) return [] // tabela ainda não criada no banco: lista vazia
-  return (data ?? []) as Lembrete[]
+    .limit(1000)
+  if (error) return [] // tabela ainda não criada no banco: calendário vazio
+  return (data ?? []) as Evento[]
 }
 
-/** Página de notificações: todos os avisos que já chegaram (pendentes e concluídos), mais recentes primeiro */
-export async function getNotificacoes(profileId: string): Promise<Lembrete[]> {
+/** Página de notificações: avisos de eventos que já chegaram (pendentes e concluídos), mais recentes primeiro */
+export async function getNotificacoes(profileId: string): Promise<Evento[]> {
   const admin = createAdminClient()
   const agora = Date.now()
   const { data, error } = await admin
     .from('reminders')
-    .select(LEMBRETE_COLS)
+    .select(EVENTO_COLS)
     .eq('profile_id', profileId)
     .eq('notificar', true)
     .lte('data_hora', new Date(agora + 24 * 60 * 60 * 1000).toISOString())
     .order('data_hora', { ascending: false })
     .limit(200)
   if (error || !data) return []
-  return (data as Lembrete[]).filter((l) => new Date(l.data_hora).getTime() - l.antecedencia_min * 60_000 <= agora)
+  return (data as Evento[]).filter((e) => horaAviso(e) <= agora)
 }

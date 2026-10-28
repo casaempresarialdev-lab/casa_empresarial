@@ -8,21 +8,23 @@ import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/toast'
-import { ANTECEDENCIAS, lembreteFormSchema, type LembreteFormData } from '@/lib/validations/lembrete'
-import { criarLembreteAction, atualizarLembreteAction } from '../actions'
-import type { Lembrete } from '../queries'
+import { ANTECEDENCIAS, eventoFormSchema, type EventoFormData } from '@/lib/validations/evento'
+import { criarEventoAction, atualizarEventoAction } from '../actions'
+import type { Evento } from '../queries'
 
 interface Props {
   open: boolean
   onClose: () => void
-  lembrete: Lembrete | null
+  evento: Evento | null
+  /** Data já escolhida no calendário (novo evento) */
+  dataInicial?: Date
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const paraData = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const paraHora = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
 
-function valoresIniciais(l: Lembrete | null): LembreteFormData {
+function valoresIniciais(l: Evento | null, dataInicial?: Date): EventoFormData {
   if (l) {
     const d = new Date(l.data_hora)
     return {
@@ -30,9 +32,10 @@ function valoresIniciais(l: Lembrete | null): LembreteFormData {
       notificar: l.notificar, antecedencia_min: l.antecedencia_min, notificar_email: l.notificar_email,
     }
   }
-  // Novo: próxima hora cheia
-  const d = new Date()
-  d.setHours(d.getHours() + 1, 0, 0, 0)
+  // Novo: no dia escolhido no calendário (ou hoje), na próxima hora cheia
+  const agora = new Date()
+  const d = dataInicial ? new Date(dataInicial) : new Date()
+  d.setHours(agora.getHours() + 1, 0, 0, 0)
   return { titulo: '', descricao: '', data: paraData(d), hora: paraHora(d), notificar: true, antecedencia_min: 15, notificar_email: false }
 }
 
@@ -43,18 +46,18 @@ function pedirPermissaoNavegador() {
   }
 }
 
-export function ModalLembrete({ open, onClose, lembrete }: Props) {
+export function ModalEvento({ open, onClose, evento, dataInicial }: Props) {
   const router = useRouter()
-  const isEditing = !!lembrete
+  const isEditing = !!evento
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } =
-    useForm<LembreteFormData>({ resolver: zodResolver(lembreteFormSchema), defaultValues: valoresIniciais(lembrete) })
+    useForm<EventoFormData>({ resolver: zodResolver(eventoFormSchema), defaultValues: valoresIniciais(evento, dataInicial) })
 
-  useEffect(() => { if (open) reset(valoresIniciais(lembrete)) }, [open, lembrete, reset])
+  useEffect(() => { if (open) reset(valoresIniciais(evento, dataInicial)) }, [open, evento, dataInicial, reset])
 
   const notificar = watch('notificar')
 
-  async function onSubmit(d: LembreteFormData) {
+  async function onSubmit(d: EventoFormData) {
     // Data e hora no fuso do usuário → ISO
     const dataHora = new Date(`${d.data}T${d.hora}:00`)
     const payload = {
@@ -65,10 +68,10 @@ export function ModalLembrete({ open, onClose, lembrete }: Props) {
       antecedencia_min: Number(d.antecedencia_min),
       notificar_email: d.notificar_email,
     }
-    const r = await toast.promise(isEditing ? atualizarLembreteAction(lembrete!.id, payload) : criarLembreteAction(payload), {
-      loading: 'Salvando lembrete…',
-      success: isEditing ? 'Lembrete atualizado.' : 'Lembrete criado.',
-      error: 'Não foi possível salvar o lembrete.',
+    const r = await toast.promise(isEditing ? atualizarEventoAction(evento!.id, payload) : criarEventoAction(payload), {
+      loading: 'Salvando evento…',
+      success: isEditing ? 'Evento atualizado.' : 'Evento criado.',
+      error: 'Não foi possível salvar o evento.',
     })
     if ('error' in r) return
     if (d.notificar) pedirPermissaoNavegador()
@@ -81,7 +84,7 @@ export function ModalLembrete({ open, onClose, lembrete }: Props) {
   const fieldSty = { borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }
 
   return (
-    <Modal open={open} onClose={onClose} title={isEditing ? 'Editar lembrete' : 'Novo lembrete'} className="sm:max-w-xl">
+    <Modal open={open} onClose={onClose} title={isEditing ? 'Editar evento' : 'Novo evento'} className="sm:max-w-xl">
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
         <Input label="Título *" placeholder="Ex.: Pagar o aluguel, Reunião com o contador" autoFocus error={errors.titulo?.message} {...register('titulo')} />
 
@@ -91,9 +94,9 @@ export function ModalLembrete({ open, onClose, lembrete }: Props) {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor="lembrete-descricao" className="text-sm font-medium" style={labelSty}>Descrição</label>
+          <label htmlFor="evento-descricao" className="text-sm font-medium" style={labelSty}>Descrição</label>
           <textarea
-            id="lembrete-descricao"
+            id="evento-descricao"
             rows={3}
             placeholder="Detalhes (opcional)"
             className="w-full rounded-lg border px-3 py-2 text-sm resize-none placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
@@ -122,8 +125,8 @@ export function ModalLembrete({ open, onClose, lembrete }: Props) {
           {notificar && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:items-end">
               <div className="flex flex-col gap-1">
-                <label htmlFor="lembrete-antecedencia" className="text-sm font-medium" style={labelSty}>Quando avisar</label>
-                <select id="lembrete-antecedencia" className={fieldCls} style={fieldSty} {...register('antecedencia_min', { valueAsNumber: true })}>
+                <label htmlFor="evento-antecedencia" className="text-sm font-medium" style={labelSty}>Quando avisar</label>
+                <select id="evento-antecedencia" className={fieldCls} style={fieldSty} {...register('antecedencia_min', { valueAsNumber: true })}>
                   {ANTECEDENCIAS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
               </div>
@@ -137,7 +140,7 @@ export function ModalLembrete({ open, onClose, lembrete }: Props) {
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button type="submit" loading={isSubmitting}>{isEditing ? 'Salvar' : 'Criar lembrete'}</Button>
+          <Button type="submit" loading={isSubmitting}>{isEditing ? 'Salvar' : 'Criar evento'}</Button>
         </div>
       </form>
     </Modal>

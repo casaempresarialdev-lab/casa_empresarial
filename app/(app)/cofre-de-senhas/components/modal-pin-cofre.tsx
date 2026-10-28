@@ -1,19 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { Modal } from '@/components/ui/modal'
 import { CodeInput } from '@/components/ui/code-input'
 import { Button } from '@/components/ui/button'
-import { Icon } from '@/components/ui/icon'
 import { toast } from '@/lib/toast'
 
-/** Link para cadastrar o PIN: perfil já aberto na aba Segurança */
-export const LINK_CADASTRAR_PIN = '/perfil?aba=seguranca'
+// Aviso de "sem PIN" e o link de cadastro ficam em components/ui/modal-pin
+export { LINK_CADASTRAR_PIN } from '@/components/ui/modal-pin'
 
 interface VerSenhaProps {
   /** Credencial cuja senha será revelada (null = fechado) */
-  credencial: { id: string; sistema: string; login: string } | null
+  credencial: { id: string; sistema: string; login: string; url: string | null; observacao: string | null } | null
   onClose: () => void
   /** Confere o PIN no servidor e devolve a senha (ou o erro para mostrar no campo) */
   onConfirmar: (id: string, pin: string) => Promise<{ password?: string; error?: string; semPin?: boolean }>
@@ -21,7 +19,7 @@ interface VerSenhaProps {
   onSemPin: () => void
 }
 
-// Ver senha: PIN centralizado → a senha aparece no próprio modal, em caixa com botão de copiar
+// Ver senha: PIN centralizado → login, senha, link e observação no próprio modal (login/senha com botão de copiar)
 export function ModalVerSenha({ credencial, onClose, onConfirmar, onSemPin }: VerSenhaProps) {
   const [pin, setPin] = useState('')
   const [erro, setErro] = useState<string | undefined>()
@@ -61,6 +59,28 @@ export function ModalVerSenha({ credencial, onClose, onConfirmar, onSemPin }: Ve
         <div className="flex flex-col gap-3">
           <CampoCopiar label="Login" valor={credencial?.login ?? ''} />
           <CampoCopiar label="Senha" valor={senha} destaque />
+          {credencial?.url && (
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Link de acesso</span>
+              <a
+                href={credencial.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 min-h-12 px-4 py-2 rounded-xl border text-sm break-all hover:underline"
+                style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-brand)' }}
+              >
+                {credencial.url}
+              </a>
+            </div>
+          )}
+          {credencial?.observacao && (
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Observação</span>
+              <p className="px-4 py-3 rounded-xl border text-sm whitespace-pre-wrap break-words" style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}>
+                {credencial.observacao}
+              </p>
+            </div>
+          )}
           <Button type="button" variant="secondary" className="w-full mt-2" onClick={fechar}>Fechar</Button>
         </div>
       )}
@@ -102,32 +122,5 @@ function CampoCopiar({ label, valor, destaque }: { label: string; valor: string;
         </button>
       </div>
     </div>
-  )
-}
-
-// Sem PIN cadastrado: explica e leva ao perfil, na aba Segurança
-export function ModalSemPin({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <Modal open={open} onClose={onClose} title="PIN de segurança necessário">
-      <div className="flex flex-col items-center text-center gap-3">
-        <span className="w-14 h-14 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
-          <Icon name="lock" size={26} />
-        </span>
-        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          Para ver ou compartilhar senhas do cofre, é preciso confirmar com o seu <strong>PIN de segurança</strong>.
-          Você ainda não cadastrou um.
-        </p>
-        <div className="flex gap-2 pt-2">
-          <Button type="button" variant="secondary" onClick={onClose}>Agora não</Button>
-          <Link
-            href={LINK_CADASTRAR_PIN}
-            className="inline-flex items-center justify-center h-10 px-4 rounded-lg text-sm font-semibold text-white"
-            style={{ backgroundColor: 'var(--color-brand)' }}
-          >
-            Cadastrar PIN
-          </Link>
-        </div>
-      </div>
-    </Modal>
   )
 }

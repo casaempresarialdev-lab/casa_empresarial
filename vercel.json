@@ -1,5 +1,5 @@
 {
   "crons": [
-    { "path": "/api/cron/lembretes", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/eventos", "schedule": "*/5 * * * *" }
   ]
 }

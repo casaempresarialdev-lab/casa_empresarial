@@ -7,13 +7,13 @@ import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { AddButton } from '@/components/ui/add-button'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ModalPinConfirmacao, ModalSemPin } from '@/components/ui/modal-pin'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/toast'
 import { ModalCredential } from './modal-credential'
 import { ModalCompartilhar } from './modal-compartilhar'
-import { ModalVerSenha, ModalSemPin, LINK_CADASTRAR_PIN } from './modal-pin-cofre'
+import { ModalVerSenha, LINK_CADASTRAR_PIN } from './modal-pin-cofre'
 import { deleteCredentialAction, revealPasswordAction } from '../actions'
 import type { Credential, CredencialCompartilhada } from '../queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
@@ -27,7 +27,7 @@ interface Props {
 }
 
 type Aba = 'minhas' | 'compartilhadas'
-type Revelavel = { id: string; sistema: string; login: string }
+type Revelavel = { id: string; sistema: string; login: string; url: string | null; observacao: string | null }
 
 export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial = 'minhas' }: Props) {
   const router = useRouter()
@@ -52,7 +52,8 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
   const compartilharCred = minhas.find((c) => c.id === compartilharId) ?? null
 
   function openAdd() { setEditingCredential(null); setModalOpen(true) }
-  function openEdit(c: Credential) { setEditingCredential(c); setModalOpen(true) }
+  // Editar pede o PIN ao salvar; sem PIN cadastrado, avisa antes
+  function openEdit(c: Credential) { exigirPin(() => { setEditingCredential(c); setModalOpen(true) }) }
 
   // Ações que exigem PIN: sem PIN cadastrado, avisa e leva ao perfil
   function exigirPin(acao: () => void) {
@@ -64,19 +65,17 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
     exigirPin(() => setRevelarTarget(c))
   }
 
-  // Remoção confirmada no modal; o resultado aparece no toast (✓ / ✕)
-  async function confirmDelete() {
+  // Remoção confirmada com o PIN (erro de PIN aparece no próprio campo)
+  async function confirmDelete(pin: string) {
     const c = confirmTarget
     if (!c) return
     setDeletingId(c.id)
-    const result = await toast.promise(deleteCredentialAction(c.id), {
-      loading: `Removendo credencial de ${c.sistema}…`,
-      success: `Credencial de ${c.sistema} removida do cofre.`,
-      error: 'Não foi possível remover a credencial.',
-    })
+    const r = await deleteCredentialAction(c.id, pin)
     setDeletingId(null)
+    if ('error' in r && r.error) return { error: r.error }
+    toast(`Credencial de ${c.sistema} removida do cofre.`)
     setConfirmTarget(null)
-    if (!('error' in result)) router.refresh()
+    router.refresh()
   }
 
   // Senha sempre escondida na lista; o olho abre o modal (PIN → senha com botão de copiar)
@@ -188,7 +187,7 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
                     { icon: 'info', label: c.observacao ? 'Observação' : 'Sem observação', onClick: () => setInfoTarget(c) },
                     { icon: 'users', label: n ? `Compartilhar (${n})` : 'Compartilhar', onClick: () => exigirPin(() => setCompartilharId(c.id)) },
                     { icon: 'pencil', label: 'Editar', onClick: () => openEdit(c) },
-                    { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(c), disabled: deletingId === c.id },
+                    { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => exigirPin(() => setConfirmTarget(c)), disabled: deletingId === c.id },
                   ]}
                 />
               )
@@ -236,7 +235,7 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
         onSemPin={() => setSemPinOpen(true)}
       />
 
-      <ModalSemPin open={semPinOpen} onClose={() => setSemPinOpen(false)} />
+      <ModalSemPin open={semPinOpen} onClose={() => setSemPinOpen(false)} motivo="ver, editar, remover ou compartilhar senhas do cofre" />
 
       {/* Observação da credencial */}
       <Modal open={!!infoTarget} onClose={() => setInfoTarget(null)} title={`Observação · ${infoTarget?.sistema ?? ''}`}>
@@ -259,18 +258,21 @@ export function CredentialsClient({ minhas, compartilhadas, temPin, abaInicial =
         </div>
       </Modal>
 
-      <ConfirmDialog
+      {/* Remover: confirmação com o PIN */}
+      <ModalPinConfirmacao
         open={!!confirmTarget}
-        onClose={() => { if (!deletingId) setConfirmTarget(null) }}
-        onConfirm={confirmDelete}
-        loading={!!deletingId}
-        title="Remover credencial"
-        message={
-          <p>
-            Remover a credencial de <strong>{confirmTarget?.sistema}</strong> do cofre de senhas?
+        titulo="Remover credencial"
+        subtitulo={confirmTarget?.sistema}
+        descricao={
+          <>
+            Informe o seu PIN de segurança para remover a credencial do cofre.
             {!!confirmTarget?.compartilhamentos.length && ' Quem a recebeu por compartilhamento também perde o acesso.'}
-          </p>
+          </>
         }
+        acaoLabel="Remover credencial"
+        perigo
+        onClose={() => setConfirmTarget(null)}
+        onConfirmar={confirmDelete}
       />
     </>
   )

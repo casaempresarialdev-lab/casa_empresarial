@@ -2,9 +2,9 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email'
 import { getEmailBranding, layoutEmail, escapeHtml } from '@/lib/email-template'
 
-// Envio dos avisos de lembretes por e-mail ("Também por e-mail") — só no servidor.
+// Envio dos avisos de eventos do calendário por e-mail ("Também por e-mail") — só no servidor.
 // Chamado pela rotina agendada (todos os usuários) e pelo próprio sistema aberto (só o usuário logado).
-// Cada lembrete é "reservado" antes de enviar (email_enviado_em preenchido só se ainda estava vazio),
+// Cada evento é "reservado" antes de enviar (email_enviado_em preenchido só se ainda estava vazio),
 // então rotina e sistema aberto nunca mandam o mesmo aviso duas vezes.
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -13,7 +13,7 @@ const quandoFormat = new Intl.DateTimeFormat('pt-BR', {
   weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
 })
 
-export async function enviarAvisosLembretes(admin: Admin, so?: { profileId: string; email: string }) {
+export async function enviarAvisosEventos(admin: Admin, so?: { profileId: string; email: string }) {
   const agora = Date.now()
   // Busca até 1 dia à frente (maior antecedência) e filtra pela hora do aviso de cada um
   let q = admin
@@ -38,7 +38,7 @@ export async function enviarAvisosLembretes(admin: Admin, so?: { profileId: stri
   let falhas = 0
 
   for (const l of devidos) {
-    // Reserva o lembrete: se outro processo já pegou, pula
+    // Reserva o evento: se outro processo já pegou, pula
     const { data: reservado } = await admin
       .from('reminders')
       .update({ email_enviado_em: new Date().toISOString() })
@@ -57,8 +57,8 @@ export async function enviarAvisosLembretes(admin: Admin, so?: { profileId: stri
     const envio = email
       ? await sendEmail({
           to: email,
-          subject: `Lembrete: ${l.titulo}`,
-          text: `Lembrete: ${l.titulo}\n${quando}${l.descricao ? `\n\n${l.descricao}` : ''}`,
+          subject: `Evento: ${l.titulo}`,
+          text: `Evento: ${l.titulo}\n${quando}${l.descricao ? `\n\n${l.descricao}` : ''}`,
           html: layoutEmail({
             branding,
             previa: `${l.titulo} — ${quando}`,
@@ -66,7 +66,7 @@ export async function enviarAvisosLembretes(admin: Admin, so?: { profileId: stri
             blocos: [
               { tipo: 'texto', html: `<strong>${escapeHtml(quando.charAt(0).toUpperCase() + quando.slice(1))}</strong>` },
               ...(l.descricao ? [{ tipo: 'texto' as const, html: escapeHtml(l.descricao).replace(/\n/g, '<br>') }] : []),
-              { tipo: 'nota', html: 'Você recebeu este aviso porque marcou "Também por e-mail" neste lembrete.' },
+              { tipo: 'nota', html: 'Você recebeu este aviso porque marcou "Também por e-mail" neste evento do calendário.' },
             ],
           }),
         })
@@ -78,7 +78,7 @@ export async function enviarAvisosLembretes(admin: Admin, so?: { profileId: stri
       // Não saiu: libera para tentar de novo na próxima verificação
       await admin.from('reminders').update({ email_enviado_em: null }).eq('id', l.id)
       falhas++
-      console.error('[lembretes] e-mail não enviado:', l.id, envio ?? 'usuário sem e-mail')
+      console.error('[eventos] e-mail não enviado:', l.id, envio ?? 'usuário sem e-mail')
     }
   }
 

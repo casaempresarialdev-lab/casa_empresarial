@@ -2,22 +2,22 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { lembreteSchema } from '@/lib/validations/lembrete'
-import { enviarAvisosLembretes } from '@/lib/lembretes-email'
-import { LEMBRETE_COLS, type Lembrete } from './queries'
+import { eventoSchema } from '@/lib/validations/evento'
+import { enviarAvisosEventos } from '@/lib/eventos-email'
+import { EVENTO_COLS, horaAviso, type Evento } from './queries'
 import { getAvisosCompartilhamento, type AvisoCompartilhamento } from '../cofre-de-senhas/queries'
 
+// Eventos do calendário (pessoais): toda operação fica restrita aos eventos do próprio usuário (profile_id)
+
 export type ResumoNotificacoes = {
-  proximos: Lembrete[]
-  avisos: Lembrete[]
+  /** Avisos de eventos que já chegaram (não concluídos) */
+  avisos: Evento[]
   /** Credenciais do cofre compartilhadas com o usuário */
   compartilhamentos: AvisoCompartilhamento[]
   naoVistos: number
   proximoAvisoEm: string | null
 }
-const RESUMO_VAZIO: ResumoNotificacoes = { proximos: [], avisos: [], compartilhamentos: [], naoVistos: 0, proximoAvisoEm: null }
-
-// Lembretes pessoais: toda operação fica restrita aos lembretes do próprio usuário (profile_id)
+const RESUMO_VAZIO: ResumoNotificacoes = { avisos: [], compartilhamentos: [], naoVistos: 0, proximoAvisoEm: null }
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -25,7 +25,7 @@ async function getAuthUser() {
   return user
 }
 
-function campos(d: ReturnType<typeof lembreteSchema.parse>) {
+function campos(d: ReturnType<typeof eventoSchema.parse>) {
   return {
     titulo: d.titulo.trim(),
     descricao: d.descricao?.trim() || null,
@@ -36,23 +36,23 @@ function campos(d: ReturnType<typeof lembreteSchema.parse>) {
   }
 }
 
-export async function criarLembreteAction(data: unknown) {
+export async function criarEventoAction(data: unknown) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
-  const parsed = lembreteSchema.safeParse(data)
+  const parsed = eventoSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   const admin = createAdminClient()
   const { error } = await admin.from('reminders').insert({ profile_id: user.id, ...campos(parsed.data) })
   if (error) return { error: error.message }
-  revalidatePath('/lembretes')
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
-export async function atualizarLembreteAction(id: string, data: unknown) {
+export async function atualizarEventoAction(id: string, data: unknown) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
-  const parsed = lembreteSchema.safeParse(data)
+  const parsed = eventoSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   const admin = createAdminClient()
@@ -63,11 +63,11 @@ export async function atualizarLembreteAction(id: string, data: unknown) {
     .eq('id', id)
     .eq('profile_id', user.id)
   if (error) return { error: error.message }
-  revalidatePath('/lembretes')
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
-export async function concluirLembreteAction(id: string, concluido: boolean) {
+export async function concluirEventoAction(id: string, concluido: boolean) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
@@ -77,57 +77,56 @@ export async function concluirLembreteAction(id: string, concluido: boolean) {
     .eq('id', id)
     .eq('profile_id', user.id)
   if (error) return { error: error.message }
-  revalidatePath('/lembretes')
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
-export async function excluirLembreteAction(id: string) {
+export async function excluirEventoAction(id: string) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
   const { error } = await admin.from('reminders').delete().eq('id', id).eq('profile_id', user.id)
   if (error) return { error: error.message }
-  revalidatePath('/lembretes')
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
 /**
- * Para a barra de ferramentas: avisos que já chegaram (notificação ligada e hora do aviso alcançada),
- * próximos lembretes e quando será o próximo aviso (para o navegador avisar no minuto exato).
+ * Para o sino da barra: avisos de eventos que já chegaram (notificação ligada e hora do aviso alcançada),
+ * senhas compartilhadas, contador de não vistos e quando será o próximo aviso (para avisar no minuto exato).
  * Também envia, com o sistema aberto, os e-mails de aviso devidos deste usuário.
  */
-export async function resumoLembretesAction(): Promise<ResumoNotificacoes> {
+export async function resumoNotificacoesAction(): Promise<ResumoNotificacoes> {
   const user = await getAuthUser()
   if (!user) return RESUMO_VAZIO
   const admin = createAdminClient()
 
   // E-mails de aviso deste usuário (a rotina agendada cobre quem está com o sistema fechado)
-  if (user.email) await enviarAvisosLembretes(admin, { profileId: user.id, email: user.email })
+  if (user.email) await enviarAvisosEventos(admin, { profileId: user.id, email: user.email })
 
   const [{ data, error }, compartilhamentos] = await Promise.all([
     admin
       .from('reminders')
-      .select(LEMBRETE_COLS)
+      .select(EVENTO_COLS)
       .eq('profile_id', user.id)
       .eq('concluido', false)
+      .eq('notificar', true)
       .order('data_hora', { ascending: true })
-      .limit(50),
+      .limit(100),
     getAvisosCompartilhamento(user.id, 20),
   ])
-  if (error || !data) return { ...RESUMO_VAZIO, compartilhamentos, naoVistos: compartilhamentos.filter((c) => !c.aviso_visto_em).length }
+  const compNaoVistos = compartilhamentos.filter((c) => !c.aviso_visto_em).length
+  if (error || !data) return { ...RESUMO_VAZIO, compartilhamentos, naoVistos: compNaoVistos }
 
   const agora = Date.now()
-  const lista = data as Lembrete[]
-  const avisos = lista.filter((l) => l.notificar && horaAviso(l) <= agora)
-  const proximos = lista.filter((l) => new Date(l.data_hora).getTime() >= agora).slice(0, 5)
-  const futuros = lista.filter((l) => l.notificar && horaAviso(l) > agora).map(horaAviso)
+  const lista = data as Evento[]
+  const avisos = lista.filter((e) => horaAviso(e) <= agora)
+  const futuros = lista.filter((e) => horaAviso(e) > agora).map(horaAviso)
   const proximoAvisoEm = futuros.length ? new Date(Math.min(...futuros)).toISOString() : null
   // Contador do sino: só os avisos ainda não vistos
-  const naoVistos = avisos.filter((l) => !l.aviso_visto_em).length + compartilhamentos.filter((c) => !c.aviso_visto_em).length
-  return { proximos, avisos, compartilhamentos, naoVistos, proximoAvisoEm }
+  const naoVistos = avisos.filter((e) => !e.aviso_visto_em).length + compNaoVistos
+  return { avisos, compartilhamentos, naoVistos, proximoAvisoEm }
 }
-
-const horaAviso = (l: Lembrete) => new Date(l.data_hora).getTime() - l.antecedencia_min * 60_000
 
 /** Abriu o sino ou a página de notificações: os avisos que já chegaram passam a "vistos" (zera o contador) */
 export async function marcarAvisosVistosAction() {
@@ -143,9 +142,7 @@ export async function marcarAvisosVistosAction() {
     .eq('notificar', true)
     .is('aviso_visto_em', null)
     .lte('data_hora', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString())
-  const ids = (data ?? [])
-    .filter((l) => new Date(l.data_hora).getTime() - l.antecedencia_min * 60_000 <= Date.now())
-    .map((l) => l.id)
+  const ids = (data ?? []).filter((e) => horaAviso(e) <= Date.now()).map((e) => e.id)
   if (!ids.length) return { success: true }
   const { error } = await admin.from('reminders').update({ aviso_visto_em: new Date().toISOString() }).in('id', ids)
   if (error) return { error: error.message }

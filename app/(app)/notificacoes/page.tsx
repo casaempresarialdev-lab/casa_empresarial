@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getNotificacoes } from '../lembretes/queries'
+import { getNotificacoes } from '../calendario/queries'
 import { getAvisosCompartilhamento } from '../cofre-de-senhas/queries'
 import { NotificacoesClient } from './components/notificacoes-client'
 

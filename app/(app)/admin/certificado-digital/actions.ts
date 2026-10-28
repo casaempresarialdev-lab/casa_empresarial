@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { encrypt, decrypt } from '@/lib/crypto'
+import { verifySecurityPin } from '@/lib/security-pin'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -11,8 +12,9 @@ const BUCKET = 'certificados'
 const MAX_CERT_BYTES = 5 * 1024 * 1024
 const PATH = '/admin/certificado-digital'
 
-// Usuário logado e membro ativo da empresa
-async function authorize(companyId: string): Promise<{ admin: Admin } | { error: string }> {
+// Usuário logado e membro ativo da empresa. Com pin: confere também o PIN de segurança do usuário
+// (baixar, editar e remover certificado exigem o PIN).
+async function authorize(companyId: string, pin?: string): Promise<{ admin: Admin } | { error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Sessão inválida. Faça login novamente.' }
@@ -26,6 +28,10 @@ async function authorize(companyId: string): Promise<{ admin: Admin } | { error:
     .eq('status', 'active')
     .maybeSingle()
   if (!member) return { error: 'Acesso não autorizado.' }
+  if (pin !== undefined) {
+    const check = await verifySecurityPin(user.id, pin)
+    if (!check.ok) return { error: check.error }
+  }
   return { admin }
 }
 
@@ -74,8 +80,8 @@ export async function createCertificateAction(companyId: string, formData: FormD
 }
 
 // Edição: identificação; arquivo e senha só mudam se vierem preenchidos
-export async function updateCertificateAction(certificateId: string, companyId: string, formData: FormData) {
-  const auth = await authorize(companyId)
+export async function updateCertificateAction(certificateId: string, companyId: string, formData: FormData, pin: string) {
+  const auth = await authorize(companyId, pin)
   if ('error' in auth) return auth
   const { admin } = auth
 
@@ -116,8 +122,8 @@ export async function updateCertificateAction(certificateId: string, companyId: 
   return { success: true }
 }
 
-export async function deleteCertificateAction(certificateId: string, companyId: string) {
-  const auth = await authorize(companyId)
+export async function deleteCertificateAction(certificateId: string, companyId: string, pin: string) {
+  const auth = await authorize(companyId, pin)
   if ('error' in auth) return auth
   const { admin } = auth
 
@@ -160,8 +166,8 @@ export async function revealCertificatePasswordAction(certificateId: string, com
 }
 
 // Link temporário para baixar o arquivo com o nome original
-export async function getCertificateDownloadUrlAction(certificateId: string, companyId: string): Promise<{ url?: string; error?: string }> {
-  const auth = await authorize(companyId)
+export async function getCertificateDownloadUrlAction(certificateId: string, companyId: string, pin: string): Promise<{ url?: string; error?: string }> {
+  const auth = await authorize(companyId, pin)
   if ('error' in auth) return auth
   const { data } = await auth.admin
     .from('company_certificates')
@@ -173,7 +179,7 @@ export async function getCertificateDownloadUrlAction(certificateId: string, com
 
   const { data: signed, error } = await auth.admin.storage
     .from(BUCKET)
-    .createSignedUrl(data.storage_path, 60, { download: data.nome_arquivo })
+    .createSignedUrl(data.storage_path, 300, { download: data.nome_arquivo }) // 5 min: o usuário clica em "Baixar" depois do PIN
   if (error || !signed) return { error: 'Não foi possível gerar o link de download.' }
   return { url: signed.signedUrl }
 }

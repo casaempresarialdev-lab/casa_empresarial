@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { AddButton } from '@/components/ui/add-button'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ModalPinConfirmacao, ModalSemPin } from '@/components/ui/modal-pin'
 import { triggerDownload } from '@/components/ui/file-viewer'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/icon'
 import { toast } from '@/lib/toast'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { ModalCertificado } from './modal-certificado'
@@ -23,16 +25,20 @@ interface Props {
   /** Erro ao ler a lista (ex.: tabela ainda não criada no banco) */
   loadError: string | null
   companyId: string
+  /** Baixar, editar e remover exigem o PIN de segurança */
+  temPin: boolean
 }
 
-export function CertificadosClient({ certificates, loadError, companyId }: Props) {
+// Ação que pede o PIN antes de executar
+type AcaoPin = { tipo: 'baixar' | 'remover'; cert: Certificate }
+
+export function CertificadosClient({ certificates, loadError, companyId, temPin }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Certificate | null>(null)
   const [search, setSearch] = useState('')
-  const [confirmTarget, setConfirmTarget] = useState<Certificate | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [acaoPin, setAcaoPin] = useState<AcaoPin | null>(null)
+  const [semPinOpen, setSemPinOpen] = useState(false)
   const [revealingId, setRevealingId] = useState<string | null>(null)
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, string>>({})
 
@@ -42,7 +48,14 @@ export function CertificadosClient({ certificates, loadError, companyId }: Props
   })
 
   function openAdd() { setEditing(null); setModalOpen(true) }
-  function openEdit(c: Certificate) { setEditing(c); setModalOpen(true) }
+  // Sem PIN cadastrado: avisa e leva ao perfil
+  function exigirPin(acao: () => void) {
+    if (!temPin) { setSemPinOpen(true); return }
+    acao()
+  }
+
+  // Editar pede o PIN ao salvar (no modal)
+  function openEdit(c: Certificate) { exigirPin(() => { setEditing(c); setModalOpen(true) }) }
 
   async function handleReveal(c: Certificate) {
     if (revealedPasswords[c.id]) {
@@ -56,27 +69,37 @@ export function CertificadosClient({ certificates, loadError, companyId }: Props
     else setRevealedPasswords((prev) => ({ ...prev, [c.id]: result.password! }))
   }
 
-  async function handleDownload(c: Certificate) {
-    setDownloadingId(c.id)
-    const result = await getCertificateDownloadUrlAction(c.id, companyId)
-    setDownloadingId(null)
-    if (result.error || !result.url) toast.error(result.error ?? 'Não foi possível baixar o certificado.')
-    else triggerDownload(result.url, c.nome_arquivo)
-  }
-
-  // Remoção confirmada no modal; o resultado aparece no toast (✓ / ✕)
-  async function confirmDelete() {
-    const c = confirmTarget
-    if (!c) return
-    setDeletingId(c.id)
-    const result = await toast.promise(deleteCertificateAction(c.id, companyId), {
-      loading: `Removendo ${c.identificacao}…`,
-      success: `${c.identificacao} foi removido dos certificados.`,
-      error: 'Não foi possível remover o certificado.',
-    })
-    setDeletingId(null)
-    setConfirmTarget(null)
-    if (!('error' in result)) router.refresh()
+  // Baixar ou remover, depois do PIN conferido no servidor (erro de PIN aparece no próprio campo)
+  async function confirmarComPin(pin: string) {
+    if (!acaoPin) return
+    const { tipo, cert } = acaoPin
+    if (tipo === 'baixar') {
+      const r = await getCertificateDownloadUrlAction(cert.id, companyId, pin)
+      if (r.error || !r.url) return { error: r.error ?? 'Não foi possível baixar o certificado.' }
+      const url = r.url
+      // Depois do PIN, o modal mostra o arquivo com o botão de baixar (o clique do usuário dispara o download)
+      return {
+        concluido: (
+          <div className="flex flex-col items-center text-center gap-3">
+            <span className="w-14 h-14 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+              <Icon name="shield" size={26} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold break-all" style={{ color: 'var(--color-text-primary)' }}>{cert.nome_arquivo}</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>O link para baixar vale por 5 minutos.</p>
+            </div>
+            <Button type="button" className="w-full" onClick={() => triggerDownload(url, cert.nome_arquivo)}>
+              <Icon name="download" size={16} /> Baixar certificado
+            </Button>
+          </div>
+        ),
+      }
+    }
+    const r = await deleteCertificateAction(cert.id, companyId, pin)
+    if ('error' in r && r.error) return { error: r.error }
+    toast(`${cert.identificacao} foi removido dos certificados.`)
+    setAcaoPin(null)
+    router.refresh()
   }
 
   return (
@@ -153,9 +176,9 @@ export function CertificadosClient({ certificates, loadError, companyId }: Props
                 )}
                 actionsLabel={c.identificacao}
                 actions={[
-                  { icon: 'download', label: 'Baixar', onClick: () => handleDownload(c), disabled: downloadingId === c.id },
+                  { icon: 'download', label: 'Baixar', onClick: () => exigirPin(() => setAcaoPin({ tipo: 'baixar', cert: c })) },
                   { icon: 'pencil', label: 'Editar', onClick: () => openEdit(c) },
-                  { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => setConfirmTarget(c), disabled: deletingId === c.id },
+                  { icon: 'trash', label: 'Remover', tone: 'danger', onClick: () => exigirPin(() => setAcaoPin({ tipo: 'remover', cert: c })) },
                 ]}
               />
             )
@@ -170,14 +193,21 @@ export function CertificadosClient({ certificates, loadError, companyId }: Props
         certificate={editing}
       />
 
-      <ConfirmDialog
-        open={!!confirmTarget}
-        onClose={() => { if (!deletingId) setConfirmTarget(null) }}
-        onConfirm={confirmDelete}
-        loading={!!deletingId}
-        title="Remover certificado"
-        message={<p>Remover <strong>{confirmTarget?.identificacao}</strong> dos certificados? O arquivo também será apagado.</p>}
+      {/* Baixar / remover: confirmação com o PIN */}
+      <ModalPinConfirmacao
+        open={!!acaoPin}
+        titulo={acaoPin?.tipo === 'remover' ? 'Remover certificado' : 'Baixar certificado'}
+        subtitulo={acaoPin?.cert.identificacao}
+        descricao={acaoPin?.tipo === 'remover'
+          ? 'Informe o seu PIN de segurança para remover o certificado. O arquivo também será apagado.'
+          : 'Informe o seu PIN de segurança para baixar o arquivo do certificado.'}
+        acaoLabel={acaoPin?.tipo === 'remover' ? 'Remover certificado' : 'Baixar'}
+        perigo={acaoPin?.tipo === 'remover'}
+        onClose={() => setAcaoPin(null)}
+        onConfirmar={confirmarComPin}
       />
+
+      <ModalSemPin open={semPinOpen} onClose={() => setSemPinOpen(false)} motivo="baixar, editar ou remover certificados" />
     </>
   )
 }
