@@ -8,8 +8,10 @@ import { AddButton } from '@/components/ui/add-button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
-import { concluirEventoAction, excluirEventoAction } from '../actions'
-import type { Evento } from '../queries'
+import { concluirEventoAction, excluirEventoAction, responderConviteAction, type Escopo } from '../actions'
+import type { Agendas, Evento, StatusConvite } from '../queries'
+import { ModalAgendas } from './modal-agendas'
+import { Avatar, corDaPessoa, estiloEvento } from './avatar'
 import { ModalEvento } from './modal-evento'
 import { ModalDetalheEvento } from './modal-detalhe-evento'
 import { SemanaHorarios } from './semana-horarios'
@@ -19,6 +21,7 @@ const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const MAX_NO_DIA = 3 // eventos visíveis por dia no calendário (o resto vira "+N")
 const VISAO_KEY = 'calendario_visao' // última visão escolhida (mês/semana), só neste navegador
+const OCULTAS_KEY = 'calendario_agendas_ocultas' // agendas acompanhadas escondidas, só neste navegador
 
 type Visao = 'mes' | 'semana'
 
@@ -31,11 +34,15 @@ const pad = (n: number) => String(n).padStart(2, '0')
 const chaveDia = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-// Calendário da página inicial: eventos do dia escolhido e atrasados (esquerda) + mês completo (direita)
-export function CalendarioHome({ eventos, eventoAbertoId }: {
+// Calendário da página inicial: eventos do dia escolhido e atrasados (esquerda) + mês ou semana (direita).
+// Mostra os meus eventos, os convites recebidos e as agendas que acompanho (cada pessoa numa cor).
+export function CalendarioHome({ eventos, eventoAbertoId, agendas, abrirAgendas }: {
   eventos: Evento[]
   /** Vindo de uma notificação (?evento=<id>): abre o evento direto no modal de detalhes */
   eventoAbertoId?: string
+  agendas: Agendas
+  /** Vindo da notificação de agenda compartilhada (?agendas=1): abre o painel de agendas */
+  abrirAgendas?: boolean
 }) {
   const router = useRouter()
   const hoje = new Date()
@@ -49,6 +56,32 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
   const [detalhe, setDetalhe] = useState<Evento | null>(null)
   const [visao, setVisao] = useState<Visao>('mes')
   const [horaNova, setHoraNova] = useState<number | null>(null)
+  const [escopoExcluir, setEscopoExcluir] = useState<Escopo>('este')
+  const [agendasOpen, setAgendasOpen] = useState(!!abrirAgendas)
+  const [ocultas, setOcultas] = useState<Set<string>>(() => new Set())
+
+  // Agendas escondidas (preferência deste navegador)
+  useEffect(() => {
+    try {
+      const salvas = JSON.parse(localStorage.getItem(OCULTAS_KEY) ?? '[]')
+      if (Array.isArray(salvas)) setOcultas(new Set(salvas.filter((x) => typeof x === 'string')))
+    } catch { /* armazenamento indisponível: mostra todas */ }
+  }, [])
+
+  function alternarAgenda(ownerId: string) {
+    setOcultas((atual) => {
+      const nova = new Set(atual)
+      if (nova.has(ownerId)) nova.delete(ownerId)
+      else nova.add(ownerId)
+      try { localStorage.setItem(OCULTAS_KEY, JSON.stringify([...nova])) } catch { /* ignora */ }
+      return nova
+    })
+  }
+
+  function fecharAgendas() {
+    setAgendasOpen(false)
+    if (abrirAgendas) router.replace('/dashboard', { scroll: false })
+  }
 
   // Restaura a visão preferida depois de montar (evita diferença entre servidor e navegador)
   useEffect(() => {
@@ -63,19 +96,20 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
     try { localStorage.setItem(VISAO_KEY, v) } catch { /* ignora */ }
   }
 
-  // Eventos agrupados por dia (no fuso do usuário)
+  // Eventos agrupados por dia (no fuso do usuário); agendas escondidas ficam de fora
   const porDia = useMemo(() => {
     const m = new Map<string, Evento[]>()
     for (const e of eventos) {
+      if (e.origem === 'agenda' && ocultas.has(e.profile_id)) continue
       const k = chaveDia(new Date(e.data_hora))
       m.set(k, [...(m.get(k) ?? []), e])
     }
     return m
-  }, [eventos])
+  }, [eventos, ocultas])
 
   const agora = hoje.getTime()
-  // Atrasados: horário já passou (inclusive hoje) e ainda não concluídos — mais antigos primeiro
-  const ehAtrasado = (e: Evento) => !e.concluido && new Date(e.data_hora).getTime() < agora
+  // Atrasados: só os meus, com horário já passado (inclusive hoje) e ainda não concluídos — mais antigos primeiro
+  const ehAtrasado = (e: Evento) => e.origem === 'meu' && !e.concluido && new Date(e.data_hora).getTime() < agora
   const atrasados = eventos.filter(ehAtrasado)
   const doDia = porDia.get(chaveDia(selecionado)) ?? []
   const ehHojeSelecionado = chaveDia(selecionado) === chaveDia(hoje)
@@ -137,9 +171,9 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
     const e = excluirTarget
     if (!e) return
     setExcluindo(true)
-    const r = await toast.promise(excluirEventoAction(e.id), {
+    const r = await toast.promise(excluirEventoAction(e.id, escopoExcluir), {
       loading: 'Excluindo evento…',
-      success: `"${e.titulo}" excluído.`,
+      success: (res) => ('excluidos' in res && res.excluidos && res.excluidos > 1 ? `${res.excluidos} eventos da série excluídos.` : `"${e.titulo}" excluído.`),
       error: 'Não foi possível excluir o evento.',
     })
     setExcluindo(false)
@@ -147,44 +181,81 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
     if (!('error' in r)) router.refresh()
   }
 
-  const itemEvento = (e: Evento, mostrarDia?: boolean) => (
-    <ListItem
-      key={e.id}
-      onClick={() => setDetalhe(e)}
-      icon={e.concluido ? 'check' : e.notificar ? 'bell' : 'calendar'}
-      title={<span className={e.concluido ? 'line-through opacity-60' : ''}>{e.titulo}</span>}
-      subtitle={
-        <span>
-          {mostrarDia && `${diaCurtoFormat.format(new Date(e.data_hora))} · `}
-          {horaFormat.format(new Date(e.data_hora))}
-          {e.descricao && <span className="opacity-80"> · {e.descricao}</span>}
-        </span>
-      }
-      actionsLabel={e.titulo}
-      actions={[
-        { icon: 'check', label: e.concluido ? 'Reabrir' : 'Concluir', onClick: () => alternarConcluido(e) },
-        { icon: 'pencil', label: 'Editar', onClick: () => { setEditando(e); setModalOpen(true) } },
-        { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluirTarget(e) },
-      ]}
-    />
-  )
+  // Convidado aceita ou recusa (vale para os próximos eventos da série)
+  async function responder(e: Evento, status: Exclude<StatusConvite, 'pendente'>) {
+    const r = await responderConviteAction(e.id, status)
+    if ('error' in r && r.error) { toast.error(r.error); return }
+    toast(status === 'aceito' ? `Convite para "${e.titulo}" aceito.` : `Convite para "${e.titulo}" recusado.`)
+    router.refresh()
+  }
+
+  function pedirExclusao(e: Evento) { setEscopoExcluir('este'); setExcluirTarget(e) }
+
+  const horario = (e: Evento) => {
+    const ini = new Date(e.data_hora)
+    return `${horaFormat.format(ini)} – ${horaFormat.format(new Date(ini.getTime() + e.duracao_min * 60_000))}`
+  }
+
+  const linkReuniao = (e: Evento) => (e.link_reuniao
+    ? [{ icon: 'external' as const, label: 'Entrar na reunião', onClick: () => window.open(e.link_reuniao!, '_blank', 'noopener,noreferrer') }]
+    : [])
+
+  const itemEvento = (e: Evento, mostrarDia?: boolean) => {
+    const meu = e.origem === 'meu'
+    const apagado = e.concluido || e.meu_status === 'recusado'
+    return (
+      <ListItem
+        key={e.id}
+        onClick={() => setDetalhe(e)}
+        // De outra pessoa (convite ou agenda): foto do dono; meu: ícone
+        media={!meu && e.dono ? <Avatar nome={e.dono.nome} url={e.dono.avatar_url} size={28} cor={e.origem === 'agenda' ? corDaPessoa(e.profile_id) : undefined} /> : undefined}
+        icon={e.concluido ? 'check' : e.notificar ? 'bell' : 'calendar'}
+        title={<span className={apagado ? 'line-through opacity-60' : ''}>{e.titulo}</span>}
+        subtitle={
+          <span>
+            {mostrarDia && `${diaCurtoFormat.format(new Date(e.data_hora))} · `}
+            {horario(e)}
+            {e.local && ` · ${e.local}`}
+            {e.link_reuniao && (e.local ? ' + online' : ' · Online')}
+            {!meu && e.dono && <span className="opacity-80"> · {e.origem === 'convite' ? `convite de ${e.dono.nome}` : e.dono.nome}</span>}
+            {meu && e.participantes.length > 0 && <span className="opacity-80"> · {e.participantes.length} {e.participantes.length === 1 ? 'convidado' : 'convidados'}</span>}
+          </span>
+        }
+        actionsLabel={e.titulo}
+        actions={meu ? [
+          ...linkReuniao(e),
+          { icon: 'check', label: e.concluido ? 'Reabrir' : 'Concluir', onClick: () => alternarConcluido(e) },
+          { icon: 'pencil', label: 'Editar', onClick: () => { setEditando(e); setModalOpen(true) } },
+          { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => pedirExclusao(e) },
+        ] : [
+          ...linkReuniao(e),
+          { icon: 'eye', label: 'Ver detalhes', onClick: () => setDetalhe(e) },
+          ...(e.origem === 'convite' ? [
+            { icon: 'check' as const, label: 'Aceitar', onClick: () => responder(e, 'aceito'), disabled: e.meu_status === 'aceito' },
+            { icon: 'trash' as const, label: 'Recusar', tone: 'danger' as const, onClick: () => responder(e, 'recusado'), disabled: e.meu_status === 'recusado' },
+          ] : []),
+        ]}
+      />
+    )
+  }
 
   // Evento dentro do calendário: clique abre o detalhe (sem selecionar o dia por trás)
-  const chipEvento = (e: Evento) => (
-    <button
-      key={e.id}
-      type="button"
-      onClick={(ev) => { ev.stopPropagation(); setDetalhe(e) }}
-      onDoubleClick={(ev) => ev.stopPropagation()}
-      title={e.titulo}
-      className={cn('hidden sm:block w-full text-left truncate rounded px-1.5 py-0.5 text-[11px] font-medium cursor-pointer hover:brightness-95', e.concluido && 'line-through opacity-50')}
-      style={ehAtrasado(e)
-        ? { backgroundColor: '#FEE2E2', color: '#B91C1C' }
-        : { backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
-    >
-      {horaFormat.format(new Date(e.data_hora))} {e.titulo}
-    </button>
-  )
+  const chipEvento = (e: Evento) => {
+    const { style, apagado } = estiloEvento(e, ehAtrasado(e))
+    return (
+      <button
+        key={e.id}
+        type="button"
+        onClick={(ev) => { ev.stopPropagation(); setDetalhe(e) }}
+        onDoubleClick={(ev) => ev.stopPropagation()}
+        title={e.dono ? `${e.titulo} · ${e.dono.nome}` : e.titulo}
+        className={cn('hidden sm:block w-full text-left truncate rounded px-1.5 py-0.5 text-[11px] font-medium cursor-pointer hover:brightness-95', apagado && 'line-through opacity-50')}
+        style={style}
+      >
+        {horaFormat.format(new Date(e.data_hora))} {e.titulo}
+      </button>
+    )
+  }
 
   // Ações das células de dia do mês
   const propsDia = (d: Date) => ({
@@ -246,7 +317,24 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
               <Icon name="chevron-right" size={18} />
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Agendas compartilhadas: quais mostrar e com quem compartilho a minha */}
+            <button
+              type="button"
+              onClick={() => setAgendasOpen(true)}
+              className="h-8 px-3 rounded-lg text-sm font-semibold border cursor-pointer hover:bg-gray-50 flex items-center gap-1.5"
+              style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
+            >
+              <Icon name="users" size={15} />
+              Agendas
+              {agendas.acompanho.length > 0 && (
+                <span className="flex -space-x-1 ml-0.5">
+                  {agendas.acompanho.slice(0, 3).map((p) => (
+                    <span key={p.id} className="w-2.5 h-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: corDaPessoa(p.id), opacity: ocultas.has(p.id) ? 0.3 : 1 }} />
+                  ))}
+                </span>
+              )}
+            </button>
             {/* Alternar visão */}
             <div role="group" aria-label="Visão do calendário" className="flex h-8 p-0.5 rounded-lg" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
               {([['mes', 'Mês'], ['semana', 'Semana']] as const).map(([v, label]) => (
@@ -331,8 +419,11 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
         onClose={fecharDetalhe}
         onConcluir={(e) => { fecharDetalhe(); alternarConcluido(e) }}
         onEditar={(e) => { fecharDetalhe(); setEditando(e); setModalOpen(true) }}
-        onExcluir={(e) => { fecharDetalhe(); setExcluirTarget(e) }}
+        onExcluir={(e) => { fecharDetalhe(); pedirExclusao(e) }}
+        onResponder={(e, status) => { fecharDetalhe(); responder(e, status) }}
       />
+
+      <ModalAgendas open={agendasOpen} onClose={fecharAgendas} agendas={agendas} ocultas={ocultas} onAlternar={alternarAgenda} />
 
       <ModalEvento open={modalOpen} onClose={() => setModalOpen(false)} evento={editando} dataInicial={selecionado} horaInicial={horaNova} />
 
@@ -342,7 +433,22 @@ export function CalendarioHome({ eventos, eventoAbertoId }: {
         onConfirm={confirmarExclusao}
         loading={excluindo}
         title="Excluir evento"
-        message={<p>Excluir o evento <strong>{excluirTarget?.titulo}</strong>?</p>}
+        message={
+          <div className="flex flex-col gap-3">
+            <p>Excluir o evento <strong>{excluirTarget?.titulo}</strong>?{!!excluirTarget?.participantes.length && ' Os convidados deixam de vê-lo.'}</p>
+            {/* Evento repetido: só este ou este e os próximos */}
+            {excluirTarget?.serie_id && (
+              <div className="flex flex-col gap-1.5">
+                {([['este', 'Somente este evento'], ['proximos', 'Este e os próximos da série']] as const).map(([v, label]) => (
+                  <label key={v} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="radio" name="escopo-excluir" checked={escopoExcluir === v} onChange={() => setEscopoExcluir(v)} style={{ accentColor: 'var(--color-brand)' }} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        }
       />
     </div>
   )

@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { Evento } from '../queries'
+import { estiloEvento } from './avatar'
 
 const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const HORAS = Array.from({ length: 24 }, (_, h) => h)
 const ALTURA_HORA = 48 // px por hora na grade
-const DURACAO_MIN = 60 // eventos só têm início: ocupam 1h na grade
+const MIN_NA_GRADE = 30 // eventos curtos ocupam ao menos 30 min na grade (para caber o título)
 const HORA_INICIAL_ROLAGEM = 7 // sem "hoje" na semana, a grade abre às 7h
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -15,7 +16,7 @@ const chaveDia = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad
 const horaFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
 const minutosDoDia = (d: Date) => d.getHours() * 60 + d.getMinutes()
 
-type Posicionado = { e: Evento; ini: number; coluna: number; colunas: number }
+type Posicionado = { e: Evento; ini: number; fim: number; coluna: number; colunas: number }
 
 // Eventos que se sobrepõem no mesmo horário ficam lado a lado (cada grupo divide a largura do dia)
 function posicionar(lista: Evento[]): Posicionado[] {
@@ -28,11 +29,13 @@ function posicionar(lista: Evento[]): Posicionado[] {
 
   for (const e of ordenados) {
     const ini = minutosDoDia(new Date(e.data_hora))
+    // Na grade, termina no fim do dia (eventos que passam da meia-noite não continuam no dia seguinte)
+    const fim = Math.min(24 * 60, ini + Math.max(MIN_NA_GRADE, e.duracao_min))
     if (ini >= fimGrupo) { fecharGrupo(); grupo = []; fimColunas = [] }
     let coluna = fimColunas.findIndex((f) => f <= ini)
-    if (coluna < 0) { coluna = fimColunas.length; fimColunas.push(ini + DURACAO_MIN) } else fimColunas[coluna] = ini + DURACAO_MIN
-    grupo.push({ e, ini, coluna, colunas: 1 })
-    fimGrupo = Math.max(fimGrupo, ini + DURACAO_MIN)
+    if (coluna < 0) { coluna = fimColunas.length; fimColunas.push(fim) } else fimColunas[coluna] = fim
+    grupo.push({ e, ini, fim, coluna, colunas: 1 })
+    fimGrupo = Math.max(fimGrupo, fim)
   }
   fecharGrupo()
   return res
@@ -49,7 +52,7 @@ interface Props {
   onAbrir: (e: Evento) => void
 }
 
-// Visão semanal com horários: coluna das horas à esquerda e os eventos posicionados no horário de cada dia
+// Visão semanal com horários: coluna das horas à esquerda e os eventos posicionados no horário e na duração de cada um
 export function SemanaHorarios({ dias, porDia, selecionado, ehAtrasado, onSelecionarDia, onNovo, onAbrir }: Props) {
   const rolagemRef = useRef<HTMLDivElement>(null)
   const [agora, setAgora] = useState(() => new Date())
@@ -143,32 +146,31 @@ export function SemanaHorarios({ dias, porDia, selecionado, ehAtrasado, onSeleci
                   ))}
 
                   {/* Eventos no horário */}
-                  {posicionar(porDia.get(k) ?? []).map(({ e, ini, coluna, colunas: total }) => {
-                    const atrasado = ehAtrasado(e)
-                    const altura = Math.max(22, (Math.min(DURACAO_MIN, 24 * 60 - ini) / 60) * ALTURA_HORA - 2)
+                  {posicionar(porDia.get(k) ?? []).map(({ e, ini, fim, coluna, colunas: total }) => {
+                    const { style, apagado } = estiloEvento(e, ehAtrasado(e))
+                    const altura = Math.max(22, ((fim - ini) / 60) * ALTURA_HORA - 2)
+                    const termino = new Date(new Date(e.data_hora).getTime() + e.duracao_min * 60_000)
                     return (
                       <button
                         key={e.id}
                         type="button"
                         onClick={() => onAbrir(e)}
                         onDoubleClick={(ev) => ev.stopPropagation()}
-                        title={`${horaFormat.format(new Date(e.data_hora))} · ${e.titulo}`}
+                        title={`${horaFormat.format(new Date(e.data_hora))}–${horaFormat.format(termino)} · ${e.titulo}${e.dono ? ` · ${e.dono.nome}` : ''}`}
                         className={cn(
                           'absolute rounded-md px-1.5 py-1 text-left text-[11px] leading-tight font-medium overflow-hidden cursor-pointer hover:brightness-95 border-l-[3px]',
-                          e.concluido && 'opacity-50',
+                          apagado && 'opacity-50',
                         )}
                         style={{
                           top: (ini / 60) * ALTURA_HORA + 1,
                           height: altura,
                           left: `calc(${(coluna / total) * 100}% + 2px)`,
                           width: `calc(${100 / total}% - 4px)`,
-                          ...(atrasado
-                            ? { backgroundColor: '#FEE2E2', color: '#B91C1C', borderLeftColor: '#B91C1C' }
-                            : { backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)', borderLeftColor: 'var(--color-brand)' }),
+                          ...style,
                         }}
                       >
-                        <span className="block font-semibold opacity-80">{horaFormat.format(new Date(e.data_hora))}</span>
-                        <span className={cn('block truncate', e.concluido && 'line-through')}>{e.titulo}</span>
+                        <span className="block font-semibold opacity-80 truncate">{horaFormat.format(new Date(e.data_hora))}{altura >= 40 && ` – ${horaFormat.format(termino)}`}</span>
+                        <span className={cn('block truncate', apagado && 'line-through')}>{e.titulo}</span>
                       </button>
                     )
                   })}

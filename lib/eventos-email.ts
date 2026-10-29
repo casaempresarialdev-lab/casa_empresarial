@@ -84,3 +84,68 @@ export async function enviarAvisosEventos(admin: Admin, so?: { profileId: string
 
   return { verificados: devidos.length, enviados, falhas }
 }
+
+const RECORRENCIA_TEXTO = { diaria: 'Repete todos os dias', semanal: 'Repete toda semana', mensal: 'Repete todo mês' } as const
+const horaFimFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+const dataCurtaFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
+
+/** Convite para um evento (uma vez por série): data, duração, local ou link e quem convidou */
+export async function enviarConviteEvento(opcoes: {
+  para: string[]
+  donoNome: string
+  link: string
+  evento: {
+    titulo: string; descricao: string | null; data_hora: string; duracao_min: number
+    local: string | null; link_reuniao: string | null
+    recorrencia: 'diaria' | 'semanal' | 'mensal' | null; recorrencia_ate: string | null
+  }
+}) {
+  const { para, donoNome, link, evento: e } = opcoes
+  if (!para.length) return []
+  const branding = await getEmailBranding(null)
+  const inicio = new Date(e.data_hora)
+  const quando = `${quandoFormat.format(inicio)} às ${horaFimFormat.format(new Date(inicio.getTime() + e.duracao_min * 60_000))}`
+  const quandoCap = quando.charAt(0).toUpperCase() + quando.slice(1)
+  const repete = e.recorrencia ? `${RECORRENCIA_TEXTO[e.recorrencia]}${e.recorrencia_ate ? ` até ${dataCurtaFormat.format(new Date(e.recorrencia_ate))}` : ''}` : null
+  // Presencial, online ou híbrido (os dois)
+  const onde = e.local && e.link_reuniao ? `Híbrido: ${e.local} ou online` : e.local ? `Presencial: ${e.local}` : e.link_reuniao ? 'Online' : null
+
+  return Promise.all(para.map((to) => sendEmail({
+    to,
+    subject: `Convite: ${e.titulo}`,
+    text: [`${donoNome} convidou você para "${e.titulo}"`, quandoCap, repete, onde, e.link_reuniao ? `Link da reunião: ${e.link_reuniao}` : null, e.descricao, `Responder: ${link}`].filter(Boolean).join('\n'),
+    html: layoutEmail({
+      branding,
+      previa: `${donoNome} convidou você — ${quandoCap}`,
+      titulo: e.titulo,
+      blocos: [
+        { tipo: 'texto', html: `<strong>${escapeHtml(donoNome)}</strong> convidou você para este evento.` },
+        { tipo: 'texto', html: [`<strong>${escapeHtml(quandoCap)}</strong>`, repete && escapeHtml(repete), onde && escapeHtml(onde)].filter(Boolean).join('<br>') },
+        ...(e.descricao ? [{ tipo: 'texto' as const, html: escapeHtml(e.descricao).replace(/\n/g, '<br>') }] : []),
+        ...(e.link_reuniao ? [{ tipo: 'botao' as const, texto: 'Entrar na reunião', url: e.link_reuniao }] : []),
+        { tipo: 'botao', texto: 'Ver e responder o convite', url: link },
+        { tipo: 'nota', html: 'O evento já aparece no seu calendário da Casa Empresarial, onde você pode aceitar ou recusar.' },
+      ],
+    }),
+  })))
+}
+
+/** Aviso de que alguém compartilhou a agenda (o destinatário passa a acompanhar, só visualização) */
+export async function enviarAgendaCompartilhada(opcoes: { para: string; donoNome: string; link: string }) {
+  const branding = await getEmailBranding(null)
+  return sendEmail({
+    to: opcoes.para,
+    subject: `${opcoes.donoNome} compartilhou a agenda com você`,
+    text: `${opcoes.donoNome} compartilhou a agenda com você na Casa Empresarial. Veja no calendário: ${opcoes.link}`,
+    html: layoutEmail({
+      branding,
+      previa: `Agora você acompanha a agenda de ${opcoes.donoNome}`,
+      titulo: 'Agenda compartilhada',
+      blocos: [
+        { tipo: 'texto', html: `<strong>${escapeHtml(opcoes.donoNome)}</strong> compartilhou a agenda com você. Os eventos aparecem no seu calendário, só para visualização.` },
+        { tipo: 'botao', texto: 'Abrir o calendário', url: opcoes.link },
+        { tipo: 'nota', html: 'Você pode esconder esta agenda ou deixar de acompanhá-la em "Agendas", no calendário.' },
+      ],
+    }),
+  })
+}

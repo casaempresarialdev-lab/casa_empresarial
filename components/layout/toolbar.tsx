@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Icon, type IconName } from '@/components/ui/icon'
 import { resumoNotificacoesAction, concluirEventoAction, marcarAvisosVistosAction, type ResumoNotificacoes } from '@/app/(app)/calendario/actions'
-import type { Evento } from '@/app/(app)/calendario/queries'
+import type { Evento, AvisoCalendario } from '@/app/(app)/calendario/queries'
 import type { AvisoCompartilhamento } from '@/app/(app)/cofre-de-senhas/queries'
 
 /** Eventos ficam no calendário da página inicial */
@@ -13,6 +13,10 @@ export const LINK_CALENDARIO = '/dashboard'
 /** Link que abre o próprio evento no calendário (modal de detalhes) */
 export const linkEvento = (id: string) => `${LINK_CALENDARIO}?evento=${id}`
 export const LINK_COMPARTILHADAS = '/cofre-de-senhas?aba=compartilhadas'
+/** Agenda compartilhada comigo: abre o calendário com o painel de agendas */
+export const LINK_AGENDAS = `${LINK_CALENDARIO}?agendas=1`
+/** Convite, aviso de evento de outra pessoa ou agenda compartilhada */
+export const linkAvisoCalendario = (a: AvisoCalendario) => (a.evento_id ? linkEvento(a.evento_id) : LINK_AGENDAS)
 
 // Barra de ferramentas da área logada (cor primária), no canto superior direito, encostada na borda da tela.
 // Só notificações (avisos de eventos do calendário e senhas compartilhadas) e tela cheia.
@@ -150,13 +154,17 @@ function LinhaNotificacao({ icon, titulo, detalhe, href, onNavegar, novo, acao }
   )
 }
 
-type ItemNotificacao = { tipo: 'evento'; data: number; l: Evento } | { tipo: 'compartilhamento'; data: number; c: AvisoCompartilhamento }
+type ItemNotificacao =
+  | { tipo: 'evento'; data: number; l: Evento }
+  | { tipo: 'compartilhamento'; data: number; c: AvisoCompartilhamento }
+  | { tipo: 'calendario'; data: number; a: AvisoCalendario }
 
-// Eventos e compartilhamentos numa lista só, mais recentes primeiro
-function juntarNotificacoes(avisos: Evento[], compartilhamentos: AvisoCompartilhamento[]): ItemNotificacao[] {
+// Eventos, convites, agendas e compartilhamentos numa lista só, mais recentes primeiro
+function juntarNotificacoes(avisos: Evento[], compartilhamentos: AvisoCompartilhamento[], calendario: AvisoCalendario[]): ItemNotificacao[] {
   return [
     ...avisos.map((l) => ({ tipo: 'evento' as const, data: new Date(l.data_hora).getTime() - l.antecedencia_min * 60_000, l })),
     ...compartilhamentos.map((c) => ({ tipo: 'compartilhamento' as const, data: new Date(c.created_at).getTime(), c })),
+    ...calendario.map((a) => ({ tipo: 'calendario' as const, data: new Date(a.em).getTime(), a })),
   ].sort((a, b) => b.data - a.data)
 }
 
@@ -176,7 +184,7 @@ export function Toolbar() {
   const [fase, setFase] = useState<Fase>('carregando')
   const barRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
-  const [resumo, setResumo] = useState<ResumoNotificacoes>({ avisos: [], compartilhamentos: [], naoVistos: 0, proximoAvisoEm: null })
+  const [resumo, setResumo] = useState<ResumoNotificacoes>({ avisos: [], compartilhamentos: [], calendario: [], naoVistos: 0, proximoAvisoEm: null })
   // Avisos que acabaram de chegar: cartão no canto da tela até a pessoa fechar
   const [cartoes, setCartoes] = useState<Evento[]>([])
 
@@ -302,11 +310,21 @@ export function Toolbar() {
           <ToolButton icon="bell" label="Notificações" onClick={abrirNotificacoes} active={painel === 'notificacoes'} badge={badge} balancar={cartoes.length > 0} />
           {painel === 'notificacoes' && (
             <PainelSuspenso titulo="Notificações" alinhar="right">
-              {resumo.avisos.length + resumo.compartilhamentos.length === 0
+              {resumo.avisos.length + resumo.compartilhamentos.length + resumo.calendario.length === 0
                 ? <Vazio icon="bell" texto="Nenhuma notificação por enquanto." />
                 : (
                   <ul className="flex flex-col max-h-72 overflow-y-auto -mx-1.5">
-                    {juntarNotificacoes(resumo.avisos, resumo.compartilhamentos).map((n) => n.tipo === 'evento' ? (
+                    {juntarNotificacoes(resumo.avisos, resumo.compartilhamentos, resumo.calendario).map((n) => n.tipo === 'calendario' ? (
+                      <LinhaNotificacao
+                        key={n.a.id}
+                        icon={n.a.tipo === 'agenda' ? 'users' : n.a.tipo === 'convite' ? 'mail' : 'calendar'}
+                        titulo={n.a.titulo}
+                        detalhe={n.a.detalhe}
+                        href={linkAvisoCalendario(n.a)}
+                        onNavegar={() => setPainel(null)}
+                        novo={!n.a.visto}
+                      />
+                    ) : n.tipo === 'evento' ? (
                       <LinhaNotificacao
                         key={'l-' + n.l.id}
                         icon="calendar"

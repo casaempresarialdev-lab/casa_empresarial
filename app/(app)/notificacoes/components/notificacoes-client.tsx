@@ -7,7 +7,8 @@ import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { toast } from '@/lib/toast'
 import { concluirEventoAction, marcarAvisosVistosAction } from '../../calendario/actions'
-import type { Evento } from '../../calendario/queries'
+import type { Evento, AvisoCalendario } from '../../calendario/queries'
+import { linkAvisoCalendario } from '@/components/layout/toolbar'
 import type { AvisoCompartilhamento } from '../../cofre-de-senhas/queries'
 
 const quandoFormat = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -25,13 +26,13 @@ const Nova = () => (
 
 // Página de notificações: avisos de eventos do calendário e credenciais do cofre compartilhadas com o usuário.
 // Cada item é um link: evento → calendário da página inicial; compartilhamento → Cofre de senhas (Compartilhadas comigo).
-export function NotificacoesClient({ notificacoes, compartilhamentos }: { notificacoes: Evento[]; compartilhamentos: AvisoCompartilhamento[] }) {
+export function NotificacoesClient({ notificacoes, compartilhamentos, calendario }: { notificacoes: Evento[]; compartilhamentos: AvisoCompartilhamento[]; calendario: AvisoCalendario[] }) {
   const router = useRouter()
 
   // Abrir a página conta como "visto": zera o contador do sino
   useEffect(() => {
-    if (notificacoes.some((n) => !n.aviso_visto_em) || compartilhamentos.some((c) => !c.aviso_visto_em)) marcarAvisosVistosAction()
-  }, [notificacoes, compartilhamentos])
+    if (notificacoes.some((n) => !n.aviso_visto_em) || compartilhamentos.some((c) => !c.aviso_visto_em) || calendario.some((a) => !a.visto)) marcarAvisosVistosAction()
+  }, [notificacoes, compartilhamentos, calendario])
 
   const pendentes = notificacoes.filter((n) => !n.concluido)
   const concluidas = notificacoes.filter((n) => n.concluido)
@@ -78,6 +79,23 @@ export function NotificacoesClient({ notificacoes, compartilhamentos }: { notifi
     />
   )
 
+  // Convites, avisos de eventos de outras pessoas e agendas compartilhadas
+  const itemCalendario = (a: AvisoCalendario) => (
+    <ListItem
+      key={a.id}
+      icon={a.tipo === 'agenda' ? 'users' : a.tipo === 'convite' ? 'mail' : 'calendar'}
+      title={
+        <Link href={linkAvisoCalendario(a)} className="flex items-center gap-2 hover:underline">
+          <span>{a.titulo}</span>
+          {!a.visto && <Nova />}
+        </Link>
+      }
+      subtitle={<span>{a.detalhe}</span>}
+      actionsLabel={a.titulo}
+      actions={[{ icon: 'calendar', label: a.evento_id ? 'Abrir evento' : 'Abrir agendas', onClick: () => router.push(linkAvisoCalendario(a)) }]}
+    />
+  )
+
   return (
     <>
       <div className="mb-6">
@@ -90,7 +108,7 @@ export function NotificacoesClient({ notificacoes, compartilhamentos }: { notifi
       </div>
 
       <div className="app-card p-5 flex flex-col gap-5">
-        {notificacoes.length + compartilhamentos.length === 0 && (
+        {notificacoes.length + compartilhamentos.length + calendario.length === 0 && (
           <ListEmpty>
             Nenhuma notificação por enquanto. Os avisos dos seus <Link href={LINK_CALENDARIO} className="font-medium hover:underline" style={{ color: 'var(--color-brand)' }}>eventos do calendário</Link> e as senhas compartilhadas com você aparecem aqui.
           </ListEmpty>
@@ -100,6 +118,13 @@ export function NotificacoesClient({ notificacoes, compartilhamentos }: { notifi
           <section className="flex flex-col gap-3">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Pendentes ({pendentes.length})</p>
             <ul className="flex flex-col gap-3">{pendentes.map(item)}</ul>
+          </section>
+        )}
+
+        {calendario.length > 0 && (
+          <section className="flex flex-col gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Convites e agendas ({calendario.length})</p>
+            <ul className="flex flex-col gap-3">{calendario.map(itemCalendario)}</ul>
           </section>
         )}
 

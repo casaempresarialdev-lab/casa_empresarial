@@ -6,7 +6,7 @@ import { SummaryCard } from '@/components/modules/dashboard/summary-card'
 import { Icon } from '@/components/ui/icon'
 import { getAccountBalances } from '@/lib/finance/balances'
 import { CalendarioHome } from '../calendario/components/calendario-home'
-import { getEventos } from '../calendario/queries'
+import { getEventos, getAgendas } from '../calendario/queries'
 import { Welcome } from '@/components/modules/dashboard/welcome'
 import { IntroProvider } from '@/components/modules/dashboard/intro'
 
@@ -22,9 +22,9 @@ function formatCurrency(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ evento?: string }> }) {
-  // ?evento=<id>: vindo de uma notificação, abre o evento no calendário
-  const { evento: eventoAbertoId } = await searchParams
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ evento?: string; agendas?: string }> }) {
+  // ?evento=<id>: vindo de uma notificação, abre o evento no calendário; ?agendas=1 abre o painel de agendas
+  const { evento: eventoAbertoId, agendas: abrirAgendas } = await searchParams
   const supabase = await createClient()
   const cookieStore = await cookies()
 
@@ -99,8 +99,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { count: vendasAbertasCount },
     // Marketing
     { count: publicacoesMesCount },
-    // Calendário (eventos pessoais do usuário)
+    // Calendário (meus eventos, convites e agendas que acompanho)
     eventos,
+    agendas,
   ] = await Promise.all([
     admin.from('documents').select('*', { count: 'exact', head: true })
       .eq('company_id', companyId).not('vencimento', 'is', null).lt('vencimento', today),
@@ -120,6 +121,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       .eq('company_id', companyId)
       .gte('data_publicacao', inicioMes).lte('data_publicacao', fimMes),
     getEventos(user.id),
+    getAgendas(user.id),
   ])
 
   // Administrativo: vencidos + vencendo em 30 dias
@@ -201,7 +203,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {/* Calendário (sem título de seção, só o respiro acima) */}
       <section className="mt-12" aria-label="Calendário">
         <div className="animate-enter" style={{ animationDelay: '600ms' }}>
-          <CalendarioHome eventos={eventos} eventoAbertoId={eventoAbertoId} />
+          <CalendarioHome eventos={eventos} eventoAbertoId={eventoAbertoId} agendas={agendas} abrirAgendas={abrirAgendas === "1"} />
         </div>
       </section>
     </IntroProvider>
