@@ -285,3 +285,8 @@ h1, h2, h3, h4, h5, h6 {
   30% { transform: rotate(-3deg); }
   35% { transform: rotate(0); }
 }
+
+/* Campo de data: o calendário nativo do navegador fica escondido; abre o seletor da empresa (components/ui/date-picker.tsx) */
+input.campo-data::-webkit-calendar-picker-indicator {
+  display: none;
+}

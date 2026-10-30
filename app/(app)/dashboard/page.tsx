@@ -157,8 +157,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             value={atencao}
             caption={atencao === 1 ? 'item pedindo atenção' : 'itens pedindo atenção'}
             accent={docsVencidos > 0 ? 'red' : atencao > 0 ? 'yellow' : undefined}
-            href="/admin/documentacao"
-            linkLabel="Ver documentação"
+            // Cada card leva ao dashboard da área (por enquanto só o Administrativo tem)
+            href="/admin"
+            linkLabel="Ver dashboard"
           />
           <SummaryCard
             icon="dollar"
@@ -167,8 +168,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             value={formatCurrency(saldoTotal)}
             caption="saldo atual em conta"
             accent={saldoTotal < 0 ? 'red' : undefined}
-            href="/financeiro/fluxo-de-caixa"
-            linkLabel="Ver fluxo de caixa"
           />
           <SummaryCard
             icon="users"
@@ -176,8 +175,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             delay={360}
             value={empAtivos}
             caption={empAtivos === 1 ? 'pessoa na equipe' : 'pessoas na equipe'}
-            href="/pessoas/funcionarios"
-            linkLabel="Ver equipe"
           />
           <SummaryCard
             icon="briefcase"
@@ -185,8 +182,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             delay={440}
             value={emAndamento}
             caption="OS e pedidos em andamento"
-            href="/operacional/ordens-de-servico"
-            linkLabel="Ver ordens de serviço"
           />
           <SummaryCard
             icon="megaphone"
@@ -194,8 +189,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             delay={520}
             value={publicacoes}
             caption={publicacoes === 1 ? 'publicação neste mês' : 'publicações neste mês'}
-            href="/marketing/calendario"
-            linkLabel="Ver calendário"
           />
         </div>
       </section>

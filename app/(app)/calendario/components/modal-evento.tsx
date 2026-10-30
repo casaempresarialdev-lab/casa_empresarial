@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { CampoData } from '@/components/ui/date-picker'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import {
@@ -305,12 +306,11 @@ export function ModalEvento({ open, onClose, evento, dataInicial, horaInicial }:
                     <input type="radio" value="em" className="h-4 w-4 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} {...register('termina')} />
                     Em
                   </label>
-                  <input
-                    type="date"
+                  <CampoData
                     min={data}
                     aria-label="Data final"
                     disabled={termina !== 'em'}
-                    className={cn(fieldCls, 'max-w-48')}
+                    className={cn(fieldCls, 'w-48')}
                     style={fieldSty}
                     {...register('recorrencia_ate')}
                   />
