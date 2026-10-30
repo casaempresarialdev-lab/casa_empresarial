@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { estenderSeries } from '@/lib/calendario-series'
 
 // Eventos do calendário: pessoais do usuário (tabela "reminders", criada quando eram lembretes),
 // os convites recebidos e os eventos das agendas compartilhadas com ele
@@ -28,8 +29,14 @@ export type Evento = {
   local: string | null
   link_reuniao: string | null
   serie_id: string | null
-  recorrencia: 'diaria' | 'semanal' | 'mensal' | null
+  recorrencia: 'diaria' | 'semanal' | 'mensal' | 'anual' | null
+  /** A cada N dias/semanas/meses/anos */
+  intervalo: number
+  /** Termina após N ocorrências (nulo = sem limite) */
+  ocorrencias: number | null
   recorrencia_ate: string | null
+  /** Semanal: dias da semana (0 = domingo … 6 = sábado) */
+  dias_semana: number[] | null
   /** De onde o evento vem para este usuário: dele, convite recebido ou agenda que ele acompanha */
   origem: 'meu' | 'convite' | 'agenda'
   dono?: Pessoa
@@ -47,7 +54,7 @@ type Linha = Omit<Evento, 'origem' | 'dono' | 'participantes' | 'meu_status'>
 export function normalizarEvento(r: Partial<Linha> & { id: string; profile_id: string; titulo: string; data_hora: string }): Linha {
   return {
     descricao: null, duracao_min: 60, notificar: false, antecedencia_min: 0, notificar_email: false, email_enviado_em: null,
-    concluido: false, concluido_em: null, local: null, link_reuniao: null, serie_id: null, recorrencia: null, recorrencia_ate: null,
+    concluido: false, concluido_em: null, local: null, link_reuniao: null, serie_id: null, recorrencia: null, recorrencia_ate: null, dias_semana: null, intervalo: 1, ocorrencias: null,
     ...r,
   } as Linha
 }
@@ -83,6 +90,8 @@ async function getParticipantes(admin: Admin, reminderIds: string[]): Promise<Ma
 // Calendário da página inicial: eventos do usuário + convites recebidos + agendas que ele acompanha
 export async function getEventos(profileId: string): Promise<Evento[]> {
   const admin = createAdminClient()
+  // Repetições sem data final: cria as próximas ocorrências que estiverem faltando (até 12 meses à frente)
+  await estenderSeries(admin, profileId).catch(() => null)
   // Agendas de outras pessoas: só a partir de 3 meses atrás (o histórico antigo não interessa)
   const desde = new Date(Date.now() - 90 * 86_400_000).toISOString()
 
@@ -109,14 +118,15 @@ export async function getEventos(profileId: string): Promise<Evento[]> {
   const todosIds = [...linhasMeus, ...linhasConvite, ...linhasAgenda].map((e) => e.id)
   const [participantes, donos] = await Promise.all([
     getParticipantes(admin, todosIds),
-    getPessoas(admin, [...linhasConvite, ...linhasAgenda].map((e) => e.profile_id)),
+    // Dono de cada evento (inclusive eu): as listas mostram as fotos de todos os envolvidos
+    getPessoas(admin, [profileId, ...linhasConvite.map((e) => e.profile_id), ...linhasAgenda.map((e) => e.profile_id)]),
   ])
 
   // Um mesmo evento pode chegar por mais de um caminho: o meu > convite > agenda
   const porId = new Map<string, Evento>()
   const add = (e: Linha & { meu_status?: StatusConvite }, origem: Evento['origem']) => {
     if (porId.has(e.id)) return
-    porId.set(e.id, { ...e, origem, dono: origem === 'meu' ? undefined : donos.get(e.profile_id), participantes: participantes.get(e.id) ?? [] })
+    porId.set(e.id, { ...e, origem, dono: donos.get(e.profile_id), participantes: participantes.get(e.id) ?? [] })
   }
   linhasMeus.forEach((e) => add(e, 'meu'))
   linhasConvite.forEach((e) => add(e, 'convite'))

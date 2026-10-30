@@ -3,13 +3,12 @@
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Icon, type IconName } from '@/components/ui/icon'
-import { ANTECEDENCIAS, RECORRENCIAS, formatarDuracao } from '@/lib/validations/evento'
+import { ANTECEDENCIAS, descreverRepeticao, formatarDuracao } from '@/lib/validations/evento'
 import type { Evento, StatusConvite } from '../queries'
 import { Avatar, STATUS_CONVITE, corDaPessoa } from './avatar'
 
 const dataLongaFormat = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 const horaFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
-const dataCurtaFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
 const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 interface Props {
@@ -48,7 +47,7 @@ export function ModalDetalheEvento({ evento: e, onClose, onConcluir, onEditar, o
   const atrasado = meu && !e.concluido && inicio.getTime() < Date.now()
   const antecedencia = ANTECEDENCIAS.find((a) => a.value === e.antecedencia_min)?.label ?? `${e.antecedencia_min} min antes`
   const duracao = formatarDuracao(e.duracao_min)
-  const repete = RECORRENCIAS.find((r) => r.value === e.recorrencia)?.label
+  const repete = descreverRepeticao(e, { diaSemana: inicio.getDay(), diaMes: inicio.getDate(), mes: inicio.getMonth() })
   const outroDia = fim.toDateString() !== inicio.toDateString()
 
   return (
@@ -77,11 +76,7 @@ export function ModalDetalheEvento({ evento: e, onClose, onConcluir, onEditar, o
             {horaFormat.format(inicio)} – {outroDia ? `${dataLongaFormat.format(fim)}, ` : ''}{horaFormat.format(fim)}
             <span style={{ color: 'var(--color-text-muted)' }}> · {duracao}</span>
           </p>
-          {repete && e.recorrencia && (
-            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-              {repete}{e.recorrencia_ate ? ` até ${dataCurtaFormat.format(new Date(e.recorrencia_ate))}` : ''}
-            </p>
-          )}
+          {repete && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{repete}</p>}
         </Linha>
 
         {/* Local: endereço (abre no mapa) e/ou link da reunião — os dois = híbrido */}

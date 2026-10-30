@@ -9,7 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { toast } from '@/lib/toast'
-import { ANTECEDENCIAS, RECORRENCIAS, duracaoDoCampo, duracaoParaCampo, eventoFormSchema, type EventoFormData } from '@/lib/validations/evento'
+import { cn } from '@/lib/utils'
+import {
+  ANTECEDENCIAS, UNIDADES, DIAS_SEMANA_CURTO, DIAS_SEMANA_NOME, SEM_REPETICAO,
+  duracaoEntre, horaFimDe, formatarDuracao, descreverRepeticao, rotulosAtalhos, regraDoAtalho, atalhoDaRegra, mesmaRegra,
+  eventoFormSchema, type EventoFormData, type Regra, type DataBase,
+} from '@/lib/validations/evento'
 import { criarEventoAction, atualizarEventoAction, type Escopo } from '../actions'
 import type { Evento, Pessoa, StatusConvite } from '../queries'
 import { Avatar, STATUS_CONVITE } from './avatar'
@@ -28,33 +33,61 @@ interface Props {
 const pad = (n: number) => String(n).padStart(2, '0')
 const paraData = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const paraHora = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
-const SEMANA_LONGA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
 
-/** Repetir até: 3 meses depois do início, por padrão */
+/** Dia da semana, dia do mês e mês da data do evento (YYYY-MM-DD) */
+const dataBase = (data: string): DataBase => {
+  const d = new Date(`${data}T12:00:00`)
+  return { diaSemana: d.getDay(), diaMes: d.getDate(), mes: d.getMonth() }
+}
+
+/** Data final sugerida quando a repetição termina numa data: 3 meses depois do início */
 const tresMesesDepois = (data: string) => {
   const [a, m, d] = data.split('-').map(Number)
   return paraData(new Date(a, m - 1 + 3, d))
 }
 
+type CamposRepeticao = Pick<EventoFormData, 'repeticao' | 'intervalo' | 'unidade' | 'dias_semana' | 'termina' | 'recorrencia_ate' | 'ocorrencias'>
+
+/** Regra do formulário: um atalho ou o painel personalizado */
+function regraDoForm(d: CamposRepeticao, b: DataBase): Regra {
+  if (d.repeticao !== 'personalizado') return regraDoAtalho(d.repeticao, b)
+  return {
+    recorrencia: d.unidade,
+    intervalo: Math.max(1, Number(d.intervalo) || 1),
+    dias_semana: d.unidade === 'semanal' ? [...d.dias_semana].sort((x, y) => x - y) : null,
+    recorrencia_ate: d.termina === 'em' && d.recorrencia_ate ? d.recorrencia_ate : null,
+    ocorrencias: d.termina === 'apos' ? Math.max(1, Number(d.ocorrencias) || 1) : null,
+  }
+}
+
 function valoresIniciais(l: Evento | null, dataInicial?: Date, horaInicial?: number | null): EventoFormData {
   if (l) {
     const d = new Date(l.data_hora)
+    const data = paraData(d)
+    const regra: Regra = { recorrencia: l.recorrencia, intervalo: l.intervalo ?? 1, dias_semana: l.dias_semana, recorrencia_ate: l.recorrencia_ate, ocorrencias: l.ocorrencias }
     return {
-      titulo: l.titulo, descricao: l.descricao ?? '', data: paraData(d), hora: paraHora(d), duracao: duracaoParaCampo(l.duracao_min),
+      titulo: l.titulo, descricao: l.descricao ?? '', data, hora: paraHora(d), hora_fim: horaFimDe(paraHora(d), l.duracao_min),
       notificar: l.notificar, antecedencia_min: l.antecedencia_min, notificar_email: l.notificar_email,
       local: l.local ?? '', link_reuniao: l.link_reuniao ?? '',
-      recorrencia: l.recorrencia ?? 'nenhuma', recorrencia_ate: l.recorrencia_ate ?? undefined,
+      repeticao: atalhoDaRegra(regra, dataBase(data)),
+      intervalo: l.intervalo ?? 1,
+      unidade: l.recorrencia ?? 'semanal',
+      dias_semana: l.dias_semana?.length ? [...l.dias_semana] : [d.getDay()],
+      termina: l.ocorrencias ? 'apos' : l.recorrencia_ate ? 'em' : 'nunca',
+      recorrencia_ate: l.recorrencia_ate ?? tresMesesDepois(data),
+      ocorrencias: l.ocorrencias ?? 13,
     }
   }
-  // Novo: no dia escolhido no calendário (ou hoje), na hora escolhida ou na próxima hora cheia
+  // Novo: no dia escolhido no calendário (ou hoje), na hora escolhida ou na próxima hora cheia, com 1h de duração
   const agora = new Date()
   const d = dataInicial ? new Date(dataInicial) : new Date()
   d.setHours(horaInicial ?? agora.getHours() + 1, 0, 0, 0)
   return {
-    titulo: '', descricao: '', data: paraData(d), hora: paraHora(d), duracao: '01:00',
+    titulo: '', descricao: '', data: paraData(d), hora: paraHora(d), hora_fim: horaFimDe(paraHora(d), 60),
     notificar: true, antecedencia_min: 15, notificar_email: false,
     local: '', link_reuniao: '',
-    recorrencia: 'nenhuma', recorrencia_ate: tresMesesDepois(paraData(d)),
+    repeticao: 'nenhuma', intervalo: 1, unidade: 'semanal', dias_semana: [d.getDay()],
+    termina: 'nunca', recorrencia_ate: tresMesesDepois(paraData(d)), ocorrencias: 13,
   }
 }
 
@@ -85,45 +118,76 @@ export function ModalEvento({ open, onClose, evento, dataInicial, horaInicial }:
   }, [open, evento, dataInicial, horaInicial, reset])
 
   const notificar = watch('notificar')
-  const recorrencia = watch('recorrencia')
   const data = watch('data')
-  const diaSemana = data ? SEMANA_LONGA[new Date(`${data}T12:00:00`).getDay()] : ''
-  const diaMes = data ? Number(data.slice(8, 10)) : 0
-  // Término (início + duração), mostrado abaixo do campo de duração
   const hora = watch('hora')
-  const duracao = watch('duracao')
-  const termino = (() => {
-    if (!data || !/^\d{2}:\d{2}$/.test(hora ?? '') || !/^\d{1,2}:\d{2}$/.test(duracao ?? '')) return null
-    const min = duracaoDoCampo(duracao)
-    if (min <= 0) return null
-    const fim = new Date(new Date(`${data}T${hora}:00`).getTime() + min * 60_000)
-    return paraData(fim) === data ? paraHora(fim) : `${paraHora(fim)} do dia seguinte`
-  })()
+  const horaFim = watch('hora_fim')
+  const repeticao = watch('repeticao')
+  const intervalo = watch('intervalo')
+  const unidade = watch('unidade')
+  const diasSemana = watch('dias_semana')
+  const termina = watch('termina')
+  const recorrenciaAte = watch('recorrencia_ate')
+  const ocorrencias = watch('ocorrencias')
+
+  // Duração calculada do início ao término (término antes do início = dia seguinte)
+  const horarioOk = /^\d{2}:\d{2}$/.test(hora ?? '') && /^\d{2}:\d{2}$/.test(horaFim ?? '') && hora !== horaFim
+  const duracao = horarioOk ? duracaoEntre(hora, horaFim) : null
+  const viraDia = horarioOk && horaFim < hora
+
+  // Repetição: atalhos com a data do evento; ao editar, se a regra mudou, a nova vale a partir deste evento
+  const base = dataBase(data || paraData(new Date()))
+  const regraForm = regraDoForm({ repeticao, intervalo, unidade, dias_semana: diasSemana ?? [], termina, recorrencia_ate: recorrenciaAte, ocorrencias }, base)
+  const regraEvento: Regra = evento
+    ? { recorrencia: evento.recorrencia, intervalo: evento.intervalo ?? 1, dias_semana: evento.dias_semana, recorrencia_ate: evento.recorrencia_ate, ocorrencias: evento.ocorrencias }
+    : SEM_REPETICAO
+  const mudouRegra = isEditing && !mesmaRegra(regraForm, regraEvento)
+  const resumoRepeticao = descreverRepeticao(regraForm, base)
+  const n = Math.max(1, Number(intervalo) || 1)
+
+  function alternarDia(dia: number) {
+    const atual = diasSemana ?? []
+    setValue('dias_semana', atual.includes(dia) ? atual.filter((x) => x !== dia) : [...atual, dia].sort(), { shouldDirty: true, shouldValidate: true })
+  }
+
+  // Abrir "Personalizar…" a partir de um atalho já começa com a regra dele (como no Google)
+  function aoTrocarRepeticao(nova: string) {
+    if (nova !== 'personalizado' || repeticao === 'personalizado' || repeticao === 'nenhuma') return
+    const r = regraDoAtalho(repeticao, base)
+    if (r.recorrencia) setValue('unidade', r.recorrencia)
+    setValue('intervalo', 1)
+    if (r.dias_semana) setValue('dias_semana', r.dias_semana)
+    setValue('termina', 'nunca')
+  }
 
   async function onSubmit(d: EventoFormData) {
-    // Data e hora no fuso do usuário → ISO
+    // Data e hora no fuso do usuário → ISO; duração do início ao término
     const dataHora = new Date(`${d.data}T${d.hora}:00`)
+    const regra = regraDoForm(d, dataBase(d.data))
     const payload = {
       titulo: d.titulo,
       descricao: d.descricao,
       data_hora: dataHora.toISOString(),
-      duracao_min: duracaoDoCampo(d.duracao),
+      duracao_min: duracaoEntre(d.hora, d.hora_fim),
       notificar: d.notificar,
       antecedencia_min: Number(d.antecedencia_min),
       notificar_email: d.notificar_email,
       local: d.local,
       link_reuniao: d.link_reuniao,
-      recorrencia: isEditing ? 'nenhuma' as const : d.recorrencia, // a repetição só é definida ao criar
-      recorrencia_ate: isEditing || d.recorrencia === 'nenhuma' ? undefined : d.recorrencia_ate,
+      recorrencia: regra.recorrencia ?? 'nenhuma' as const,
+      intervalo: regra.intervalo,
+      dias_semana: regra.dias_semana ?? undefined,
+      recorrencia_ate: regra.recorrencia_ate ?? undefined,
+      ocorrencias: regra.ocorrencias ?? undefined,
       convidados: convidados.map((c) => c.email),
     }
-    type Resultado = { error?: string; success?: boolean; ocorrencias?: number; atualizados?: number; convites?: { enviados: number; falhas: number } }
+    type Resultado = { error?: string; success?: boolean; ocorrencias?: number; atualizados?: number; mudouRegra?: boolean; convites?: { enviados: number; falhas: number } }
     const acao: Promise<Resultado> = isEditing ? atualizarEventoAction(evento!.id, payload, escopo) : criarEventoAction(payload)
     const r = await toast.promise(acao, {
       loading: 'Salvando evento…',
       success: (res) => {
+        if (res.mudouRegra) return res.ocorrencias ? 'Evento atualizado. A nova repetição vale a partir deste evento.' : 'Evento atualizado. Ele não se repete mais.'
         if ((res.atualizados ?? 0) > 1) return `${res.atualizados} eventos da série atualizados.`
-        if ((res.ocorrencias ?? 0) > 1) return `Evento criado com ${res.ocorrencias} repetições.`
+        if ((res.ocorrencias ?? 0) > 1) return 'Evento criado com repetição.'
         return isEditing ? 'Evento atualizado.' : 'Evento criado.'
       },
       error: 'Não foi possível salvar o evento.',
@@ -137,7 +201,7 @@ export function ModalEvento({ open, onClose, evento, dataInicial, horaInicial }:
   }
 
   const labelSty = { color: 'var(--color-text-secondary)' }
-  const fieldCls = 'h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] disabled:opacity-60 disabled:cursor-not-allowed'
+  const fieldCls = 'h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] disabled:opacity-50 disabled:cursor-not-allowed'
   const fieldSty = { borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }
   const caixa = 'rounded-xl border p-4 flex flex-col gap-3'
   const caixaSty = { borderColor: 'var(--color-bg-surface)' }
@@ -147,73 +211,166 @@ export function ModalEvento({ open, onClose, evento, dataInicial, horaInicial }:
       {texto}
     </p>
   )
+  const erroCampo = (msg?: string) => msg && <p className="text-xs" style={{ color: 'var(--color-error)' }}>{msg}</p>
 
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? 'Editar evento' : 'Novo evento'} className="sm:max-w-2xl">
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
         <Input label="Título *" placeholder="Ex.: Pagar o aluguel, Reunião com o contador" autoFocus error={errors.titulo?.message} {...register('titulo')} />
 
-        {/* Quando: data, início e duração */}
+        {/* Quando: data, início e término (a duração é calculada) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <Input label="Data *" type="date" error={errors.data?.message} {...register('data')} />
-          <Input label="Início *" type="time" error={errors.hora?.message} {...register('hora')} />
-          {/* Duração em horas e minutos, livre (ex.: 01:30); mostra o horário de término */}
           <div className="col-span-2 sm:col-span-1">
-            <Input
-              label="Duração *"
-              type="time"
-              min="00:05"
-              error={errors.duracao?.message}
-              hint={termino ? `Termina às ${termino}` : undefined}
-              {...register('duracao')}
-            />
+            <Input label="Data *" type="date" error={errors.data?.message} {...register('data')} />
           </div>
+          <Input label="Início *" type="time" error={errors.hora?.message} {...register('hora')} />
+          <Input
+            label="Término *"
+            type="time"
+            error={errors.hora_fim?.message}
+            hint={duracao ? `Duração: ${formatarDuracao(duracao)}${viraDia ? ' · termina no dia seguinte' : ''}` : undefined}
+            {...register('hora_fim')}
+          />
         </div>
 
-        {/* Repetição: definida ao criar; ao editar um evento da série, escolhe se vale só para ele ou para os próximos */}
+        {/* Repetição (estilo Google Agenda): atalhos para a data do evento ou personalizada */}
         <div className={caixa} style={caixaSty}>
           {tituloCaixa('calendar', 'Repetição')}
-          {isEditing ? (
-            naSerie ? (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                  Este evento faz parte de uma série ({RECORRENCIAS.find((o) => o.value === evento?.recorrencia)?.label.toLowerCase()}). Aplicar as alterações em:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {([['este', 'Somente este evento'], ['proximos', 'Este e os próximos']] as const).map(([v, label]) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setEscopo(v)}
-                      aria-pressed={escopo === v}
-                      className="h-9 px-3 rounded-lg text-sm font-semibold border cursor-pointer transition-colors"
-                      style={escopo === v
-                        ? { backgroundColor: 'var(--color-brand)', borderColor: 'var(--color-brand)', color: '#fff' }
-                        : { borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Não se repete. A repetição é escolhida ao criar o evento.</p>
-            )
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:items-start">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="evento-recorrencia" className="text-sm font-medium" style={labelSty}>Repetir</label>
-                <select id="evento-recorrencia" className={fieldCls} style={fieldSty} {...register('recorrencia')}>
-                  {RECORRENCIAS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.value === 'semanal' && diaSemana ? `Toda semana (${diaSemana})` : o.value === 'mensal' && diaMes ? `Todo mês (dia ${diaMes})` : o.label}
-                    </option>
-                  ))}
+          <select
+            aria-label="Repetir"
+            className={fieldCls}
+            style={fieldSty}
+            {...register('repeticao', { onChange: (ev) => aoTrocarRepeticao(ev.target.value) })}
+          >
+            {rotulosAtalhos(base).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+
+          {/* Personalizada: a cada N …, repetir em (dias), termina */}
+          {repeticao === 'personalizado' && (
+            <div className="rounded-xl p-4 flex flex-col gap-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm" style={labelSty}>Repetir a cada</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  aria-label="Intervalo"
+                  className="h-10 w-16 rounded-lg border px-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                  style={fieldSty}
+                  {...register('intervalo', { valueAsNumber: true })}
+                />
+                <select aria-label="Unidade" className="h-10 rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]" style={fieldSty} {...register('unidade')}>
+                  {UNIDADES.map((u) => <option key={u.value} value={u.value}>{n > 1 ? u.plural : u.singular}</option>)}
                 </select>
               </div>
-              {recorrencia !== 'nenhuma' && (
-                <Input label="Até *" type="date" min={data} hint="Até 366 repetições" error={errors.recorrencia_ate?.message} {...register('recorrencia_ate')} />
+              {erroCampo(errors.intervalo?.message)}
+
+              {unidade === 'semanal' && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-sm" style={labelSty}>Repetir em</span>
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Dias da semana">
+                    {DIAS_SEMANA_CURTO.map((letra, dia) => {
+                      const marcado = (diasSemana ?? []).includes(dia)
+                      return (
+                        <button
+                          key={dia}
+                          type="button"
+                          onClick={() => alternarDia(dia)}
+                          aria-pressed={marcado}
+                          aria-label={DIAS_SEMANA_NOME[dia]}
+                          title={DIAS_SEMANA_NOME[dia]}
+                          className="w-9 h-9 rounded-full text-xs font-bold cursor-pointer transition-colors"
+                          style={marcado
+                            ? { backgroundColor: 'var(--color-brand)', color: '#fff' }
+                            : { backgroundColor: '#fff', color: 'var(--color-text-secondary)' }}
+                        >
+                          {letra}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {erroCampo(errors.dias_semana?.message)}
+                </div>
               )}
+
+              {/* Termina: nunca, em uma data ou após N ocorrências */}
+              <fieldset className="flex flex-col gap-2">
+                <legend className="text-sm mb-1" style={labelSty}>Termina</legend>
+                <label className="flex items-center gap-3 h-10 text-sm cursor-pointer select-none" style={{ color: 'var(--color-text-primary)' }}>
+                  <input type="radio" value="nunca" className="h-4 w-4 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} {...register('termina')} />
+                  Nunca
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-3 w-20 text-sm cursor-pointer select-none" style={{ color: 'var(--color-text-primary)' }}>
+                    <input type="radio" value="em" className="h-4 w-4 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} {...register('termina')} />
+                    Em
+                  </label>
+                  <input
+                    type="date"
+                    min={data}
+                    aria-label="Data final"
+                    disabled={termina !== 'em'}
+                    className={cn(fieldCls, 'max-w-48')}
+                    style={fieldSty}
+                    {...register('recorrencia_ate')}
+                  />
+                </div>
+                {termina === 'em' && erroCampo(errors.recorrencia_ate?.message)}
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-3 w-20 text-sm cursor-pointer select-none" style={{ color: 'var(--color-text-primary)' }}>
+                    <input type="radio" value="apos" className="h-4 w-4 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} {...register('termina')} />
+                    Após
+                  </label>
+                  <div className={cn('flex items-center gap-2', termina !== 'apos' && 'opacity-50')}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      aria-label="Número de ocorrências"
+                      disabled={termina !== 'apos'}
+                      className="h-10 w-20 rounded-lg border px-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] disabled:cursor-not-allowed"
+                      style={fieldSty}
+                      {...register('ocorrencias', { valueAsNumber: true })}
+                    />
+                    <span className="text-sm" style={labelSty}>{Number(ocorrencias) === 1 ? 'ocorrência' : 'ocorrências'}</span>
+                  </div>
+                </div>
+                {termina === 'apos' && erroCampo(errors.ocorrencias?.message)}
+              </fieldset>
+            </div>
+          )}
+
+          {resumoRepeticao && <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{resumoRepeticao}</p>}
+
+          {/* Editando: regra nova → vale daqui em diante; mesma regra num evento da série → escolhe o alcance */}
+          {isEditing && mudouRegra && (
+            <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+              {!regraForm.recorrencia
+                ? 'Este evento deixará de se repetir; os próximos da série serão removidos.'
+                : naSerie
+                  ? 'A nova repetição vale a partir deste evento: os próximos da série serão recriados com ela.'
+                  : 'Este evento passará a ser o primeiro da repetição.'}
+            </p>
+          )}
+          {isEditing && naSerie && !mudouRegra && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Este evento faz parte de uma série. Aplicar as alterações em:</p>
+              <div className="flex flex-wrap gap-2">
+                {([['este', 'Somente este evento'], ['proximos', 'Este e os próximos']] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setEscopo(v)}
+                    aria-pressed={escopo === v}
+                    className="h-9 px-3 rounded-lg text-sm font-semibold border cursor-pointer transition-colors"
+                    style={escopo === v
+                      ? { backgroundColor: 'var(--color-brand)', borderColor: 'var(--color-brand)', color: '#fff' }
+                      : { borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

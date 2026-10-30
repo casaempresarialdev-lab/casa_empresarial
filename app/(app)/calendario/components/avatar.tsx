@@ -30,6 +30,38 @@ export function Avatar({ nome, url, size = 32, cor }: { nome: string; url: strin
   )
 }
 
+/**
+ * Fotos dos envolvidos no evento: quem criou e os convidados (recusados ficam de fora), sobrepostas.
+ * Sem convidados, aparece só a foto de quem criou.
+ */
+export function AvatarGrupo({ evento: e, size = 28, max = 3 }: { evento: Evento; size?: number; max?: number }) {
+  const pessoas = [
+    ...(e.dono ? [e.dono] : []),
+    ...e.participantes.filter((p) => p.status !== 'recusado' && p.id !== e.dono?.id),
+  ]
+  if (!pessoas.length) return null
+  const visiveis = pessoas.slice(0, max)
+  const resto = pessoas.length - visiveis.length
+  const cor = e.origem === 'agenda' ? corDaPessoa(e.profile_id) : undefined
+  return (
+    <span className="shrink-0 flex items-center" title={pessoas.map((p) => p.nome).join(', ')} aria-label={`Envolvidos: ${pessoas.map((p) => p.nome).join(', ')}`}>
+      {visiveis.map((p, i) => (
+        <span key={p.id} className="rounded-full ring-2 ring-white" style={{ marginLeft: i ? -size * 0.35 : 0, zIndex: max - i }}>
+          <Avatar nome={p.nome} url={p.avatar_url} size={size} cor={i === 0 ? cor : undefined} />
+        </span>
+      ))}
+      {resto > 0 && (
+        <span
+          className="rounded-full ring-2 ring-white flex items-center justify-center font-bold"
+          style={{ width: size, height: size, marginLeft: -size * 0.35, fontSize: size * 0.36, backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}
+        >
+          +{resto}
+        </span>
+      )}
+    </span>
+  )
+}
+
 export const STATUS_CONVITE: Record<StatusConvite, { label: string; estilo: React.CSSProperties }> = {
   pendente: { label: 'Aguardando', estilo: { backgroundColor: '#FEF3C7', color: '#92400E' } },
   aceito: { label: 'Aceito', estilo: { backgroundColor: '#DCFCE7', color: '#166534' } },

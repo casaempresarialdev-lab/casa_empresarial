@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email'
 import { getEmailBranding, layoutEmail, escapeHtml } from '@/lib/email-template'
+import { descreverRepeticao } from '@/lib/validations/evento'
 
 // Envio dos avisos de eventos do calendário por e-mail ("Também por e-mail") — só no servidor.
 // Chamado pela rotina agendada (todos os usuários) e pelo próprio sistema aberto (só o usuário logado).
@@ -85,9 +86,7 @@ export async function enviarAvisosEventos(admin: Admin, so?: { profileId: string
   return { verificados: devidos.length, enviados, falhas }
 }
 
-const RECORRENCIA_TEXTO = { diaria: 'Repete todos os dias', semanal: 'Repete toda semana', mensal: 'Repete todo mês' } as const
 const horaFimFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
-const dataCurtaFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
 
 /** Convite para um evento (uma vez por série): data, duração, local ou link e quem convidou */
 export async function enviarConviteEvento(opcoes: {
@@ -97,7 +96,8 @@ export async function enviarConviteEvento(opcoes: {
   evento: {
     titulo: string; descricao: string | null; data_hora: string; duracao_min: number
     local: string | null; link_reuniao: string | null
-    recorrencia: 'diaria' | 'semanal' | 'mensal' | null; recorrencia_ate: string | null
+    recorrencia: 'diaria' | 'semanal' | 'mensal' | 'anual' | null; recorrencia_ate: string | null; dias_semana: number[] | null
+    intervalo?: number | null; ocorrencias?: number | null
   }
 }) {
   const { para, donoNome, link, evento: e } = opcoes
@@ -106,7 +106,9 @@ export async function enviarConviteEvento(opcoes: {
   const inicio = new Date(e.data_hora)
   const quando = `${quandoFormat.format(inicio)} às ${horaFimFormat.format(new Date(inicio.getTime() + e.duracao_min * 60_000))}`
   const quandoCap = quando.charAt(0).toUpperCase() + quando.slice(1)
-  const repete = e.recorrencia ? `${RECORRENCIA_TEXTO[e.recorrencia]}${e.recorrencia_ate ? ` até ${dataCurtaFormat.format(new Date(e.recorrencia_ate))}` : ''}` : null
+  // Dia do mês e mês no fuso do Brasil (para "Mensal: no dia 30" e "Anual: em 30 de outubro")
+  const [mes, diaMes] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(inicio).split('-').slice(1).map(Number)
+  const repete = descreverRepeticao(e, { diaMes, mes: mes - 1 })
   // Presencial, online ou híbrido (os dois)
   const onde = e.local && e.link_reuniao ? `Híbrido: ${e.local} ou online` : e.local ? `Presencial: ${e.local}` : e.link_reuniao ? 'Online' : null
 

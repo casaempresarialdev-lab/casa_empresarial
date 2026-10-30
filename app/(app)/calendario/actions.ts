@@ -1,10 +1,10 @@
 'use server'
 
-import { randomUUID } from 'crypto'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { eventoSchema, MAX_OCORRENCIAS, type EventoData } from '@/lib/validations/evento'
+import { eventoSchema, mesmaRegra, SEM_REPETICAO, type EventoData, type Regra } from '@/lib/validations/evento'
+import { criarOcorrencias, datasDaRegra, diaAnterior, diaNoFuso, horizonte } from '@/lib/calendario-series'
 import { enviarAvisosEventos, enviarConviteEvento, enviarAgendaCompartilhada } from '@/lib/eventos-email'
 import { findUserIdByEmail } from '@/lib/invitations'
 import {
@@ -31,7 +31,6 @@ const RESUMO_VAZIO: ResumoNotificacoes = { avisos: [], compartilhamentos: [], ca
 export type Escopo = 'este' | 'proximos'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const FUSO = 'America/Sao_Paulo'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -48,7 +47,7 @@ async function getAppUrl() {
 
 type Admin = ReturnType<typeof createAdminClient>
 
-// Campos do evento (sem a recorrência, que só é definida ao criar)
+// Campos do evento (a regra de repetição é tratada à parte)
 function campos(d: EventoData) {
   return {
     titulo: d.titulo.trim(),
@@ -63,30 +62,27 @@ function campos(d: EventoData) {
   }
 }
 
-/** Dia (YYYY-MM-DD) no fuso do Brasil, para comparar com o "repetir até" */
-const diaNoFuso = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: FUSO }).format(d)
-
-/** Datas de todas as ocorrências da série, do início até o último dia escolhido (inclusive) */
-function gerarOcorrencias(inicio: Date, recorrencia: EventoData['recorrencia'], ate?: string): Date[] {
-  if (recorrencia === 'nenhuma' || !ate) return [inicio]
-  const datas: Date[] = []
-  for (let i = 0; datas.length < MAX_OCORRENCIAS; i++) {
-    const d = new Date(inicio)
-    if (recorrencia === 'diaria') d.setUTCDate(d.getUTCDate() + i)
-    else if (recorrencia === 'semanal') d.setUTCDate(d.getUTCDate() + 7 * i)
-    else {
-      // Mensal: mesmo dia do mês; em meses mais curtos (ex.: dia 31), cai no último dia
-      const dia = inicio.getUTCDate()
-      d.setUTCDate(1)
-      d.setUTCMonth(inicio.getUTCMonth() + i)
-      const ultimo = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()
-      d.setUTCDate(Math.min(dia, ultimo))
-    }
-    if (diaNoFuso(d) > ate) break
-    datas.push(d)
+/** Regra de repetição do formulário */
+function regraDe(d: EventoData): Regra {
+  if (d.recorrencia === 'nenhuma') return SEM_REPETICAO
+  return {
+    recorrencia: d.recorrencia,
+    intervalo: d.intervalo ?? 1,
+    dias_semana: d.recorrencia === 'semanal' ? [...new Set(d.dias_semana ?? [])].sort((a, b) => a - b) : null,
+    // Termina numa data ou após N ocorrências (um ou outro)
+    recorrencia_ate: d.ocorrencias ? null : d.recorrencia_ate ?? null,
+    ocorrencias: d.ocorrencias ?? null,
   }
-  return datas
 }
+
+/** Regra gravada num evento */
+const regraDoEvento = (e: { recorrencia?: Regra['recorrencia']; intervalo?: number | null; dias_semana?: number[] | null; recorrencia_ate?: string | null; ocorrencias?: number | null }): Regra => ({
+  recorrencia: e.recorrencia ?? null,
+  intervalo: e.intervalo ?? 1,
+  dias_semana: e.dias_semana ?? null,
+  recorrencia_ate: e.recorrencia_ate ?? null,
+  ocorrencias: e.ocorrencias ?? null,
+})
 
 /** E-mails dos convidados → usuários do sistema (erro se algum não existir ou for o próprio usuário) */
 async function resolverConvidados(admin: Admin, emails: string[], meuEmail?: string): Promise<{ lista?: { id: string; email: string }[]; error?: string }> {
@@ -119,6 +115,50 @@ async function convidarPorEmail(admin: Admin, donoId: string, emails: string[], 
   return { enviados, falhas: resultados.length - enviados }
 }
 
+/**
+ * Começa uma série a partir de um evento já salvo (a primeira ocorrência): registra a regra
+ * e cria as próximas ocorrências até o horizonte, com os mesmos convidados.
+ */
+async function iniciarSerie(admin: Admin, primeira: Record<string, unknown> & { id: string; data_hora: string; profile_id: string }, regra: Regra, convidados: { id: string; email: string }[]) {
+  const limite = horizonte()
+  const { data: serie, error } = await admin.from('reminder_series').insert({
+    profile_id: primeira.profile_id,
+    recorrencia: regra.recorrencia,
+    intervalo: regra.intervalo,
+    dias_semana: regra.dias_semana,
+    inicio: primeira.data_hora,
+    ate: regra.recorrencia_ate,
+    ocorrencias: regra.ocorrencias,
+    gerado_ate: limite.toISOString(),
+  }).select('id').single()
+  if (error || !serie) return { error: error?.message ?? 'Não foi possível criar a repetição.' }
+
+  const camposRegra = {
+    serie_id: serie.id, recorrencia: regra.recorrencia, intervalo: regra.intervalo, dias_semana: regra.dias_semana,
+    recorrencia_ate: regra.recorrencia_ate, ocorrencias: regra.ocorrencias,
+  }
+  await admin.from('reminders').update(camposRegra).eq('id', primeira.id)
+  // "Após N ocorrências": a primeira já conta
+  const datas = datasDaRegra(new Date(primeira.data_hora), regra, { depoisDe: new Date(primeira.data_hora), ate: limite, max: regra.ocorrencias ? regra.ocorrencias - 1 : undefined })
+  const r = await criarOcorrencias(admin, { ...primeira, ...camposRegra }, datas, convidados.map((c) => ({ profile_id: c.id, email: c.email })))
+  if (r.error) return { error: r.error }
+  await admin.from('reminder_series').update({ geradas: 1 + r.ids.length }).eq('id', serie.id)
+  return { ocorrencias: 1 + r.ids.length }
+}
+
+/**
+ * Encerra a série antes deste evento: apaga as ocorrências seguintes e a regra passa a terminar no dia anterior.
+ * Usado ao mudar a repetição (a nova vale daqui em diante) e ao excluir "este e os próximos".
+ */
+async function encerrarSerieAntes(admin: Admin, userId: string, serieId: string, dataHora: string, incluirEste: boolean) {
+  await admin.from('reminders').delete().eq('serie_id', serieId).eq('profile_id', userId)[incluirEste ? 'gte' : 'gt']('data_hora', dataHora)
+  const { count } = await admin.from('reminders').select('id', { count: 'exact', head: true }).eq('serie_id', serieId).lt('data_hora', dataHora)
+  if (!count) { await admin.from('reminder_series').delete().eq('id', serieId).eq('profile_id', userId); return }
+  const ultimoDia = diaAnterior(diaNoFuso(new Date(dataHora)))
+  await admin.from('reminder_series').update({ ate: ultimoDia }).eq('id', serieId).eq('profile_id', userId)
+  await admin.from('reminders').update({ recorrencia_ate: ultimoDia }).eq('serie_id', serieId).lt('data_hora', dataHora)
+}
+
 export async function criarEventoAction(data: unknown) {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
@@ -130,42 +170,35 @@ export async function criarEventoAction(data: unknown) {
   const convidados = await resolverConvidados(admin, d.convidados, user.email)
   if (convidados.error) return { error: convidados.error }
 
-  const datas = gerarOcorrencias(new Date(d.data_hora), d.recorrencia, d.recorrencia_ate)
-  const repete = d.recorrencia !== 'nenhuma' && datas.length > 1
-  const serieId = repete ? randomUUID() : null
-  const base = {
-    profile_id: user.id,
-    ...campos(d),
-    serie_id: serieId,
-    recorrencia: repete ? (d.recorrencia as Exclude<EventoData['recorrencia'], 'nenhuma'>) : null,
-    recorrencia_ate: repete ? d.recorrencia_ate ?? null : null,
-  }
-
-  const { data: criados, error } = await admin
+  const { data: criado, error } = await admin
     .from('reminders')
-    .insert(datas.map((dt) => ({ ...base, data_hora: dt.toISOString() })))
-    .select('id, data_hora')
-  if (error) return { error: error.message }
-  const ids = (criados ?? []).sort((a, b) => a.data_hora.localeCompare(b.data_hora)).map((c) => c.id)
+    .insert({ profile_id: user.id, ...campos(d), data_hora: new Date(d.data_hora).toISOString() })
+    .select('*')
+    .single()
+  if (error || !criado) return { error: error?.message ?? 'Não foi possível salvar o evento.' }
 
-  let convites = { enviados: 0, falhas: 0 }
-  if (convidados.lista!.length && ids.length) {
-    const { error: errP } = await admin.from('reminder_participants').insert(
-      ids.flatMap((rid) => convidados.lista!.map((c) => ({ reminder_id: rid, profile_id: c.id, email: c.email }))),
-    )
+  if (convidados.lista!.length) {
+    const { error: errP } = await admin.from('reminder_participants').insert(convidados.lista!.map((c) => ({ reminder_id: criado.id, profile_id: c.id, email: c.email })))
     if (errP) return { error: `Evento salvo, mas os convidados não foram adicionados: ${errP.message}` }
-    convites = await convidarPorEmail(admin, user.id, convidados.lista!.map((c) => c.email), ids[0], {
-      ...base, data_hora: datas[0].toISOString(),
-    })
   }
 
+  // Repetição: este evento é a primeira ocorrência da série
+  const regra = regraDe(d)
+  let ocorrencias = 1
+  if (regra.recorrencia) {
+    const s = await iniciarSerie(admin, criado, regra, convidados.lista!)
+    if (s.error) return { error: `Evento salvo, mas a repetição não foi criada: ${s.error}` }
+    ocorrencias = s.ocorrencias ?? 1
+  }
+
+  const convites = await convidarPorEmail(admin, user.id, convidados.lista!.map((c) => c.email), criado.id, { ...normalizarEvento(criado), ...regra })
   revalidatePath('/dashboard')
-  return { success: true, ocorrencias: ids.length, convites }
+  return { success: true, ocorrencias, convites }
 }
 
 /** Linhas afetadas por editar/excluir: o próprio evento ou ele e os próximos da mesma série */
 async function eventosAlvo(admin: Admin, userId: string, id: string, escopo: Escopo) {
-  const { data: atual } = await admin.from('reminders').select('id, data_hora, serie_id').eq('id', id).eq('profile_id', userId).maybeSingle()
+  const { data: atual } = await admin.from('reminders').select('*').eq('id', id).eq('profile_id', userId).maybeSingle()
   if (!atual) return null
   if (escopo === 'proximos' && atual.serie_id) {
     const { data } = await admin
@@ -176,9 +209,14 @@ async function eventosAlvo(admin: Admin, userId: string, id: string, escopo: Esc
       .gte('data_hora', atual.data_hora)
     return { atual, alvo: data ?? [] }
   }
-  return { atual, alvo: [{ id: atual.id, data_hora: atual.data_hora }] }
+  return { atual, alvo: [{ id: atual.id as string, data_hora: atual.data_hora as string }] }
 }
 
+/**
+ * Edita o evento. Se a repetição mudou, vale a partir deste evento (como no Google Agenda):
+ * a série antiga termina antes dele e uma nova começa nele com a regra nova.
+ * Sem mudar a repetição: "este" altera só ele; "proximos" altera ele e os seguintes da série.
+ */
 export async function atualizarEventoAction(id: string, data: unknown, escopo: Escopo = 'este') {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
@@ -187,45 +225,64 @@ export async function atualizarEventoAction(id: string, data: unknown, escopo: E
   const d = parsed.data
 
   const admin = createAdminClient()
-  const alvos = await eventosAlvo(admin, user.id, id, escopo)
-  if (!alvos) return { error: 'Evento não encontrado.' }
+  const { data: atual } = await admin.from('reminders').select('*').eq('id', id).eq('profile_id', user.id).maybeSingle()
+  if (!atual) return { error: 'Evento não encontrado.' }
   const convidados = await resolverConvidados(admin, d.convidados, user.email)
   if (convidados.error) return { error: convidados.error }
 
-  // Nova data/hora deste evento; nos próximos da série, o mesmo deslocamento
-  const delta = new Date(d.data_hora).getTime() - new Date(alvos.atual.data_hora).getTime()
-  const ids = alvos.alvo.map((a) => a.id)
+  const regraNova = regraDe(d)
+  const regraAtual = regraDoEvento(atual)
+  const mudouRegra = !mesmaRegra(regraNova, regraAtual)
+  const novaDataHora = new Date(d.data_hora).toISOString()
   // Mudou data/aviso: o e-mail e o aviso no sino voltam a valer no novo horário
   const comuns = { ...campos(d), email_enviado_em: null, aviso_visto_em: null }
 
-  if (delta === 0) {
-    const { error } = await admin.from('reminders').update(comuns).in('id', ids).eq('profile_id', user.id)
-    if (error) return { error: error.message }
-  } else {
-    const resultados = await Promise.all(alvos.alvo.map((a) =>
-      admin.from('reminders')
-        .update({ ...comuns, data_hora: new Date(new Date(a.data_hora).getTime() + delta).toISOString() })
-        .eq('id', a.id)
-        .eq('profile_id', user.id),
-    ))
-    const falha = resultados.find((r) => r.error)
-    if (falha?.error) return { error: falha.error.message }
-  }
+  const { data: existentes } = await admin.from('reminder_participants').select('reminder_id, profile_id').eq('reminder_id', id)
+  const jaNoEvento = new Set((existentes ?? []).map((p) => p.profile_id))
 
-  // Convidados: remove quem saiu, adiciona quem entrou (em todas as ocorrências afetadas)
-  const { data: existentes } = await admin.from('reminder_participants').select('reminder_id, profile_id').in('reminder_id', ids)
-  const desejados = new Map(convidados.lista!.map((c) => [c.id, c.email]))
-  const removidos = [...new Set((existentes ?? []).map((p) => p.profile_id).filter((pid) => !desejados.has(pid)))]
-  if (removidos.length) await admin.from('reminder_participants').delete().in('reminder_id', ids).in('profile_id', removidos)
-  const jaNoEvento = new Set((existentes ?? []).filter((p) => p.reminder_id === id).map((p) => p.profile_id))
-  if (desejados.size) {
-    await admin.from('reminder_participants').upsert(
-      ids.flatMap((rid) => [...desejados].map(([pid, email]) => ({ reminder_id: rid, profile_id: pid, email }))),
-      { onConflict: 'reminder_id,profile_id', ignoreDuplicates: true },
-    )
+  let ids = [id]
+  let ocorrencias = 0
+  if (mudouRegra) {
+    // A série antiga termina antes deste evento; ele passa a ser avulso ou a primeira ocorrência da nova série
+    if (atual.serie_id) await encerrarSerieAntes(admin, user.id, atual.serie_id, atual.data_hora, false)
+    const { error } = await admin.from('reminders')
+      .update({ ...comuns, data_hora: novaDataHora, serie_id: null, recorrencia: null, intervalo: 1, dias_semana: null, recorrencia_ate: null, ocorrencias: null })
+      .eq('id', id).eq('profile_id', user.id)
+    if (error) return { error: error.message }
+    await sincronizarConvidados(admin, [id], convidados.lista!)
+    if (regraNova.recorrencia) {
+      const s = await iniciarSerie(admin, { ...atual, ...comuns, data_hora: novaDataHora }, regraNova, convidados.lista!)
+      if (s.error) return { error: `Evento salvo, mas a nova repetição não foi criada: ${s.error}` }
+      ocorrencias = s.ocorrencias ?? 0
+    }
+  } else {
+    const alvos = await eventosAlvo(admin, user.id, id, escopo)
+    if (!alvos) return { error: 'Evento não encontrado.' }
+    ids = alvos.alvo.map((a) => a.id)
+    // Nova data/hora deste evento; nos próximos da série, o mesmo deslocamento
+    const delta = new Date(novaDataHora).getTime() - new Date(atual.data_hora).getTime()
+    if (delta === 0) {
+      const { error } = await admin.from('reminders').update(comuns).in('id', ids).eq('profile_id', user.id)
+      if (error) return { error: error.message }
+    } else {
+      const resultados = await Promise.all(alvos.alvo.map((a) =>
+        admin.from('reminders')
+          .update({ ...comuns, data_hora: new Date(new Date(a.data_hora).getTime() + delta).toISOString() })
+          .eq('id', a.id)
+          .eq('profile_id', user.id),
+      ))
+      const falha = resultados.find((r) => r.error)
+      if (falha?.error) return { error: falha.error.message }
+      // Os próximos da série (criados depois) seguem o novo horário
+      if (escopo === 'proximos' && atual.serie_id) {
+        const { data: serie } = await admin.from('reminder_series').select('inicio').eq('id', atual.serie_id).maybeSingle()
+        if (serie) await admin.from('reminder_series').update({ inicio: new Date(new Date(serie.inicio).getTime() + delta).toISOString() }).eq('id', atual.serie_id)
+      }
+      // Horário mudou: os convidados voltam a receber o aviso no sino
+      await admin.from('reminder_participants').update({ lembrete_visto_em: null }).in('reminder_id', ids)
+    }
+    await sincronizarConvidados(admin, ids, convidados.lista!)
   }
-  // Horário mudou: os convidados voltam a receber o aviso no sino
-  if (delta !== 0) await admin.from('reminder_participants').update({ lembrete_visto_em: null }).in('reminder_id', ids)
 
   // Só os convidados novos recebem o convite por e-mail
   const novos = convidados.lista!.filter((c) => !jaNoEvento.has(c.id)).map((c) => c.email)
@@ -233,7 +290,21 @@ export async function atualizarEventoAction(id: string, data: unknown, escopo: E
   const convites = salvo ? await convidarPorEmail(admin, user.id, novos, id, normalizarEvento(salvo)) : { enviados: 0, falhas: 0 }
 
   revalidatePath('/dashboard')
-  return { success: true, atualizados: ids.length, convites }
+  return { success: true, atualizados: ids.length, ocorrencias, mudouRegra, convites }
+}
+
+/** Convidados das ocorrências: remove quem saiu e adiciona quem entrou */
+async function sincronizarConvidados(admin: Admin, ids: string[], lista: { id: string; email: string }[]) {
+  const { data: existentes } = await admin.from('reminder_participants').select('profile_id').in('reminder_id', ids)
+  const desejados = new Map(lista.map((c) => [c.id, c.email]))
+  const removidos = [...new Set((existentes ?? []).map((p) => p.profile_id).filter((pid) => !desejados.has(pid)))]
+  if (removidos.length) await admin.from('reminder_participants').delete().in('reminder_id', ids).in('profile_id', removidos)
+  if (desejados.size) {
+    await admin.from('reminder_participants').upsert(
+      ids.flatMap((rid) => [...desejados].map(([pid, email]) => ({ reminder_id: rid, profile_id: pid, email }))),
+      { onConflict: 'reminder_id,profile_id', ignoreDuplicates: true },
+    )
+  }
 }
 
 export async function concluirEventoAction(id: string, concluido: boolean) {
@@ -256,6 +327,12 @@ export async function excluirEventoAction(id: string, escopo: Escopo = 'este') {
   const admin = createAdminClient()
   const alvos = await eventosAlvo(admin, user.id, id, escopo)
   if (!alvos) return { error: 'Evento não encontrado.' }
+  // Este e os próximos: a série também para de criar ocorrências
+  if (escopo === 'proximos' && alvos.atual.serie_id) {
+    await encerrarSerieAntes(admin, user.id, alvos.atual.serie_id, alvos.atual.data_hora, true)
+    revalidatePath('/dashboard')
+    return { success: true, excluidos: alvos.alvo.length }
+  }
   const { error } = await admin.from('reminders').delete().in('id', alvos.alvo.map((a) => a.id)).eq('profile_id', user.id)
   if (error) return { error: error.message }
   revalidatePath('/dashboard')

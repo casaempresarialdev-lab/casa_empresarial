@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { concluirEventoAction, excluirEventoAction, responderConviteAction, type Escopo } from '../actions'
 import type { Agendas, Evento, StatusConvite } from '../queries'
 import { ModalAgendas } from './modal-agendas'
-import { Avatar, corDaPessoa, estiloEvento } from './avatar'
+import { AvatarGrupo, corDaPessoa, estiloEvento } from './avatar'
 import { ModalEvento } from './modal-evento'
 import { ModalDetalheEvento } from './modal-detalhe-evento'
 import { SemanaHorarios } from './semana-horarios'
@@ -207,8 +207,8 @@ export function CalendarioHome({ eventos, eventoAbertoId, agendas, abrirAgendas 
       <ListItem
         key={e.id}
         onClick={() => setDetalhe(e)}
-        // De outra pessoa (convite ou agenda): foto do dono; meu: ícone
-        media={!meu && e.dono ? <Avatar nome={e.dono.nome} url={e.dono.avatar_url} size={28} cor={e.origem === 'agenda' ? corDaPessoa(e.profile_id) : undefined} /> : undefined}
+        // Fotos dos envolvidos: quem criou e os convidados
+        media={<AvatarGrupo evento={e} />}
         icon={e.concluido ? 'check' : e.notificar ? 'bell' : 'calendar'}
         title={<span className={apagado ? 'line-through opacity-60' : ''}>{e.titulo}</span>}
         subtitle={
