@@ -4,7 +4,10 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DEFAULT_BRAND_COLOR } from '@/lib/theme'
 import { PageTitle } from '@/components/layout/page-title'
 import { getCompany } from '../empresa/queries'
+import { getConfigAdmissao } from '../pessoas/admissao/queries'
 import { ConfigIdentidadeVisual } from './components/config-identidade-visual'
+import { ConfigAbas } from './components/config-abas'
+import { ConfigAdmissao } from './components/config-admissao'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +21,8 @@ export default async function ConfiguracoesPage() {
   if (!companyId) redirect('/empresa')
 
   const admin = createAdminClient()
-  const [company, { data: row }] = await Promise.all([
+  const [configAdmissao, company, { data: row }] = await Promise.all([
+    getConfigAdmissao(companyId),
     getCompany(companyId),
     // select('*'): as colunas opcionais (migrations 20261023000053/54) podem ainda não existir
     admin.from('companies').select('*').eq('id', companyId).maybeSingle(),
@@ -29,16 +33,21 @@ export default async function ConfiguracoesPage() {
     <div className="w-full">
       <PageTitle title="Configurações" />
 
-      <ConfigIdentidadeVisual
-        companyId={companyId}
-        logoUrl={company?.logo_url ?? null}
-        logoReduzidaUrl={extras.logo_reduzida_url ?? null}
-        logoReduzidaDisponivel={'logo_reduzida_url' in extras}
-        iconeUrl={extras.icone_url ?? null}
-        iconeDisponivel={'icone_url' in extras}
-        corFundo={extras.cor_fundo ?? null}
-        corFundoDisponivel={'cor_fundo' in extras}
-        corPrimaria={company?.cor_primaria ?? DEFAULT_BRAND_COLOR}
+      <ConfigAbas
+        personalizacao={
+          <ConfigIdentidadeVisual
+            companyId={companyId}
+            logoUrl={company?.logo_url ?? null}
+            logoReduzidaUrl={extras.logo_reduzida_url ?? null}
+            logoReduzidaDisponivel={'logo_reduzida_url' in extras}
+            iconeUrl={extras.icone_url ?? null}
+            iconeDisponivel={'icone_url' in extras}
+            corFundo={extras.cor_fundo ?? null}
+            corFundoDisponivel={'cor_fundo' in extras}
+            corPrimaria={company?.cor_primaria ?? DEFAULT_BRAND_COLOR}
+          />
+        }
+        admissao={<ConfigAdmissao companyId={companyId} inicial={configAdmissao} />}
       />
     </div>
   )

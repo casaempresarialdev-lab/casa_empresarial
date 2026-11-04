@@ -38,7 +38,7 @@ export async function getEmployeesForSS(companyId: string): Promise<EmployeeForS
     .from('employees')
     .select('id, nome, cargo')
     .eq('company_id', companyId)
-    .in('status', ['ativo', 'experiencia', 'admissao'])
+    .in('status', ['ativo', 'experiencia'])
     .order('nome', { ascending: true })
 
   if (error) throw error

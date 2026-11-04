@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { submitOnboardingAction } from '../actions'
+import { docsObrigatorios } from '../../docs-obrigatorios'
 
 const GRAU_OPTIONS = [
   'Fundamental Incompleto', 'Fundamental Completo', 'Médio Incompleto', 'Médio Completo',
@@ -13,7 +14,6 @@ const GRAU_OPTIONS = [
 const DOC_SLOTS = [
   { key: 'rg_cnh_frente',          label: 'RG Frente / CNH',            accept: 'image/*,application/pdf' },
   { key: 'rg_verso',               label: 'RG Verso (opcional)',         accept: 'image/*,application/pdf' },
-  { key: 'exame_admissional',       label: 'Exame Admissional',          accept: 'image/*,application/pdf' },
   { key: 'cpf',                    label: 'CPF',                        accept: 'image/*,application/pdf' },
   { key: 'comprovante_residencia', label: 'Comprovante de Residência',   accept: 'image/*,application/pdf' },
   { key: 'titulo_eleitor',         label: 'Título de Eleitor',          accept: 'image/*,application/pdf' },
@@ -34,22 +34,34 @@ interface Props {
   token: string
   employeeName: string
   companyName: string
+  /** Dados já conhecidos (candidatura, ficha): o candidato só confere e completa */
+  inicial: {
+    cpf: string; rg: string; nascimento: string; telefone: string; email: string; grau_instrucao: string
+    dependentes: string; pis_pasep: string; serie_ctps: string; certificado_reservista: string; dados_bancarios: string
+  }
+  tipoContrato: string | null
+  /** Documentos obrigatórios já enviados antes */
+  docsExistentes: string[]
 }
 
-export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
+export function AutoCadastroForm({ token, employeeName, companyName, inicial, tipoContrato, docsExistentes }: Props) {
   const firstName = employeeName.split(' ')[0]
+  const pj = tipoContrato === 'pj' || tipoContrato === 'autonomo'
+  const obrigatorios = docsObrigatorios(tipoContrato)
+  // PJ/autônomo não têm documentos trabalhistas
+  const slots = DOC_SLOTS.filter((s) => !pj || !['ctps', 'pis'].includes(s.key))
 
-  const [cpf, setCpf]                   = useState('')
-  const [rg, setRg]                     = useState('')
-  const [nascimento, setNascimento]     = useState('')
-  const [telefone, setTelefone]         = useState('')
-  const [email, setEmail]               = useState('')
-  const [grauInstrucao, setGrau]        = useState('')
-  const [dependentes, setDependentes]   = useState('0')
-  const [pisPasep, setPisPasep]         = useState('')
-  const [serieCtps, setSerieCtps]       = useState('')
-  const [certReservista, setCertReservista] = useState('')
-  const [dadosBancarios, setDadosBancarios] = useState('')
+  const [cpf, setCpf]                   = useState(formatCpf(inicial.cpf))
+  const [rg, setRg]                     = useState(inicial.rg)
+  const [nascimento, setNascimento]     = useState(inicial.nascimento)
+  const [telefone, setTelefone]         = useState(inicial.telefone)
+  const [email, setEmail]               = useState(inicial.email)
+  const [grauInstrucao, setGrau]        = useState(inicial.grau_instrucao)
+  const [dependentes, setDependentes]   = useState(inicial.dependentes)
+  const [pisPasep, setPisPasep]         = useState(inicial.pis_pasep)
+  const [serieCtps, setSerieCtps]       = useState(inicial.serie_ctps)
+  const [certReservista, setCertReservista] = useState(inicial.certificado_reservista)
+  const [dadosBancarios, setDadosBancarios] = useState(inicial.dados_bancarios)
   const [fotoFile, setFotoFile]         = useState<File | null>(null)
   const [fotoPreview, setFotoPreview]   = useState<string | null>(null)
   const [docFiles, setDocFiles]         = useState<Record<string, File | null>>({})
@@ -59,8 +71,10 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError('')
+    const faltando = obrigatorios.filter((d) => !docFiles[d.key] && !docsExistentes.includes(d.key))
+    if (faltando.length) { setError(`Envie: ${faltando.map((d) => d.label).join(', ')}.`); return }
+    setLoading(true)
 
     const fd = new FormData()
     fd.set('cpf', cpf)
@@ -75,7 +89,7 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
     fd.set('certificado_reservista', certReservista)
     fd.set('dados_bancarios', dadosBancarios)
     if (fotoFile) fd.set('doc_foto', fotoFile)
-    for (const slot of DOC_SLOTS) {
+    for (const slot of slots) {
       const file = docFiles[slot.key]
       if (file) fd.set(`doc_${slot.key}`, file)
     }
@@ -259,7 +273,7 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
             <div style={card}>
               <p style={sec}>2. DADOS COMPLEMENTARES</p>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                {!pj && <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label style={lbl}>PIS / PASEP *</label>
                     <Input value={pisPasep} onChange={e => setPisPasep(e.target.value)} placeholder="000.00000.00-0" required />
@@ -268,11 +282,11 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
                     <label style={lbl}>Série da CTPS *</label>
                     <Input value={serieCtps} onChange={e => setSerieCtps(e.target.value)} placeholder="Ex: 001" required />
                   </div>
-                </div>
-                <div>
-                  <label style={lbl}>Certificado de Reservista *</label>
-                  <Input value={certReservista} onChange={e => setCertReservista(e.target.value)} placeholder="Nº / categoria" required />
-                </div>
+                </div>}
+                {!pj && <div>
+                  <label style={lbl}>Certificado de Reservista</label>
+                  <Input value={certReservista} onChange={e => setCertReservista(e.target.value)} placeholder="Nº / categoria" />
+                </div>}
                 <div>
                   <label style={lbl}>Dados Bancários *</label>
                   <textarea
@@ -292,10 +306,10 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
             <div style={card}>
               <p style={sec}>3. DOCUMENTOS</p>
               <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
-                Todos os campos são opcionais. Aceita imagens (JPG, PNG) e PDF até 20 MB.
+                Obrigatórios: {obrigatorios.map((d) => d.label).join(', ')}. Os demais são opcionais. Aceita imagens (JPG, PNG) e PDF até 20 MB.
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                {DOC_SLOTS.map(slot => {
+                {slots.map(slot => {
                   const file = docFiles[slot.key] ?? null
                   const isImage = file?.type.startsWith('image/')
                   const preview = isImage ? URL.createObjectURL(file!) : null
@@ -310,8 +324,11 @@ export function AutoCadastroForm({ token, employeeName, companyName }: Props) {
                       }}
                     >
                       <p className="text-xs font-medium leading-tight" style={{ color: 'var(--color-text-secondary)' }}>
-                        {slot.label}
+                        {slot.label}{obrigatorios.some((d) => d.key === slot.key) && ' *'}
                       </p>
+                      {!file && docsExistentes.includes(slot.key) && (
+                        <p className="text-xs" style={{ color: '#15803D' }}>Já enviado</p>
+                      )}
                       {file ? (
                         <>
                           {preview

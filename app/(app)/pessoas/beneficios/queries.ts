@@ -49,7 +49,7 @@ export async function getEmployeesWithBenefits(companyId: string): Promise<Emplo
     .from('employees')
     .select('id, nome, cargo, status, salario, employee_benefits(benefit_id, valor_override)')
     .eq('company_id', companyId)
-    .in('status', ['ativo', 'experiencia', 'admissao'])
+    .in('status', ['ativo', 'experiencia'])
     .order('nome', { ascending: true })
   if (error) throw error
   return (data ?? []) as unknown as EmployeeWithBenefits[]

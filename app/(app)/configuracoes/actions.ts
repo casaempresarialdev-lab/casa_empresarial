@@ -3,8 +3,32 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DEFAULT_BRAND_COLOR } from '@/lib/theme'
+import { requireGestor } from '@/lib/auth/gestor'
+import { configAdmissaoSchema } from '@/lib/validations/admissao'
 
 type Admin = ReturnType<typeof createAdminClient>
+
+/** Configurações de admissão da empresa */
+export async function salvarConfigAdmissaoAction(companyId: string, data: unknown) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+
+  const parsed = configAdmissaoSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  const { error } = await auth.admin.from('admission_settings').upsert({
+    company_id: companyId,
+    carta_assunto: parsed.data.carta_assunto,
+    carta_modelo: parsed.data.carta_modelo,
+    carta_validade_dias: Number(parsed.data.carta_validade_dias),
+    updated_at: new Date().toISOString(),
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/configuracoes')
+  revalidatePath('/pessoas/admissao')
+  return { success: true as const }
+}
 
 // Sobe a imagem para o bucket "logos" e devolve a URL pública. O ?v= evita que o
 // navegador continue mostrando a versão antiga (o caminho do arquivo é sempre o mesmo).

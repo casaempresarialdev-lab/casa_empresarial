@@ -66,7 +66,7 @@ export async function getActiveEmployees(companyId: string) {
     .from('employees')
     .select('id, nome, cargo')
     .eq('company_id', companyId)
-    .in('status', ['ativo', 'experiencia', 'admissao', 'ferias', 'afastado'])
+    .in('status', ['ativo', 'experiencia', 'ferias', 'afastado'])
     .order('nome', { ascending: true })
 
   if (error) throw error

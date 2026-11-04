@@ -30,7 +30,11 @@ const ROUTE_LABELS: Record<string, string> = {
   'pedidos-venda': 'Pedidos de Venda',
   'frente-de-caixa': 'Frente de Caixa',
   pessoas: 'Pessoas',
-  funcionarios: 'Equipe',
+  funcionarios: 'Funcionários',
+  admissao: 'Admissão',
+  vagas: 'Vagas',
+  nova: 'Nova',
+  editar: 'Editar',
   'registro-de-ponto': 'Registro de Ponto',
   'escala-de-trabalho': 'Escala de Trabalho',
   'folha-de-pagamento': 'Folha de Pagamento',
@@ -47,14 +51,17 @@ const ROUTE_LABELS: Record<string, string> = {
   perfil: 'Meu Perfil',
 }
 
-/** current: nome para o último item (ex.: o nome do registro no lugar do id da URL) */
-export function Breadcrumb({ current }: { current?: string } = {}) {
+/**
+ * current: nome para o último item (ex.: o nome do registro no lugar do id da URL)
+ * segmentLabels: nomes para segmentos específicos (ex.: { [id]: 'Maria' } em /funcionarios/[id]/editar)
+ */
+export function Breadcrumb({ current, segmentLabels }: { current?: string; segmentLabels?: Record<string, string> } = {}) {
   const pathname = usePathname()
   const segments = pathname.split('/').filter(Boolean)
 
   type Crumb = { label: string; href: string }
   const crumbs: Crumb[] = segments.map((seg, i) => ({
-    label: (current && i === segments.length - 1 ? current : ROUTE_LABELS[seg]) ?? seg,
+    label: (current && i === segments.length - 1 ? current : segmentLabels?.[seg] ?? ROUTE_LABELS[seg]) ?? seg,
     href: '/' + segments.slice(0, i + 1).join('/'),
   }))
 

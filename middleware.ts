@@ -9,7 +9,7 @@ const ONBOARDING_ROUTES = ['/cadastro/passo-2', '/cadastro/termos']
 
 // Acessível para todos (autenticado ou não)
 // /api/cron: rotinas agendadas da Vercel (protegidas pelo CRON_SECRET na própria rota)
-const PUBLIC_ROUTES = ['/cadastro/passo-1', '/auth/callback', '/registrar-ponto', '/auto-cadastro', '/pesquisa', '/convite', '/api/cron']
+const PUBLIC_ROUTES = ['/cadastro/passo-1', '/auth/callback', '/registrar-ponto', '/auto-cadastro', '/pesquisa', '/convite', '/vaga', '/carta', '/api/cron']
 
 // Segunda etapa do login para contas com autenticação em 2 fatores
 const MFA_ROUTE = '/verificar-2fa'

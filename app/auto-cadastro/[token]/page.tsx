@@ -69,7 +69,10 @@ export default async function AutoCadastroPage({
   }
 
   const [{ data: employee }, { data: company }] = await Promise.all([
-    admin.from('employees').select('nome').eq('id', tokenRow.employee_id).single(),
+    admin.from('employees')
+      .select('nome, cpf, rg, nascimento, telefone, email, grau_instrucao, dependentes, pis_pasep, serie_ctps, certificado_reservista, dados_bancarios, tipo_contrato, doc_cpf_path, doc_ctps_path, doc_comprovante_residencia_path')
+      .eq('id', tokenRow.employee_id)
+      .single(),
     admin.from('companies').select('nome_fantasia, razao_social').eq('id', tokenRow.company_id).single(),
   ])
 
@@ -81,6 +84,25 @@ export default async function AutoCadastroPage({
       token={token}
       employeeName={employeeName}
       companyName={companyName}
+      inicial={{
+        cpf: employee?.cpf ?? '',
+        rg: employee?.rg ?? '',
+        nascimento: employee?.nascimento ?? '',
+        telefone: employee?.telefone ?? '',
+        email: employee?.email ?? '',
+        grau_instrucao: employee?.grau_instrucao ?? '',
+        dependentes: String(employee?.dependentes ?? 0),
+        pis_pasep: employee?.pis_pasep ?? '',
+        serie_ctps: employee?.serie_ctps ?? '',
+        certificado_reservista: employee?.certificado_reservista ?? '',
+        dados_bancarios: employee?.dados_bancarios ?? '',
+      }}
+      tipoContrato={employee?.tipo_contrato ?? null}
+      docsExistentes={[
+        employee?.doc_cpf_path ? 'cpf' : null,
+        employee?.doc_ctps_path ? 'ctps' : null,
+        employee?.doc_comprovante_residencia_path ? 'comprovante_residencia' : null,
+      ].filter((d): d is string => !!d)}
     />
   )
 }

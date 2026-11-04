@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
-import { getFinalStageKey } from '../admissao/queries'
+import { ETAPA_FINAL, ETAPA_SEM_VAGA } from '../admissao/etapas'
 import { findUserIdByEmail, adicionarContaExistente, enviarConvite } from '@/lib/invitations'
 
 async function getAppUrl() {
@@ -22,7 +22,7 @@ const DOC_KEYS = [
   'comprovante_residencia', 'titulo_eleitor', 'ctps', 'pis', 'certidao',
 ] as const
 
-type DocKey = typeof DOC_KEYS[number]
+export type DocKey = typeof DOC_KEYS[number]
 
 function keyToCol(key: DocKey): string {
   return key === 'foto' ? 'foto_path' : `doc_${key}_path`
@@ -85,7 +85,7 @@ function dec(fd: FormData, key: string): number | null {
   return isNaN(n) ? null : n
 }
 
-async function parseEmployeeFields(formData: FormData, companyId: string) {
+function parseEmployeeFields(formData: FormData) {
   const dataAdmissao = (formData.get('data_admissao') as string) || null
 
   const fimExp1Raw = (formData.get('fim_experiencia_1') as string) || null
@@ -108,7 +108,6 @@ async function parseEmployeeFields(formData: FormData, companyId: string) {
   const depRaw = parseInt((formData.get('dependentes') as string) || '0')
 
   const status = (formData.get('status') as string) || 'admissao'
-  const finalStageKey = status !== 'admissao' ? await getFinalStageKey(companyId) : null
 
   return {
     nome: (formData.get('nome') as string)?.toUpperCase() || '',
@@ -123,9 +122,8 @@ async function parseEmployeeFields(formData: FormData, companyId: string) {
     salario: dec(formData, 'salario'),
     plano_saude: formData.get('plano_saude') === 'true',
     status,
-    // Quando o funcionário sai do fluxo de admissão, marca admission_stage como a coluna
-    // final configurada pela empresa, para que apareça na aba Ativos da Equipe.
-    ...(finalStageKey && { admission_stage: finalStageKey }),
+    // Fora do fluxo de admissão: fica na etapa final, para aparecer na Equipe
+    ...(status !== 'admissao' && { admission_stage: ETAPA_FINAL }),
     data_admissao: dataAdmissao,
     fim_experiencia_1,
     fim_experiencia_2,
@@ -174,13 +172,14 @@ export async function createEmployeeAction(companyId: string, formData: FormData
   const viewerC = await getViewerContext(companyId)
   if (viewerC?.isColaborador) return { error: 'Sem permissão para esta ação.' }
 
-  const fields = await parseEmployeeFields(formData, companyId)
+  const fields = parseEmployeeFields(formData)
   if (!fields.nome) return { error: 'Nome é obrigatório.' }
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .insert({ company_id: companyId, ...fields })
+    // Admissão sem vaga entra no kanban depois da entrevista
+    .insert({ company_id: companyId, ...(fields.status === 'admissao' && { admission_stage: ETAPA_SEM_VAGA }), ...fields })
     .select('id')
     .single()
 
@@ -214,7 +213,7 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
   const viewerU = await getViewerContext(current.company_id)
   if (viewerU?.isColaborador) return { error: 'Sem permissão para esta ação. Use "Meus Dados" para editar suas informações de contato.' }
 
-  const fields = await parseEmployeeFields(formData, current.company_id)
+  const fields = parseEmployeeFields(formData)
   if (!fields.nome) return { error: 'Nome é obrigatório.' }
 
   const existingDocs: Partial<Record<DocKey, string | null>> = {
@@ -266,12 +265,43 @@ export async function generateOnboardingTokenAction(
   return { url: `${baseUrl}/auto-cadastro/${tokenData.token}` }
 }
 
-export async function getEmployeeDocUrlAction(storagePath: string): Promise<{ url?: string; error?: string }> {
+// Arquivos só de leitura: gerados pelo sistema, sem envio ou remoção pelo formulário
+const DOC_KEYS_LEITURA = ['carta_proposta'] as const
+
+/**
+ * Link temporário (1h) de um arquivo do funcionário (foto ou documento).
+ * O caminho vem do banco (nunca do cliente). Colaborador só abre os próprios arquivos.
+ * downloadName: o link força o download com esse nome.
+ */
+export async function getEmployeeDocUrlAction(
+  employeeId: string,
+  key: DocKey | (typeof DOC_KEYS_LEITURA)[number],
+  downloadName?: string,
+): Promise<{ url?: string; error?: string }> {
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
+  if (![...DOC_KEYS, ...DOC_KEYS_LEITURA].includes(key)) return { error: 'Documento inválido.' }
 
   const admin = createAdminClient()
-  const { data, error } = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
+  const col = key === 'foto' ? 'foto_path' : `doc_${key}_path`
+  const { data: row } = await admin
+    .from('employees')
+    .select('company_id, profile_id, foto_path, doc_rg_cnh_frente_path, doc_rg_verso_path, doc_exame_admissional_path, doc_cpf_path, doc_comprovante_residencia_path, doc_titulo_eleitor_path, doc_ctps_path, doc_pis_path, doc_certidao_path, doc_carta_proposta_path')
+    .eq('id', employeeId)
+    .single()
+  const emp = row as (Record<string, string | null> & { company_id: string; profile_id: string | null }) | null
+  if (!emp) return { error: 'Funcionário não encontrado.' }
+
+  const { data: membership } = await admin
+    .from('company_members').select('role')
+    .eq('company_id', emp.company_id).eq('profile_id', user.id).eq('status', 'active').maybeSingle()
+  if (!membership) return { error: 'Sem permissão para este arquivo.' }
+  if (membership.role === 'colaborador' && emp.profile_id !== user.id) return { error: 'Sem permissão para este arquivo.' }
+
+  const path = emp[col]
+  if (!path) return { error: 'Arquivo não encontrado.' }
+
+  const { data, error } = await admin.storage.from(BUCKET).createSignedUrl(path, 3600, downloadName ? { download: downloadName } : undefined)
   if (error) return { error: error.message }
   return { url: data.signedUrl }
 }

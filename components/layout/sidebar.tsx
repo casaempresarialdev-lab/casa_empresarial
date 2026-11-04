@@ -50,6 +50,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'users',
     children: [
       { label: 'Equipe', href: '/pessoas/funcionarios' },
+      { label: 'Vagas', href: '/pessoas/vagas' },
       { label: 'Admissão', href: '/pessoas/admissao' },
       { label: 'Registro de Ponto', href: '/pessoas/registro-de-ponto' },
       { label: 'Escala de Trabalho', href: '/pessoas/escala-de-trabalho' },

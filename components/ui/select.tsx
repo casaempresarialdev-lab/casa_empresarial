@@ -8,11 +8,14 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   error?: string
   options: { value: string; label: string }[]
   placeholder?: string
+  /** Destaca o campo com borda vermelha, sem mensagem (aviso via toast) */
+  invalid?: boolean
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, label, error, options, placeholder, id, ...props }, ref) => {
+  ({ className, label, error: errorMsg, invalid, options, placeholder, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
+    const error = errorMsg || invalid
 
     return (
       <div className="flex flex-col gap-1">
@@ -48,9 +51,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </option>
           ))}
         </select>
-        {error && (
+        {errorMsg && (
           <p className="text-xs" style={{ color: 'var(--color-error)' }}>
-            {error}
+            {errorMsg}
           </p>
         )}
       </div>

@@ -14,7 +14,7 @@ export type Employee = {
   local_trabalho: string | null
   salario: number | null
   plano_saude: boolean
-  status: 'admissao' | 'experiencia' | 'ativo' | 'inativo' | 'demitido'
+  status: 'admissao' | 'experiencia' | 'ativo' | 'ferias' | 'afastado' | 'inativo' | 'demitido'
   data_admissao: string | null
   data_experiencia_fim: string | null
   fim_experiencia_1: string | null
@@ -49,6 +49,7 @@ export type Employee = {
   doc_ctps_path: string | null
   doc_pis_path: string | null
   doc_certidao_path: string | null
+  doc_carta_proposta_path: string | null
   created_at: string
   updated_at: string
   employee_benefits: { benefit_id: string }[]

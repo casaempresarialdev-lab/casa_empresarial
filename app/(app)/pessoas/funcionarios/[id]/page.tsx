@@ -1,18 +1,23 @@
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getViewerContext } from '@/lib/auth/viewer'
 import { getEmployeeById } from '../queries'
 import { getActiveCompanyBenefits } from '../../beneficios/queries'
-import { ViewFuncionarioPage } from './components/view-funcionario-page'
+import { getCompany } from '../../../empresa/queries'
+import { isSecaoId } from '../components/ficha/ficha-config'
+import { FuncionarioPage } from './components/funcionario-page'
 
 export const dynamic = 'force-dynamic'
 
 interface Props {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ aba?: string }>
 }
 
-export default async function FuncionarioViewPage({ params }: Props) {
-  const { id } = await params
+// Ficha do funcionário (visualizar). A edição (./editar) usa a mesma tela com os campos abertos.
+export default async function FuncionarioViewPage({ params, searchParams }: Props) {
+  const [{ id }, { aba }] = await Promise.all([params, searchParams])
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -22,34 +27,36 @@ export default async function FuncionarioViewPage({ params }: Props) {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const admin = createAdminClient()
-  const [employee, companyBenefits, { data: membership }] = await Promise.all([
+  const [employee, companyBenefits, company, viewer] = await Promise.all([
     getEmployeeById(id, companyId),
     getActiveCompanyBenefits(companyId),
-    admin.from('company_members').select('role').eq('company_id', companyId).eq('profile_id', user.id).eq('status', 'active').single(),
+    getCompany(companyId),
+    getViewerContext(companyId),
   ])
-
   if (!employee) notFound()
 
-  const viewerRole = membership?.role ?? 'member'
+  // Colaborador só vê a própria ficha
+  const isColaboradorSelf = !!viewer?.isColaborador
+  if (isColaboradorSelf && viewer?.myEmployeeId !== employee.id) notFound()
 
-  // Signed URL para foto (bucket privado)
+  // Foto em bucket privado: link temporário (1h)
   let fotoUrl: string | null = null
   if (employee.foto_path) {
-    const { data } = await admin.storage
-      .from('documentos')
-      .createSignedUrl(employee.foto_path, 3600)
+    const { data } = await createAdminClient().storage.from('documentos').createSignedUrl(employee.foto_path, 3600)
     fotoUrl = data?.signedUrl ?? null
   }
 
   return (
     <div className="w-full">
-      <ViewFuncionarioPage
+      <FuncionarioPage
+        modo="ver"
         employee={employee}
         companyId={companyId}
+        company={company}
         companyBenefits={companyBenefits}
         fotoUrl={fotoUrl}
-        viewerRole={viewerRole}
+        abaInicial={isSecaoId(aba) ? aba : undefined}
+        isColaboradorSelf={isColaboradorSelf}
       />
     </div>
   )
