@@ -4,14 +4,23 @@ import { revalidatePath } from 'next/cache'
 import { requireGestor } from '@/lib/auth/gestor'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { headers } from 'next/headers'
-import { avisarEntrevista, enviarCartaProposta } from '@/lib/admissao-email'
+import { avisarEntrevista, avisarExame, avisarReprovacao, enviarCartaProposta } from '@/lib/admissao-email'
 import { cancelarEntrevistasFuturas, removerDaAdmissao } from '@/lib/admissao-remover'
-import { cartaSchema, entrevistaParaIso, entrevistaSchema, fmtDataHora, preencherModelo } from '@/lib/validations/admissao'
-import { ETAPAS, ETAPA_CARTA, ETAPA_FINAL, ETAPA_INICIAL, isEtapa } from './etapas'
+import { registrarAceite } from '@/lib/admissao-aceite'
+import { salvarDadosAdmissao } from '@/lib/admissao-dados'
+import {
+  ASO_MAX_BYTES, CONTRATO_MAX_BYTES, GUIA_TIPOS, cartaSchema, type CartaInput, entrevistaParaIso, entrevistaSchema, exameSchema, fmtDataHora, preencherModelo, resultadoExameSchema,
+} from '@/lib/validations/admissao'
+import {
+  ETAPAS, ETAPA_CARTA, ETAPA_EXAME, ETAPA_FINAL, ETAPA_INICIAL, ETAPA_POS_EXAME, ETAPA_RESULTADO_EXAME, isEtapa,
+  ETAPA_AGUARDAR_CONTABILIDADE, ETAPA_CONTABILIDADE, ETAPA_CONTRATO,
+} from './etapas'
 import { getConfigAdmissao } from './queries'
 import { addDays, normalizarValor } from '../funcionarios/components/ficha/ficha-config'
 
 const FORA_DO_KANBAN = 'Esta admissão não está mais no kanban.'
+const SAIR_DO_RESULTADO = 'Abra a ficha de admissão e registre o resultado do exame: o card segue sozinho.'
+const SAIR_DO_EXAME = 'Abra a ficha de admissão e encaminhe o candidato para o exame: o card segue sozinho.'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -25,7 +34,7 @@ function revalidar() {
 async function buscarEmAdmissao(admin: Admin, employeeId: string, companyId: string) {
   const { data: emp } = await admin
     .from('employees')
-    .select('id, nome, email, admission_stage')
+    .select('id, nome, email, cargo, admission_stage')
     .eq('id', employeeId)
     .eq('company_id', companyId)
     .eq('status', 'admissao')
@@ -40,7 +49,7 @@ async function buscarEmAdmissao(admin: Admin, employeeId: string, companyId: str
     .maybeSingle()
 
   return {
-    ...(emp as { id: string; nome: string; email: string | null; admission_stage: string | null }),
+    ...(emp as { id: string; nome: string; email: string | null; cargo: string | null; admission_stage: string | null }),
     applicationId: (cand?.id as string | undefined) ?? null,
     vagaTitulo: (cand?.job_openings as unknown as { titulo: string } | null)?.titulo ?? null,
   }
@@ -51,12 +60,14 @@ async function nomeDe(admin: Admin, profileId: string) {
   return (data?.name as string | undefined) || 'Usuário'
 }
 
-async function registrarAnotacao(admin: Admin, opcoes: { companyId: string; employeeId: string; applicationId: string | null; autorId: string; texto: string }) {
+/** Linha do tempo da ficha: por padrão, um evento registrado pelo sistema */
+async function registrarAnotacao(admin: Admin, opcoes: { companyId: string; employeeId: string; applicationId: string | null; autorId: string; texto: string; tipo?: 'anotacao' | 'evento' }) {
   return admin.from('admission_notes').insert({
     company_id: opcoes.companyId,
     employee_id: opcoes.employeeId,
     application_id: opcoes.applicationId,
     texto: opcoes.texto,
+    tipo: opcoes.tipo ?? 'evento',
     autor_id: opcoes.autorId,
     autor_nome: await nomeDe(admin, opcoes.autorId),
   })
@@ -70,6 +81,111 @@ async function cartaAceita(admin: Admin, employeeId: string, companyId: string) 
     .eq('company_id', companyId)
     .eq('status', 'aceita')
   return (count ?? 0) > 0
+}
+
+/** Grava uma carta nova (com o assunto e a validade das configurações); a anterior deixa de valer */
+async function criarCarta(admin: Admin, opcoes: {
+  companyId: string
+  emp: { id: string; nome: string; applicationId: string | null; vagaTitulo: string | null }
+  d: CartaInput
+  autorId: string
+}) {
+  const { companyId, emp, d, autorId } = opcoes
+  const config = await getConfigAdmissao(companyId)
+  const expiraEm = new Date(Date.now() + config.carta_validade_dias * 86_400_000).toISOString()
+  const { data: empresa } = await admin.from('companies').select('nome_fantasia, razao_social').eq('id', companyId).maybeSingle()
+  const assunto = preencherModelo(config.carta_assunto, {
+    nome: emp.nome,
+    empresa: empresa?.nome_fantasia || empresa?.razao_social || '',
+    vaga: emp.vagaTitulo ?? '',
+    cargo: d.cargo,
+  })
+
+  const { error: errAntiga } = await admin
+    .from('admission_offers')
+    .update({ status: 'substituida' })
+    .eq('employee_id', emp.id)
+    .eq('company_id', companyId)
+    .eq('status', 'enviada')
+  if (errAntiga) return { error: errAntiga.message }
+
+  const { data: carta, error } = await admin
+    .from('admission_offers')
+    .insert({
+      company_id: companyId,
+      employee_id: emp.id,
+      application_id: emp.applicationId,
+      assunto,
+      conteudo: d.conteudo,
+      cargo: d.cargo || null,
+      salario: d.salario ? Number(normalizarValor(d.salario)) : null,
+      data_inicio: d.data_inicio,
+      local_trabalho: d.local_trabalho || null,
+      beneficios: d.beneficios || null,
+      expira_em: expiraEm,
+      enviada_por: autorId,
+    })
+    .select('id, token')
+    .single()
+  if (error || !carta) return { error: error?.message ?? 'Não foi possível criar a carta.' }
+  return { carta: carta as { id: string; token: string }, assunto, expiraEm }
+}
+
+/**
+ * Aceite registrado no painel: o candidato aceitou pessoalmente. Com os dados do formulário, grava a carta e já a
+ * marca como aceita; sem eles, usa a carta enviada que está aguardando resposta.
+ */
+export async function registrarAceiteAction(companyId: string, employeeId: string, data: unknown | null) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { admin, user } = auth
+
+  const emp = await buscarEmAdmissao(admin, employeeId, companyId)
+  if (!emp) return { error: FORA_DO_KANBAN }
+  if (emp.admission_stage !== ETAPA_CARTA) return { error: 'Este candidato não está na etapa da carta proposta.' }
+  if (await cartaAceita(admin, employeeId, companyId)) return { error: 'A carta proposta já foi aceita.' }
+
+  let cartaId: string
+  if (data) {
+    const parsed = cartaSchema.safeParse(data)
+    if (!parsed.success) return { error: parsed.error.issues[0].message }
+    const criada = await criarCarta(admin, { companyId, emp, d: parsed.data, autorId: user.id })
+    if ('error' in criada) return { error: criada.error }
+    cartaId = criada.carta.id
+  } else {
+    const { data: enviada } = await admin
+      .from('admission_offers')
+      .select('id')
+      .eq('employee_id', employeeId)
+      .eq('company_id', companyId)
+      .eq('status', 'enviada')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!enviada) return { error: 'Não há carta aguardando resposta.' }
+    cartaId = enviada.id as string
+  }
+
+  const r = await registrarAceite(admin, { cartaId, ip: null, registradoPor: { id: user.id, nome: await nomeDe(admin, user.id) } })
+  if ('error' in r) return { error: r.error }
+  revalidatePath('/pessoas/admissao')
+  return { success: true as const }
+}
+
+/** Preenchimento dos dados no painel, por quem acompanha a admissão (mesmo formulário do candidato) */
+export async function preencherDadosAction(companyId: string, employeeId: string, formData: FormData) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { admin, user } = auth
+
+  const emp = await buscarEmAdmissao(admin, employeeId, companyId)
+  if (!emp) return { error: FORA_DO_KANBAN }
+
+  const r = await salvarDadosAdmissao(admin, { employeeId, companyId, formData, autor: { id: user.id, nome: await nomeDe(admin, user.id) } })
+  if (r.error) return { error: r.error }
+  revalidatePath('/pessoas/admissao')
+  revalidatePath('/pessoas/funcionarios')
+  return { success: true as const }
 }
 
 /**
@@ -91,43 +207,9 @@ export async function enviarCartaAction(companyId: string, employeeId: string, d
   if (!emp.email) return { error: 'Cadastre o e-mail do candidato na ficha antes de enviar a carta.' }
   if (await cartaAceita(admin, employeeId, companyId)) return { error: 'A carta proposta já foi aceita.' }
 
-  const config = await getConfigAdmissao(companyId)
-  const expiraEm = new Date(Date.now() + config.carta_validade_dias * 86_400_000).toISOString()
-  const { data: empresa } = await admin.from('companies').select('nome_fantasia, razao_social').eq('id', companyId).maybeSingle()
-  const assunto = preencherModelo(config.carta_assunto, {
-    nome: emp.nome,
-    empresa: empresa?.nome_fantasia || empresa?.razao_social || '',
-    vaga: emp.vagaTitulo ?? '',
-    cargo: d.cargo,
-  })
-
-  const { error: errAntiga } = await admin
-    .from('admission_offers')
-    .update({ status: 'substituida' })
-    .eq('employee_id', employeeId)
-    .eq('company_id', companyId)
-    .eq('status', 'enviada')
-  if (errAntiga) return { error: errAntiga.message }
-
-  const { data: carta, error } = await admin
-    .from('admission_offers')
-    .insert({
-      company_id: companyId,
-      employee_id: employeeId,
-      application_id: emp.applicationId,
-      assunto,
-      conteudo: d.conteudo,
-      cargo: d.cargo || null,
-      salario: d.salario ? Number(normalizarValor(d.salario)) : null,
-      data_inicio: d.data_inicio,
-      local_trabalho: d.local_trabalho || null,
-      beneficios: d.beneficios || null,
-      expira_em: expiraEm,
-      enviada_por: user.id,
-    })
-    .select('token')
-    .single()
-  if (error || !carta) return { error: error?.message ?? 'Não foi possível criar a carta.' }
+  const criada = await criarCarta(admin, { companyId, emp, d, autorId: user.id })
+  if ('error' in criada) return { error: criada.error }
+  const { carta, assunto, expiraEm } = criada
 
   const hdrs = await headers()
   const link = `${hdrs.get('x-forwarded-proto') ?? 'http'}://${hdrs.get('host') ?? 'localhost:3000'}/carta/${carta.token}`
@@ -146,8 +228,8 @@ export async function enviarCartaAction(companyId: string, employeeId: string, d
 }
 
 /**
- * Move o card entre as etapas. Da entrevista só se sai aprovando ou reprovando;
- * ir para o fim é pelo finalizarAdmissaoAction, que coloca a pessoa na Equipe.
+ * Move o card entre as etapas: arrastando, só para trás. Para frente, cada etapa avança pela própria ação na ficha;
+ * o fim é pelo finalizarAdmissaoAction, com o contrato assinado.
  */
 export async function moverEtapaAction(employeeId: string, companyId: string, etapa: string) {
   const auth = await requireGestor(companyId)
@@ -160,9 +242,15 @@ export async function moverEtapaAction(employeeId: string, companyId: string, et
     return { error: 'Abra o card para aprovar ou reprovar a entrevista.' }
   }
   const avancando = ETAPAS.findIndex((e) => e.key === etapa) > ETAPAS.findIndex((e) => e.key === emp.admission_stage)
-  if (emp.admission_stage === ETAPA_CARTA && avancando && !(await cartaAceita(auth.admin, employeeId, companyId))) {
-    return { error: 'A carta proposta precisa ser aceita antes de avançar.' }
+  // Da carta só se sai preenchendo os dados (o card avança sozinho ao concluir)
+  if (emp.admission_stage === ETAPA_CARTA && avancando) {
+    return { error: 'Abra a ficha de admissão: a etapa avança ao concluir o preenchimento dos dados.' }
   }
+  // Do exame só se sai encaminhando o candidato (o card segue sozinho)
+  if (emp.admission_stage === ETAPA_EXAME && avancando) return { error: SAIR_DO_EXAME }
+  if (emp.admission_stage === ETAPA_RESULTADO_EXAME && avancando) return { error: SAIR_DO_RESULTADO }
+  // Daqui em diante cada etapa avança pela própria ação na ficha
+  if (avancando) return { error: 'Abra a ficha de admissão: cada etapa avança pela ação dela.' }
 
   const { error } = await auth.admin
     .from('employees')
@@ -172,6 +260,10 @@ export async function moverEtapaAction(employeeId: string, companyId: string, et
     .eq('status', 'admissao')
 
   if (error) return { error: error.message }
+  await registrarAnotacao(auth.admin, {
+    companyId, employeeId, applicationId: emp.applicationId, autorId: auth.user.id,
+    texto: `Movido para "${ETAPAS.find((e) => e.key === etapa)?.label}".`,
+  })
   revalidatePath('/pessoas/admissao')
   return { success: true as const }
 }
@@ -303,6 +395,10 @@ export async function salvarEntrevistaAction(companyId: string, employeeId: stri
       })
     : null
 
+  await registrarAnotacao(admin, {
+    companyId, employeeId, applicationId: emp.applicationId, autorId: user.id,
+    texto: `Entrevista ${entrevistaId ? 'remarcada' : 'marcada'} para ${fmtDataHora(dataHora)} com ${entrevistadorNome}.`,
+  })
   revalidatePath('/pessoas/admissao')
   return { success: true as const, candidatoAvisado: aviso?.status === 'enviado' }
 }
@@ -310,7 +406,7 @@ export async function salvarEntrevistaAction(companyId: string, employeeId: stri
 export async function cancelarEntrevistaAction(companyId: string, entrevistaId: string) {
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
-  const { admin } = auth
+  const { admin, user } = auth
 
   const { data: entrevista } = await admin
     .from('admission_interviews')
@@ -337,8 +433,275 @@ export async function cancelarEntrevistaAction(companyId: string, entrevistaId: 
       })
     : null
 
+  if (emp) {
+    await registrarAnotacao(admin, {
+      companyId, employeeId: emp.id, applicationId: emp.applicationId, autorId: user.id,
+      texto: `Entrevista de ${fmtDataHora(entrevista.data_hora as string)} cancelada.`,
+    })
+  }
   revalidatePath('/pessoas/admissao')
   return { success: true as const, candidatoAvisado: aviso?.status === 'enviado' }
+}
+
+// ── Exame admissional ────────────────────────────────────────────────────────
+
+/** Guia anexada ao e-mail: a da clínica ou, sem ela, a geral da empresa */
+async function baixarGuia(admin: Admin, path: string | null, nome: string | null) {
+  if (!path) return null
+  const { data, error } = await admin.storage.from('documentos').download(path)
+  if (error || !data) { console.error('[admissão] guia indisponível:', error?.message); return null }
+  const ext = path.split('.').pop()
+  return { filename: nome || `guia-de-encaminhamento.${ext}`, content: Buffer.from(await data.arrayBuffer()) }
+}
+
+/**
+ * Encaminha o candidato para o exame (ou troca o encaminhamento): grava com uma cópia dos dados da clínica e,
+ * se a configuração mandar, envia o e-mail com a guia. Não entra na agenda: quem vai ao exame é o candidato.
+ */
+export async function encaminharExameAction(companyId: string, employeeId: string, data: unknown) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { admin, user } = auth
+
+  const parsed = exameSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  const d = parsed.data
+
+  const dataHora = d.data ? entrevistaParaIso(d.data, d.hora) : null
+  if (dataHora && (Number.isNaN(Date.parse(dataHora)) || Date.parse(dataHora) <= Date.now())) return { error: 'Escolha uma data e hora futuras.' }
+
+  const emp = await buscarEmAdmissao(admin, employeeId, companyId)
+  if (!emp) return { error: FORA_DO_KANBAN }
+  // Na etapa do resultado ainda dá para reencaminhar (exame remarcado ou em outra clínica)
+  const reencaminhando = emp.admission_stage === ETAPA_RESULTADO_EXAME
+  if (emp.admission_stage !== ETAPA_EXAME && !reencaminhando) return { error: 'Este candidato não está na etapa do exame.' }
+
+  const { data: clinica } = await admin
+    .from('admission_clinics')
+    .select('id, nome, endereco, telefone, guia_path, guia_nome')
+    .eq('id', d.clinic_id)
+    .eq('company_id', companyId)
+    .eq('ativo', true)
+    .maybeSingle()
+  if (!clinica) return { error: 'Escolha uma das clínicas cadastradas.' }
+
+  const { error: errAnterior } = await admin
+    .from('admission_exams')
+    .update({ status: 'substituido' })
+    .eq('employee_id', employeeId)
+    .eq('company_id', companyId)
+    .eq('status', 'encaminhado')
+  if (errAnterior) return { error: errAnterior.message }
+
+  const orientacoes = d.orientacoes || null
+  const { data: exame, error } = await admin
+    .from('admission_exams')
+    .insert({
+      company_id: companyId,
+      employee_id: employeeId,
+      application_id: emp.applicationId,
+      clinic_id: clinica.id,
+      clinica_nome: clinica.nome,
+      clinica_endereco: clinica.endereco,
+      clinica_telefone: clinica.telefone,
+      data_hora: dataHora,
+      orientacoes,
+      created_by: user.id,
+    })
+    .select('id')
+    .single()
+  if (error || !exame) return { error: error?.message ?? 'Não foi possível registrar o encaminhamento.' }
+
+  // E-mail: falha no envio não desfaz o encaminhamento; a tela avisa para combinar por outro meio
+  const config = await getConfigAdmissao(companyId)
+  let email: 'enviado' | 'falhou' | 'desligado' | 'sem_email' = 'desligado'
+  if (config.exame_notificar) {
+    if (!emp.email) email = 'sem_email'
+    else {
+      const guia = clinica.guia_path
+        ? await baixarGuia(admin, clinica.guia_path as string, clinica.guia_nome as string | null)
+        : await baixarGuia(admin, config.exame_guia_path, config.exame_guia_nome)
+      const envio = await avisarExame({
+        companyId,
+        assunto: config.exame_assunto,
+        modelo: config.exame_modelo,
+        nome: emp.nome,
+        email: emp.email,
+        vagaTitulo: emp.vagaTitulo,
+        cargo: emp.cargo,
+        clinica: { nome: clinica.nome as string, endereco: clinica.endereco as string | null, telefone: clinica.telefone as string | null },
+        dataHora,
+        orientacoes,
+        guia,
+      })
+      email = envio.status === 'enviado' ? 'enviado' : 'falhou'
+      if (email === 'enviado') await admin.from('admission_exams').update({ email_enviado: true }).eq('id', exame.id)
+    }
+  }
+
+  // Encaminhado: o card segue para o registro do resultado
+  if (!reencaminhando) {
+    const { error: errEtapa } = await admin
+      .from('employees')
+      .update({ admission_stage: ETAPA_RESULTADO_EXAME })
+      .eq('id', employeeId)
+      .eq('company_id', companyId)
+    if (errEtapa) return { error: errEtapa.message }
+  }
+
+  const quando = dataHora ? `para ${fmtDataHora(dataHora)}` : 'por ordem de chegada'
+  await registrarAnotacao(admin, {
+    companyId, employeeId, applicationId: emp.applicationId, autorId: user.id,
+    texto: `${reencaminhando ? 'Reencaminhado' : 'Encaminhado'} para exame na ${clinica.nome}, ${quando}.${email === 'enviado' ? ' Candidato avisado por e-mail.' : ''}`,
+  })
+  revalidatePath('/pessoas/admissao')
+  return { success: true as const, email, reencaminhando }
+}
+
+/**
+ * Resultado do exame, com o ASO (obrigatório para apto).
+ * Apto: o ASO vira o "Exame Admissional" do funcionário e o card segue para a contabilidade.
+ * Inapto: novo exame (volta para o encaminhamento) ou reprovação, com o e-mail da reprovação no exame.
+ */
+export async function registrarResultadoExameAction(companyId: string, employeeId: string, formData: FormData) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { admin, user } = auth
+
+  const parsed = resultadoExameSchema.safeParse({
+    resultado: formData.get('resultado') || undefined,
+    data: formData.get('data') ?? '',
+    observacoes: formData.get('observacoes') ?? '',
+    decisao: formData.get('decisao') || undefined,
+  })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  const d = parsed.data
+  const apto = d.resultado === 'apto'
+
+  const aso = formData.get('aso') as File | null
+  const temAso = !!aso && aso.size > 0
+  if (apto && !temAso) return { error: 'Anexe o ASO para registrar o resultado apto.' }
+  if (temAso && !GUIA_TIPOS.includes(aso.type)) return { error: 'O ASO precisa ser PDF, JPG ou PNG.' }
+  if (temAso && aso.size > ASO_MAX_BYTES) return { error: 'O ASO pode ter até 10 MB.' }
+
+  const emp = await buscarEmAdmissao(admin, employeeId, companyId)
+  if (!emp) return { error: FORA_DO_KANBAN }
+  if (emp.admission_stage !== ETAPA_RESULTADO_EXAME) return { error: 'Este candidato não está na etapa do resultado do exame.' }
+
+  const { data: exame } = await admin
+    .from('admission_exams')
+    .select('id, clinica_nome')
+    .eq('employee_id', employeeId)
+    .eq('company_id', companyId)
+    .eq('status', 'encaminhado')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!exame) return { error: 'Não há encaminhamento para exame aguardando resultado.' }
+
+  let asoPath: string | null = null
+  if (temAso) {
+    const ext = aso.name.split('.').pop()?.toLowerCase() || 'pdf'
+    asoPath = `funcionarios/${companyId}/${employeeId}/exame_admissional_${Date.now()}.${ext}`
+    const { error } = await admin.storage.from('documentos').upload(asoPath, await aso.arrayBuffer(), { contentType: aso.type })
+    if (error) return { error: `Não foi possível enviar o ASO: ${error.message}` }
+  }
+
+  const autorNome = await nomeDe(admin, user.id)
+  const { error: errExame } = await admin
+    .from('admission_exams')
+    .update({
+      status: 'realizado',
+      realizado_em: new Date(`${d.data}T12:00:00-03:00`).toISOString(),
+      resultado: d.resultado,
+      resultado_data: d.data,
+      resultado_observacoes: d.observacoes || null,
+      aso_path: asoPath,
+      resultado_por: autorNome,
+      resultado_em: new Date().toISOString(),
+    })
+    .eq('id', exame.id)
+  if (errExame) {
+    if (asoPath) await admin.storage.from('documentos').remove([asoPath])
+    return { error: errExame.message }
+  }
+
+  const obs = d.observacoes ? ` Observações: ${d.observacoes}` : ''
+
+  if (apto) {
+    const { data: ficha } = await admin.from('employees').select('doc_exame_admissional_path').eq('id', employeeId).maybeSingle()
+    const { error } = await admin
+      .from('employees')
+      .update({ admission_stage: ETAPA_POS_EXAME, doc_exame_admissional_path: asoPath })
+      .eq('id', employeeId)
+      .eq('company_id', companyId)
+    if (error) return { error: error.message }
+    // ASO anterior do cadastro (ex.: enviado à mão) deixa de ser usado
+    const anterior = ficha?.doc_exame_admissional_path as string | null | undefined
+    if (anterior && anterior !== asoPath) await admin.storage.from('documentos').remove([anterior])
+
+    await registrarAnotacao(admin, {
+      companyId, employeeId, applicationId: emp.applicationId, autorId: user.id,
+      texto: `Apto no exame admissional (${exame.clinica_nome}).${obs}`,
+    })
+    revalidar()
+    return { success: true as const, resultado: 'apto' as const }
+  }
+
+  if (d.decisao === 'novo_exame') {
+    const { error } = await admin
+      .from('employees')
+      .update({ admission_stage: ETAPA_EXAME })
+      .eq('id', employeeId)
+      .eq('company_id', companyId)
+    if (error) return { error: error.message }
+    await registrarAnotacao(admin, {
+      companyId, employeeId, applicationId: emp.applicationId, autorId: user.id,
+      texto: `Inapto no exame admissional (${exame.clinica_nome}). Novo exame solicitado.${obs}`,
+    })
+    revalidatePath('/pessoas/admissao')
+    return { success: true as const, resultado: 'novo_exame' as const }
+  }
+
+  // Reprovado no exame: mesmo caminho da reprovação, com o e-mail próprio das configurações
+  const r = await removerDaAdmissao(admin, {
+    employeeId,
+    companyId,
+    statusCandidatura: 'reprovada',
+    motivo: 'Inapto no exame admissional',
+    texto: `Inapto no exame admissional (${exame.clinica_nome}). Reprovado.${obs}`,
+    autorId: user.id,
+    autorNome,
+  })
+  if (r.error) return { error: r.error }
+
+  const config = await getConfigAdmissao(companyId)
+  let avisoFalhou = false
+  if (config.exame_reprovacao_notificar && emp.email) {
+    const envio = await avisarReprovacao({
+      companyId,
+      assunto: config.exame_reprovacao_assunto,
+      modelo: config.exame_reprovacao_modelo,
+      nome: emp.nome,
+      email: emp.email,
+      vagaTitulo: emp.vagaTitulo,
+      cargo: emp.cargo,
+    })
+    avisoFalhou = envio.status !== 'enviado'
+  }
+  revalidar()
+  return { success: true as const, resultado: 'reprovado' as const, avisoFalhou }
+}
+
+/** Abre o ASO de um exame da empresa */
+export async function getAsoUrlAction(companyId: string, exameId: string) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { data } = await auth.admin.from('admission_exams').select('aso_path').eq('id', exameId).eq('company_id', companyId).maybeSingle()
+  if (!data?.aso_path) return { error: 'Arquivo não encontrado.' }
+  const { data: url } = await auth.admin.storage.from('documentos').createSignedUrl(data.aso_path as string, 300)
+  if (!url) return { error: 'Não foi possível abrir o ASO.' }
+  return { url: url.signedUrl }
 }
 
 export async function adicionarAnotacaoAction(companyId: string, employeeId: string, texto: string) {
@@ -352,7 +715,7 @@ export async function adicionarAnotacaoAction(companyId: string, employeeId: str
   const emp = await buscarEmAdmissao(admin, employeeId, companyId)
   if (!emp) return { error: FORA_DO_KANBAN }
 
-  const { error } = await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: limpo })
+  const { error } = await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: limpo, tipo: 'anotacao' })
   if (error) return { error: error.message }
   revalidatePath('/pessoas/admissao')
   return { success: true as const }
@@ -387,6 +750,10 @@ export async function reprovarAdmissaoAction(employeeId: string, companyId: stri
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
 
+  // Lido antes: o cadastro é apagado na reprovação
+  const emp = await buscarEmAdmissao(admin, employeeId, companyId)
+  const { data: ficha } = await admin.from('employees').select('cargo').eq('id', employeeId).eq('company_id', companyId).maybeSingle()
+
   const motivoLimpo = motivo?.trim().slice(0, 1000) || null
   const r = await removerDaAdmissao(admin, {
     employeeId,
@@ -399,29 +766,109 @@ export async function reprovarAdmissaoAction(employeeId: string, companyId: stri
   })
   if (r.error) return { error: r.error }
 
+  // Configuração ligada: o aviso sai direto; falha no e-mail não desfaz a reprovação
+  const config = await getConfigAdmissao(companyId)
+  let avisoFalhou = false
+  if (config.reprovacao_notificar && emp?.email) {
+    const envio = await avisarReprovacao({
+      companyId,
+      assunto: config.reprovacao_assunto,
+      modelo: config.reprovacao_modelo,
+      nome: emp.nome,
+      email: emp.email,
+      vagaTitulo: emp.vagaTitulo,
+      cargo: (ficha?.cargo as string | null) ?? null,
+    })
+    avisoFalhou = envio.status !== 'enviado'
+  }
+
   revalidar()
+  return { success: true as const, avisoFalhou }
+}
+
+// ── Contabilidade e contrato ─────────────────────────────────────────────────
+
+/** A ficha foi enviada à contabilidade (por fora do sistema): o card passa a aguardar o retorno */
+export async function registrarEnvioContabilidadeAction(companyId: string, employeeId: string) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { admin, user } = auth
+
+  const emp = await buscarEmAdmissao(admin, employeeId, companyId)
+  if (!emp) return { error: FORA_DO_KANBAN }
+  if (emp.admission_stage !== ETAPA_CONTABILIDADE) return { error: 'Este candidato não está na etapa de envio para a contabilidade.' }
+
+  const autorNome = await nomeDe(admin, user.id)
+  const { error } = await admin
+    .from('employees')
+    .update({
+      admission_stage: ETAPA_AGUARDAR_CONTABILIDADE,
+      admissao_contabilidade_enviada_em: new Date().toISOString(),
+      admissao_contabilidade_enviada_por: autorNome,
+      admissao_contabilidade_retorno_em: null,
+    })
+    .eq('id', employeeId)
+    .eq('company_id', companyId)
+  if (error) return { error: error.message }
+
+  await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: 'Ficha enviada à contabilidade.' })
+  revalidatePath('/pessoas/admissao')
   return { success: true as const }
 }
 
-/** Fim do fluxo: entra na Equipe. CLT começa em experiência (datas calculadas pela admissão); os demais, ativos. */
-export async function finalizarAdmissaoAction(employeeId: string, companyId: string, dataAdmissao: string) {
+/** A contabilidade respondeu: segue para a assinatura do contrato */
+export async function registrarRetornoContabilidadeAction(companyId: string, employeeId: string) {
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
+  const { admin, user } = auth
+
+  const emp = await buscarEmAdmissao(admin, employeeId, companyId)
+  if (!emp) return { error: FORA_DO_KANBAN }
+  if (emp.admission_stage !== ETAPA_AGUARDAR_CONTABILIDADE) return { error: 'Este candidato não está aguardando o retorno da contabilidade.' }
+
+  const { error } = await admin
+    .from('employees')
+    .update({ admission_stage: ETAPA_CONTRATO, admissao_contabilidade_retorno_em: new Date().toISOString() })
+    .eq('id', employeeId)
+    .eq('company_id', companyId)
+  if (error) return { error: error.message }
+
+  await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: 'Retorno da contabilidade recebido.' })
+  revalidatePath('/pessoas/admissao')
+  return { success: true as const }
+}
+
+/**
+ * Fim do fluxo: com o contrato assinado anexado, a pessoa entra na Equipe.
+ * CLT começa em experiência (datas calculadas pela admissão); os demais, ativos.
+ */
+export async function finalizarAdmissaoAction(companyId: string, employeeId: string, formData: FormData) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { admin, user } = auth
+
+  const dataAdmissao = String(formData.get('data_admissao') ?? '')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAdmissao)) return { error: 'Informe a data de admissão.' }
-  const { admin } = auth
+  const contrato = formData.get('contrato') as File | null
+  if (!contrato || contrato.size === 0) return { error: 'Anexe o contrato assinado.' }
+  if (!GUIA_TIPOS.includes(contrato.type)) return { error: 'O contrato precisa ser PDF, JPG ou PNG.' }
+  if (contrato.size > CONTRATO_MAX_BYTES) return { error: 'O contrato pode ter até 20 MB.' }
 
   const { data: emp } = await admin
     .from('employees')
-    .select('tipo_contrato, admission_stage, fim_experiencia_1, fim_experiencia_2, vcto_ferias, conceder_ferias_ate')
+    // '*': doc_contrato_path pode ainda não existir (migration 20261106000084)
+    .select('*')
     .eq('id', employeeId)
     .eq('company_id', companyId)
     .eq('status', 'admissao')
     .maybeSingle()
   if (!emp) return { error: FORA_DO_KANBAN }
-  if (emp.admission_stage === ETAPA_INICIAL) return { error: 'Abra o card para aprovar ou reprovar a entrevista.' }
-  if (emp.admission_stage === ETAPA_CARTA && !(await cartaAceita(admin, employeeId, companyId))) {
-    return { error: 'A carta proposta precisa ser aceita antes de avançar.' }
-  }
+  if (emp.admission_stage !== ETAPA_CONTRATO) return { error: 'Abra a ficha de admissão: a admissão termina na etapa "Assinar contrato".' }
+
+  const ext = contrato.name.split('.').pop()?.toLowerCase() || 'pdf'
+  const contratoPath = `funcionarios/${companyId}/${employeeId}/contrato_${Date.now()}.${ext}`
+  const { error: errUpload } = await admin.storage.from('documentos').upload(contratoPath, await contrato.arrayBuffer(), { contentType: contrato.type })
+  if (errUpload) return { error: `Não foi possível enviar o contrato: ${errUpload.message}` }
 
   const clt = emp.tipo_contrato === 'clt'
   const pj = emp.tipo_contrato === 'pj' || emp.tipo_contrato === 'autonomo'
@@ -435,13 +882,25 @@ export async function finalizarAdmissaoAction(employeeId: string, companyId: str
       admission_stage: ETAPA_FINAL,
       admissao_em_espera: false,
       data_admissao: dataAdmissao,
+      doc_contrato_path: contratoPath,
       ...(clt && { fim_experiencia_1: fim1, fim_experiencia_2: emp.fim_experiencia_2 ?? addDays(fim1, 45) }),
       ...(!pj && { vcto_ferias: vcto, conceder_ferias_ate: emp.conceder_ferias_ate ?? addDays(vcto, 330) }),
     })
     .eq('id', employeeId)
     .eq('company_id', companyId)
 
-  if (error) return { error: error.message }
+  if (error) {
+    await admin.storage.from('documentos').remove([contratoPath])
+    return { error: error.message }
+  }
+  // Contrato anterior (ex.: enviado à mão nos dados cadastrais) deixa de ser usado
+  if (emp.doc_contrato_path && emp.doc_contrato_path !== contratoPath) await admin.storage.from('documentos').remove([emp.doc_contrato_path as string])
+
+  const { data: cand } = await admin.from('job_applications').select('id').eq('employee_id', employeeId).eq('company_id', companyId).maybeSingle()
+  await registrarAnotacao(admin, {
+    companyId, employeeId, applicationId: (cand?.id as string | undefined) ?? null, autorId: user.id,
+    texto: `Contrato assinado anexado. Admissão finalizada em ${dataAdmissao.split('-').reverse().join('/')}.`,
+  })
   revalidar()
   return { success: true as const, status: clt ? 'experiencia' : 'ativo' }
 }

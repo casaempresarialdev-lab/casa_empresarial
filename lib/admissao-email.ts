@@ -1,6 +1,36 @@
-import { sendEmail, type SendResult } from '@/lib/email'
+import { sendEmail, type Anexo, type SendResult } from '@/lib/email'
 import { escapeHtml, getEmailBranding, layoutEmail } from '@/lib/email-template'
-import { fmtDataHora } from '@/lib/validations/admissao'
+import { fmtDataHora, preencherModelo } from '@/lib/validations/admissao'
+
+/** Reprovação: texto das configurações da empresa. Cada parágrafo do modelo vira um bloco do e-mail. */
+export async function avisarReprovacao(opcoes: {
+  companyId: string
+  assunto: string
+  modelo: string
+  nome: string
+  email: string
+  vagaTitulo: string | null
+  cargo: string | null
+}): Promise<SendResult> {
+  const { companyId, assunto, modelo, nome, email, vagaTitulo, cargo } = opcoes
+  const branding = await getEmailBranding(companyId)
+  const valores = { nome, empresa: branding.nome, vaga: vagaTitulo ?? cargo ?? '', cargo: cargo ?? '' }
+  const titulo = preencherModelo(assunto, valores)
+  const texto = preencherModelo(modelo, valores)
+  const paragrafos = texto.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+
+  return sendEmail({
+    to: email,
+    subject: titulo,
+    text: texto,
+    html: layoutEmail({
+      branding,
+      previa: paragrafos[1] ?? paragrafos[0] ?? titulo,
+      titulo,
+      blocos: paragrafos.map((p) => ({ tipo: 'texto' as const, html: escapeHtml(p).replace(/\n/g, '<br>') })),
+    }),
+  }).catch(() => ({ status: 'falhou' as const, error: 'erro no envio' }))
+}
 
 /** Carta proposta: o e-mail leva ao link público, onde o candidato lê e responde */
 export async function enviarCartaProposta(opcoes: {
@@ -61,6 +91,55 @@ export async function avisarRespostaCarta(opcoes: {
         { tipo: 'texto', html: escapeHtml(mensagem) },
         ...(motivo ? [{ tipo: 'texto' as const, html: `<strong>Motivo:</strong> ${escapeHtml(motivo)}` }] : []),
         { tipo: 'botao', texto: 'Abrir o kanban de admissão', url: link },
+      ],
+    }),
+  }).catch(() => ({ status: 'falhou' as const, error: 'erro no envio' }))
+}
+
+/** Encaminhamento para o exame admissional: texto das configurações, com a guia em anexo quando houver */
+export async function avisarExame(opcoes: {
+  companyId: string
+  assunto: string
+  modelo: string
+  nome: string
+  email: string
+  vagaTitulo: string | null
+  cargo: string | null
+  clinica: { nome: string; endereco: string | null; telefone: string | null }
+  dataHora: string | null
+  orientacoes: string | null
+  guia: Anexo | null
+}): Promise<SendResult> {
+  const { companyId, assunto, modelo, nome, email, vagaTitulo, cargo, clinica, dataHora, orientacoes, guia } = opcoes
+  const branding = await getEmailBranding(companyId)
+  const valores = {
+    nome,
+    empresa: branding.nome,
+    vaga: vagaTitulo ?? cargo ?? '',
+    cargo: cargo ?? '',
+    clinica: clinica.nome,
+    endereco: clinica.endereco || 'Confirme com a clínica',
+    telefone_clinica: clinica.telefone || 'Não informado',
+    data_exame: dataHora ? `${fmtDataHora(dataHora)} (horário de Brasília)` : 'Atendimento por ordem de chegada',
+    orientacoes: orientacoes || 'Nenhuma orientação especial.',
+  }
+  const titulo = preencherModelo(assunto, valores)
+  const texto = preencherModelo(modelo, valores)
+  const paragrafos = texto.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+  const avisoGuia = 'A guia de encaminhamento está em anexo. Apresente-a na clínica, impressa ou no celular.'
+
+  return sendEmail({
+    to: email,
+    subject: titulo,
+    text: guia ? `${texto}\n\n${avisoGuia}` : texto,
+    attachments: guia ? [guia] : undefined,
+    html: layoutEmail({
+      branding,
+      previa: paragrafos[1] ?? paragrafos[0] ?? titulo,
+      titulo,
+      blocos: [
+        ...paragrafos.map((p) => ({ tipo: 'texto' as const, html: escapeHtml(p).replace(/\n/g, '<br>') })),
+        ...(guia ? [{ tipo: 'texto' as const, html: `<strong>${escapeHtml(avisoGuia)}</strong>` }] : []),
       ],
     }),
   }).catch(() => ({ status: 'falhou' as const, error: 'erro no envio' }))

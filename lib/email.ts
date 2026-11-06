@@ -8,7 +8,10 @@ import { Resend } from 'resend'
 // Remetente: EMAIL_FROM (ex.: "Casa Empresarial <contato@seudominio.com.br>"); sem ele, usa o SMTP_USER.
 // Em desenvolvimento, sem provedor, o e-mail é mostrado no terminal do servidor em vez de enviado.
 
-type Email = { to: string; subject: string; html: string; text: string }
+/** Anexo: nome do arquivo e conteúdo */
+export type Anexo = { filename: string; content: Buffer }
+
+type Email = { to: string; subject: string; html: string; text: string; attachments?: Anexo[] }
 
 /** Resultado real do envio, para a tela dizer exatamente o que aconteceu */
 export type SendResult =
@@ -20,7 +23,7 @@ function remetente() {
   return process.env.EMAIL_FROM || (process.env.SMTP_USER ? `Casa Empresarial <${process.env.SMTP_USER}>` : 'Casa Empresarial <onboarding@resend.dev>')
 }
 
-async function viaSmtp({ to, subject, html, text }: Email): Promise<SendResult> {
+async function viaSmtp({ to, subject, html, text, attachments }: Email): Promise<SendResult> {
   const port = Number(process.env.SMTP_PORT || 465)
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -29,7 +32,7 @@ async function viaSmtp({ to, subject, html, text }: Email): Promise<SendResult> 
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   })
   try {
-    const info = await transporter.sendMail({ from: remetente(), to, subject, html, text })
+    const info = await transporter.sendMail({ from: remetente(), to, subject, html, text, attachments })
     // O servidor recusou o destinatário: não foi enviado
     if (info.rejected?.length) return { status: 'falhou', error: `O servidor de e-mail recusou o destinatário ${to}.` }
     return { status: 'enviado', id: info.messageId }
@@ -44,10 +47,10 @@ async function viaSmtp({ to, subject, html, text }: Email): Promise<SendResult> 
   }
 }
 
-async function viaResend({ to, subject, html, text }: Email): Promise<SendResult> {
+async function viaResend({ to, subject, html, text, attachments }: Email): Promise<SendResult> {
   try {
     const resend = new Resend(process.env.RESEND_API_KEY)
-    const { data, error } = await resend.emails.send({ from: remetente(), to, subject, html, text })
+    const { data, error } = await resend.emails.send({ from: remetente(), to, subject, html, text, attachments })
     if (error || !data?.id) {
       console.error('[e-mail] falha no Resend:', error)
       return { status: 'falhou', error: error?.message ?? 'O provedor de e-mail não confirmou o envio.' }
@@ -64,7 +67,7 @@ export async function sendEmail(email: Email): Promise<SendResult> {
   if (process.env.RESEND_API_KEY) return viaResend(email)
 
   if (process.env.NODE_ENV !== 'production') {
-    console.info(`\n[e-mail NÃO enviado: nenhum provedor configurado]\nPara: ${email.to}\nAssunto: ${email.subject}\n${email.text}\n`)
+    console.info(`\n[e-mail NÃO enviado: nenhum provedor configurado]\nPara: ${email.to}\nAssunto: ${email.subject}${email.attachments?.length ? `\nAnexos: ${email.attachments.map((a) => a.filename).join(', ')}` : ''}\n${email.text}\n`)
   }
   return { status: 'nao_configurado' }
 }

@@ -1,401 +1,285 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useForm, type FieldErrors } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { submitOnboardingAction } from '../actions'
+import { Icon } from '@/components/ui/icon'
+import { FotoPicker } from '@/components/ui/foto-picker'
+import { Stepper } from '@/components/ui/form-steps'
+import { PublicoAviso } from '@/components/layout/publico-shell'
+import { toast } from '@/lib/toast'
+import { autoCadastroSchema, type AutoCadastroInput } from '@/lib/validations/auto-cadastro'
+import { GRAU_OPTIONS, maskCpf, maskTelefone } from '@/app/(app)/pessoas/funcionarios/components/ficha/ficha-config'
 import { docsObrigatorios } from '../../docs-obrigatorios'
 
-const GRAU_OPTIONS = [
-  'Fundamental Incompleto', 'Fundamental Completo', 'Médio Incompleto', 'Médio Completo',
-  'Técnico', 'Superior Incompleto', 'Superior Completo', 'Pós-graduação', 'Mestrado', 'Doutorado',
+const MAX_ARQUIVO = 20 * 1024 * 1024
+
+const DOCUMENTOS = [
+  { key: 'rg_cnh_frente', label: 'RG frente / CNH' },
+  { key: 'rg_verso', label: 'RG verso' },
+  { key: 'cpf', label: 'CPF' },
+  { key: 'ctps', label: 'Carteira de Trabalho' },
+  { key: 'pis', label: 'PIS' },
+  { key: 'titulo_eleitor', label: 'Título de Eleitor' },
+  { key: 'certidao', label: 'Certidão Nasc./Casamento' },
+  { key: 'comprovante_residencia', label: 'Comprovante de Residência' },
 ]
 
-const DOC_SLOTS = [
-  { key: 'rg_cnh_frente',          label: 'RG Frente / CNH',            accept: 'image/*,application/pdf' },
-  { key: 'rg_verso',               label: 'RG Verso (opcional)',         accept: 'image/*,application/pdf' },
-  { key: 'cpf',                    label: 'CPF',                        accept: 'image/*,application/pdf' },
-  { key: 'comprovante_residencia', label: 'Comprovante de Residência',   accept: 'image/*,application/pdf' },
-  { key: 'titulo_eleitor',         label: 'Título de Eleitor',          accept: 'image/*,application/pdf' },
-  { key: 'ctps',                   label: 'Carteira de Trabalho',       accept: 'image/*,application/pdf' },
-  { key: 'pis',                    label: 'PIS',                        accept: 'image/*,application/pdf' },
-  { key: 'certidao',               label: 'Certidão Nasc./Casamento',   accept: 'image/*,application/pdf' },
-] as const
-
-function formatCpf(value: string) {
-  const d = value.replace(/\D/g, '').slice(0, 11)
-  if (d.length <= 3) return d
-  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
-  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
-  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
-}
-
 interface Props {
-  token: string
+  /** Envia os dados: pelo link (candidato) ou pelo painel (empresa) */
+  enviar: (fd: FormData) => Promise<{ success?: true; error?: string }>
+  /** No painel: em vez da mensagem de agradecimento, avisa quem chamou */
+  onConcluido?: () => void
+  /** No painel, dentro de outra caixa: sem o cartão próprio */
+  semCartao?: boolean
   employeeName: string
   companyName: string
   /** Dados já conhecidos (candidatura, ficha): o candidato só confere e completa */
-  inicial: {
-    cpf: string; rg: string; nascimento: string; telefone: string; email: string; grau_instrucao: string
-    dependentes: string; pis_pasep: string; serie_ctps: string; certificado_reservista: string; dados_bancarios: string
-  }
+  inicial: AutoCadastroInput
   tipoContrato: string | null
   /** Documentos obrigatórios já enviados antes */
   docsExistentes: string[]
 }
 
-export function AutoCadastroForm({ token, employeeName, companyName, inicial, tipoContrato, docsExistentes }: Props) {
-  const firstName = employeeName.split(' ')[0]
+// Etapas do preenchimento: cada uma valida os próprios campos antes de avançar
+export function AutoCadastroForm({ enviar: enviarDados, onConcluido, semCartao, employeeName, companyName, inicial, tipoContrato, docsExistentes }: Props) {
+  const painel = !!onConcluido
+  // "ROGELSON" → "Rogelson" no título
+  const nomeTitulo = employeeName.split(' ')[0].toLowerCase().replace(/^\p{L}/u, (l) => l.toUpperCase())
+  const primeiroNome = employeeName.split(' ')[0]
   const pj = tipoContrato === 'pj' || tipoContrato === 'autonomo'
   const obrigatorios = docsObrigatorios(tipoContrato)
   // PJ/autônomo não têm documentos trabalhistas
-  const slots = DOC_SLOTS.filter((s) => !pj || !['ctps', 'pis'].includes(s.key))
+  const documentos = DOCUMENTOS.filter((d) => !pj || !['ctps', 'pis'].includes(d.key))
 
-  const [cpf, setCpf]                   = useState(formatCpf(inicial.cpf))
-  const [rg, setRg]                     = useState(inicial.rg)
-  const [nascimento, setNascimento]     = useState(inicial.nascimento)
-  const [telefone, setTelefone]         = useState(inicial.telefone)
-  const [email, setEmail]               = useState(inicial.email)
-  const [grauInstrucao, setGrau]        = useState(inicial.grau_instrucao)
-  const [dependentes, setDependentes]   = useState(inicial.dependentes)
-  const [pisPasep, setPisPasep]         = useState(inicial.pis_pasep)
-  const [serieCtps, setSerieCtps]       = useState(inicial.serie_ctps)
-  const [certReservista, setCertReservista] = useState(inicial.certificado_reservista)
-  const [dadosBancarios, setDadosBancarios] = useState(inicial.dados_bancarios)
-  const [fotoFile, setFotoFile]         = useState<File | null>(null)
-  const [fotoPreview, setFotoPreview]   = useState<string | null>(null)
-  const [docFiles, setDocFiles]         = useState<Record<string, File | null>>({})
-  const [loading, setLoading]           = useState(false)
-  const [error, setError]               = useState('')
-  const [success, setSuccess]           = useState(false)
+  const etapas: { label: string; campos: (keyof AutoCadastroInput)[] }[] = [
+    { label: 'Dados pessoais', campos: ['cpf', 'rg', 'nascimento', 'telefone', 'email', 'grau_instrucao', 'dependentes'] },
+    { label: pj ? 'Dados bancários' : 'Trabalho e banco', campos: ['pis_pasep', 'serie_ctps', 'certificado_reservista', 'dados_bancarios'] },
+    { label: 'Documentos', campos: [] },
+    { label: 'Foto', campos: [] },
+  ]
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    const faltando = obrigatorios.filter((d) => !docFiles[d.key] && !docsExistentes.includes(d.key))
-    if (faltando.length) { setError(`Envie: ${faltando.map((d) => d.label).join(', ')}.`); return }
-    setLoading(true)
+  const [etapa, setEtapa] = useState(0)
+  const ultima = etapa === etapas.length - 1
+  const [arquivos, setArquivos] = useState<Record<string, File | undefined>>({})
+  const [docsFaltando, setDocsFaltando] = useState<string[]>([])
+  const [foto, setFoto] = useState<File | null>(null)
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [enviado, setEnviado] = useState(false)
 
-    const fd = new FormData()
-    fd.set('cpf', cpf)
-    fd.set('rg', rg)
-    fd.set('nascimento', nascimento)
-    fd.set('telefone', telefone)
-    fd.set('email', email)
-    fd.set('grau_instrucao', grauInstrucao)
-    fd.set('dependentes', dependentes)
-    fd.set('pis_pasep', pisPasep)
-    fd.set('serie_ctps', serieCtps)
-    fd.set('certificado_reservista', certReservista)
-    fd.set('dados_bancarios', dadosBancarios)
-    if (fotoFile) fd.set('doc_foto', fotoFile)
-    for (const slot of slots) {
-      const file = docFiles[slot.key]
-      if (file) fd.set(`doc_${slot.key}`, file)
+  const { register, handleSubmit, trigger, setValue, formState: { errors } } = useForm<AutoCadastroInput>({
+    resolver: zodResolver(autoCadastroSchema(pj)),
+    defaultValues: { ...inicial, cpf: maskCpf(inicial.cpf), telefone: maskTelefone(inicial.telefone) },
+  })
+
+  useEffect(() => () => { if (fotoPreview) URL.revokeObjectURL(fotoPreview) }, [fotoPreview])
+
+  const faltando = () => obrigatorios.filter((d) => !arquivos[d.key] && !docsExistentes.includes(d.key))
+
+  async function avancar() {
+    if (etapas[etapa].campos.length && !(await trigger(etapas[etapa].campos, { shouldFocus: true }))) {
+      toast.error('Confira os campos destacados.')
+      return
     }
-
-    const result = await submitOnboardingAction(token, fd)
-    setLoading(false)
-    if ('error' in result && result.error) { setError(result.error); return }
-    setSuccess(true)
+    if (etapas[etapa].label === 'Documentos' && faltando().length) {
+      setDocsFaltando(faltando().map((d) => d.key))
+      toast.error(`Anexe: ${faltando().map((d) => d.label).join(', ')}.`)
+      return
+    }
+    setErro('')
+    setEtapa((e) => e + 1)
   }
 
-  if (success) {
+  function escolher(key: string, file: File | undefined) {
+    if (!file) return
+    if (file.size > MAX_ARQUIVO) { toast.error(`"${file.name}" passa de 20 MB.`); return }
+    setArquivos((a) => ({ ...a, [key]: file }))
+    setDocsFaltando((f) => f.filter((k) => k !== key))
+  }
+
+  async function enviar(d: AutoCadastroInput) {
+    setEnviando(true)
+    setErro('')
+    const fd = new FormData()
+    for (const [k, v] of Object.entries(d)) fd.set(k, v)
+    if (foto) fd.set('doc_foto', foto)
+    for (const doc of documentos) {
+      const file = arquivos[doc.key]
+      if (file) fd.set(`doc_${doc.key}`, file)
+    }
+    const r = await enviarDados(fd)
+    setEnviando(false)
+    if (r.error) { setErro(r.error); return }
+    if (onConcluido) { onConcluido(); return }
+    setEnviado(true)
+  }
+
+  function invalido(erros: FieldErrors<AutoCadastroInput>) {
+    // Um campo de etapa anterior ficou com problema: volta para ela
+    const i = etapas.findIndex((e) => e.campos.some((c) => erros[c]))
+    if (i >= 0) setEtapa(i)
+    toast.error('Confira os campos destacados.')
+  }
+
+  function handleForm(e: React.FormEvent<HTMLFormElement>) {
+    // Enter nas etapas intermediárias avança em vez de enviar
+    if (!ultima) { e.preventDefault(); void avancar(); return }
+    void handleSubmit(enviar, invalido)(e)
+  }
+
+  if (enviado) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center max-w-sm">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-5"
-            style={{ backgroundColor: '#D5F5E3' }}
-          >
-            ✅
-          </div>
-          <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Dados enviados!
-          </h2>
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            Obrigado, {firstName}! Suas informações foram recebidas com sucesso pela equipe de {companyName}.
-          </p>
-        </div>
-      </div>
+      <PublicoAviso
+        icon="check"
+        tom="sucesso"
+        titulo="Dados enviados"
+        texto={`Obrigado, ${primeiroNome}! Suas informações foram recebidas pela equipe da ${companyName}, que entrará em contato com os próximos passos.`}
+      />
     )
   }
 
-  const lbl: React.CSSProperties = {
-    color: 'var(--color-text-secondary)',
-    fontSize: '0.75rem',
-    fontWeight: 500,
-    marginBottom: 4,
-    display: 'block',
-  }
-  const sec: React.CSSProperties = {
-    color: 'var(--color-primary-darker)',
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    marginBottom: 12,
-    paddingBottom: 8,
-    borderBottom: '1px solid var(--color-bg-surface)',
-    letterSpacing: '0.05em',
-  }
-  const card: React.CSSProperties = {
-    backgroundColor: 'white',
-    borderRadius: '0.75rem',
-    border: '1px solid var(--color-bg-surface)',
-    padding: '1.5rem',
-  }
-
   return (
-    <div className="min-h-screen px-4 py-8" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <div className="max-w-2xl mx-auto">
+    <>
+    {/* Página do candidato: saudação fora da caixa, na cor da empresa */}
+    {!painel && (
+      <div>
+        <h2 className="text-2xl sm:text-3xl font-extrabold" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Olá, {nomeTitulo}!</h2>
+        <p className="text-base mt-1 font-medium" style={{ color: 'var(--color-brand)' }}>Confira o que já está preenchido e complete o restante.</p>
+      </div>
+    )}
+    {/* Página do candidato: letra um pouco maior nos campos e nos textos de apoio (no painel, o tamanho do sistema) */}
+    <div className={[
+      semCartao ? '' : 'app-card p-6 sm:p-8',
+      painel ? '' : '[&_label]:text-[15px] [&_input]:text-base [&_select]:text-base [&_textarea]:text-base [&_form_p.text-sm]:text-[15px]',
+    ].join(' ')}>
+      <Stepper labels={etapas.map((e) => e.label)} step={etapa} onSelect={setEtapa} />
 
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Seus Dados de Admissão
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            {companyName} · {employeeName}
-          </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            Preencha seus dados pessoais e faça upload dos documentos solicitados.
-          </p>
+      {/* Todas as etapas ficam no mesmo formulário (só escondidas), para não perder o que foi digitado */}
+      <form onSubmit={handleForm} noValidate className="flex flex-col gap-5">
+        {/* ── 1. Dados pessoais ── */}
+        <div className={etapa === 0 ? 'flex flex-col gap-4' : 'hidden'}>
+          {painel && (
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Confira o que já está preenchido e complete o restante.</p>
+          )}
+          {/* Três colunas em telas largas: CPF, RG, nascimento / telefone, e-mail (duplo) / grau, dependentes */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <Input label="CPF *" inputMode="numeric" placeholder="000.000.000-00" error={errors.cpf?.message}
+              {...register('cpf', { onChange: (e) => setValue('cpf', maskCpf(e.target.value)) })} />
+            <Input label="RG *" error={errors.rg?.message} {...register('rg')} />
+            <Input label="Data de nascimento *" type="date" error={errors.nascimento?.message} {...register('nascimento')} />
+            <Input label="Telefone / WhatsApp *" inputMode="tel" placeholder="(00) 00000-0000" error={errors.telefone?.message}
+              {...register('telefone', { onChange: (e) => setValue('telefone', maskTelefone(e.target.value)) })} />
+            <div className="sm:col-span-2">
+              <Input label="E-mail *" type="email" placeholder="seu@email.com" error={errors.email?.message} {...register('email')} />
+            </div>
+            <Select label="Grau de instrução *" options={GRAU_OPTIONS} placeholder="Selecionar..." error={errors.grau_instrucao?.message} {...register('grau_instrucao')} />
+            {!pj && <Input label="Dependentes (IR) *" type="number" min={0} error={errors.dependentes?.message} {...register('dependentes')} />}
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
-
-            {/* Foto de perfil */}
-            <div style={card}>
-              <p style={sec}>FOTO DE PERFIL</p>
-              <div className="flex items-center gap-5">
-                <div className="relative shrink-0">
-                  <div
-                    className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center"
-                    style={{
-                      backgroundColor: fotoPreview ? 'transparent' : 'var(--color-bg-surface)',
-                      border: '2px solid var(--color-bg-surface)',
-                    }}
-                  >
-                    {fotoPreview
-                      ? <img src={fotoPreview} alt="Foto" className="w-full h-full object-cover" />
-                      : <span className="text-3xl">👤</span>
-                    }
-                  </div>
-                  <label
-                    className="absolute bottom-0 right-0 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer text-white text-xs"
-                    style={{ backgroundColor: 'var(--color-primary-dark)' }}
-                  >
-                    ✏️
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={e => {
-                        const f = e.target.files?.[0]
-                        if (f) { setFotoFile(f); setFotoPreview(URL.createObjectURL(f)) }
-                        e.target.value = ''
-                      }}
-                    />
-                  </label>
-                </div>
-                <div>
-                  <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                    {fotoPreview ? 'Foto selecionada' : 'Sem foto'}
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                    Clique no lápis para selecionar uma imagem
-                  </p>
-                  {fotoPreview && (
-                    <button
-                      type="button"
-                      onClick={() => { setFotoFile(null); setFotoPreview(null) }}
-                      className="text-xs mt-1.5"
-                      style={{ color: 'var(--color-error)' }}
-                    >
-                      Remover foto
-                    </button>
-                  )}
-                </div>
-              </div>
+        {/* ── 2. Trabalho e banco ── */}
+        <div className={etapa === 1 ? 'flex flex-col gap-4' : 'hidden'}>
+          {!pj && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <Input label="PIS / PASEP *" placeholder="000.00000.00-0" error={errors.pis_pasep?.message} {...register('pis_pasep')} />
+              <Input label="Série da CTPS *" placeholder="Ex.: 001" error={errors.serie_ctps?.message} {...register('serie_ctps')} />
+              <Input label="Certificado de reservista" placeholder="Nº / categoria" {...register('certificado_reservista')} />
             </div>
-
-          {/* 1 — Dados Pessoais */}
-            <div style={card}>
-              <p style={sec}>1. DADOS PESSOAIS</p>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label style={lbl}>CPF *</label>
-                    <Input value={cpf} onChange={e => setCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" required />
-                  </div>
-                  <div>
-                    <label style={lbl}>RG *</label>
-                    <Input value={rg} onChange={e => setRg(e.target.value)} placeholder="RG" required />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label style={lbl}>Data de Nascimento *</label>
-                    <Input type="date" value={nascimento} onChange={e => setNascimento(e.target.value)} required />
-                  </div>
-                  <div>
-                    <label style={lbl}>Telefone / WhatsApp *</label>
-                    <Input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(21) 99999-0000" required />
-                  </div>
-                </div>
-                <div>
-                  <label style={lbl}>E-mail *</label>
-                  <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" required />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label style={lbl}>Grau de Instrução *</label>
-                    <select
-                      value={grauInstrucao}
-                      onChange={e => setGrau(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 rounded-lg border text-sm"
-                      style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                    >
-                      <option value="">Selecionar...</option>
-                      {GRAU_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={lbl}>Dependentes (IR) *</label>
-                    <Input type="number" min={0} value={dependentes} onChange={e => setDependentes(e.target.value)} placeholder="0" required />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 2 — Dados Complementares */}
-            <div style={card}>
-              <p style={sec}>2. DADOS COMPLEMENTARES</p>
-              <div className="space-y-3">
-                {!pj && <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label style={lbl}>PIS / PASEP *</label>
-                    <Input value={pisPasep} onChange={e => setPisPasep(e.target.value)} placeholder="000.00000.00-0" required />
-                  </div>
-                  <div>
-                    <label style={lbl}>Série da CTPS *</label>
-                    <Input value={serieCtps} onChange={e => setSerieCtps(e.target.value)} placeholder="Ex: 001" required />
-                  </div>
-                </div>}
-                {!pj && <div>
-                  <label style={lbl}>Certificado de Reservista</label>
-                  <Input value={certReservista} onChange={e => setCertReservista(e.target.value)} placeholder="Nº / categoria" />
-                </div>}
-                <div>
-                  <label style={lbl}>Dados Bancários *</label>
-                  <textarea
-                    value={dadosBancarios}
-                    onChange={e => setDadosBancarios(e.target.value)}
-                    placeholder="Banco, agência, conta corrente e/ou chave PIX"
-                    rows={2}
-                    required
-                    className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
-                    style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* 3 — Documentos */}
-            <div style={card}>
-              <p style={sec}>3. DOCUMENTOS</p>
-              <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
-                Obrigatórios: {obrigatorios.map((d) => d.label).join(', ')}. Os demais são opcionais. Aceita imagens (JPG, PNG) e PDF até 20 MB.
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                {slots.map(slot => {
-                  const file = docFiles[slot.key] ?? null
-                  const isImage = file?.type.startsWith('image/')
-                  const preview = isImage ? URL.createObjectURL(file!) : null
-                  return (
-                    <div
-                      key={slot.key}
-                      className="border rounded-xl p-3 text-center flex flex-col items-center gap-2"
-                      style={{
-                        borderColor: file ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)',
-                        backgroundColor: file ? 'var(--color-primary)' : 'white',
-                        minHeight: 120,
-                      }}
-                    >
-                      <p className="text-xs font-medium leading-tight" style={{ color: 'var(--color-text-secondary)' }}>
-                        {slot.label}{obrigatorios.some((d) => d.key === slot.key) && ' *'}
-                      </p>
-                      {!file && docsExistentes.includes(slot.key) && (
-                        <p className="text-xs" style={{ color: '#15803D' }}>Já enviado</p>
-                      )}
-                      {file ? (
-                        <>
-                          {preview
-                            ? <img src={preview} alt={slot.label} className="w-14 h-14 object-cover rounded-lg border" />
-                            : (
-                              <div
-                                className="w-14 h-14 rounded-lg flex items-center justify-center text-2xl"
-                                style={{ backgroundColor: 'var(--color-bg-surface)' }}
-                              >
-                                📄
-                              </div>
-                            )
-                          }
-                          <p className="text-xs truncate w-full" style={{ color: 'var(--color-text-muted)' }} title={file.name}>
-                            {file.name}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setDocFiles(p => ({ ...p, [slot.key]: null }))}
-                            className="text-xs px-2 py-0.5 rounded border hover:bg-red-50"
-                            style={{ color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
-                          >
-                            Remover
-                          </button>
-                        </>
-                      ) : (
-                        <label className="cursor-pointer flex flex-col items-center gap-1 flex-1 justify-center">
-                          <span className="text-2xl">📎</span>
-                          <span className="text-xs" style={{ color: 'var(--color-primary-darker)' }}>Selecionar</span>
-                          <input
-                            type="file"
-                            accept={slot.accept}
-                            className="hidden"
-                            onChange={e => {
-                              const f = e.target.files?.[0]
-                              if (f) setDocFiles(p => ({ ...p, [slot.key]: f }))
-                              e.target.value = ''
-                            }}
-                          />
-                        </label>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-          </div>
-
-          {error && (
-            <p className="text-sm p-3 rounded-lg bg-red-50 mt-4" style={{ color: 'var(--color-error)' }}>
-              {error}
-            </p>
           )}
-
-          <div className="flex justify-end mt-6 pb-8">
-            <Button type="submit" loading={loading}>
-              Enviar dados
-            </Button>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="dados-bancarios" className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Dados bancários *</label>
+            <textarea
+              id="dados-bancarios"
+              rows={3}
+              placeholder="Banco, agência, conta corrente e/ou chave PIX"
+              aria-invalid={!!errors.dados_bancarios || undefined}
+              className={`w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 ${errors.dados_bancarios ? 'border-red-400 focus:ring-red-300' : 'focus:ring-[var(--color-brand)]'}`}
+              style={{ borderColor: errors.dados_bancarios ? undefined : 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
+              {...register('dados_bancarios')}
+            />
+            {errors.dados_bancarios && <p className="text-xs" style={{ color: 'var(--color-error)' }}>{errors.dados_bancarios.message}</p>}
           </div>
+        </div>
 
-          <p className="text-xs text-center -mt-4 pb-4" style={{ color: 'var(--color-text-muted)' }}>
+        {/* ── 3. Documentos ── */}
+        <div className={etapa === 2 ? 'flex flex-col gap-3' : 'hidden'}>
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            Obrigatórios: {obrigatorios.map((d) => d.label).join(', ')}. Imagem (JPG, PNG) ou PDF, até 20 MB cada.
+          </p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {documentos.map((d) => {
+              const file = arquivos[d.key]
+              const obrigatorio = obrigatorios.some((o) => o.key === d.key)
+              const jaEnviado = docsExistentes.includes(d.key)
+              const tem = !!file || jaEnviado
+              const destacar = docsFaltando.includes(d.key)
+              return (
+                <li
+                  key={d.key}
+                  className="flex items-center gap-3 rounded-xl border px-3.5 py-3"
+                  style={{
+                    borderColor: destacar ? '#F87171' : tem ? 'var(--color-brand)' : 'var(--color-card-border)',
+                    backgroundColor: tem ? 'var(--color-brand-light)' : '#fff',
+                  }}
+                >
+                  <span className="shrink-0" style={{ color: tem ? 'var(--color-brand)' : 'var(--color-text-muted)' }}><Icon name="file" size={18} /></span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>{d.label}{obrigatorio && ' *'}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{file ? file.name : jaEnviado ? 'Já enviado' : obrigatorio ? 'Obrigatório' : 'Opcional'}</p>
+                  </div>
+                  {file ? (
+                    <button type="button" onClick={() => setArquivos((a) => ({ ...a, [d.key]: undefined }))} className="text-xs font-medium px-2 py-1 rounded-lg shrink-0 hover:bg-white/70" style={{ color: '#B91C1C' }}>
+                      Remover
+                    </button>
+                  ) : (
+                    <label className="text-xs font-medium px-2 py-1 rounded-lg cursor-pointer shrink-0 hover:bg-[var(--color-brand-light)]" style={{ color: 'var(--color-brand)' }}>
+                      {jaEnviado ? 'Trocar' : 'Anexar'}
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => { escolher(d.key, e.target.files?.[0]); e.target.value = '' }} />
+                    </label>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+
+        {/* ── 4. Foto ── */}
+        <div className={etapa === 3 ? 'flex flex-col gap-4' : 'hidden'}>
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{painel ? 'Opcional: a foto aparece na ficha do funcionário.' : 'Opcional: a foto aparece na sua ficha na empresa.'}</p>
+          <FotoPicker
+            preview={fotoPreview}
+            alt="Sua foto"
+            onPick={(file) => { setFoto(file); setFotoPreview(URL.createObjectURL(file)) }}
+            onRemove={() => { setFoto(null); setFotoPreview(null) }}
+            disabled={enviando}
+          />
+        </div>
+
+        {erro && <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: '#B91C1C' }} role="alert">{erro}</p>}
+
+        <div className="flex items-center justify-between gap-2 pt-2">
+          {etapa > 0 ? (
+            <Button type="button" variant="secondary" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-card-border-hover)' }} onClick={() => setEtapa((e) => e - 1)} disabled={enviando}>Voltar</Button>
+          ) : <span />}
+          {ultima ? (
+            <Button key="enviar" type="submit" loading={enviando} style={{ color: 'var(--cor-sobre-marca, #fff)' }}>{painel ? 'Salvar dados' : 'Enviar dados'}</Button>
+          ) : (
+            <Button key="avancar" type="button" style={{ color: 'var(--cor-sobre-marca, #fff)' }} onClick={avancar}>Avançar</Button>
+          )}
+        </div>
+
+        {!painel && (
+          <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
             Seus dados são protegidos e usados exclusivamente para fins trabalhistas.
           </p>
-
-        </form>
-      </div>
+        )}
+      </form>
     </div>
+    </>
   )
 }

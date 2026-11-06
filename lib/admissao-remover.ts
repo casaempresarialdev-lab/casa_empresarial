@@ -2,7 +2,8 @@ import type { createAdminClient } from '@/lib/supabase/server'
 
 type Admin = ReturnType<typeof createAdminClient>
 
-const COLS_ARQUIVOS = 'foto_path, doc_rg_cnh_frente_path, doc_rg_verso_path, doc_exame_admissional_path, doc_cpf_path, doc_comprovante_residencia_path, doc_titulo_eleitor_path, doc_ctps_path, doc_pis_path, doc_certidao_path, doc_carta_proposta_path'
+/** Colunas de arquivo do cadastro: a foto e os documentos (doc_*_path) */
+const ehArquivo = (coluna: string) => coluna === 'foto_path' || (coluna.startsWith('doc_') && coluna.endsWith('_path'))
 
 /** Cancela as entrevistas ainda por acontecer e tira os eventos da agenda (a pessoa saiu da etapa) */
 export async function cancelarEntrevistasFuturas(admin: Admin, employeeId: string, companyId: string) {
@@ -36,7 +37,8 @@ export async function removerDaAdmissao(admin: Admin, opcoes: {
 
   const { data: emp } = await admin
     .from('employees')
-    .select(`id, ${COLS_ARQUIVOS}`)
+    // '*': as colunas de documentos variam conforme as migrations aplicadas
+    .select('*')
     .eq('id', employeeId)
     .eq('company_id', companyId)
     .eq('status', 'admissao')
@@ -56,7 +58,7 @@ export async function removerDaAdmissao(admin: Admin, opcoes: {
 
   if (cand) {
     await admin.from('admission_notes').insert({
-      company_id: companyId, employee_id: employeeId, application_id: cand.id, texto, autor_id: autorId, autor_nome: autorNome,
+      company_id: companyId, employee_id: employeeId, application_id: cand.id, texto, tipo: 'evento', autor_id: autorId, autor_nome: autorNome,
     })
     const { error } = await admin
       .from('job_applications')
@@ -67,13 +69,17 @@ export async function removerDaAdmissao(admin: Admin, opcoes: {
     await admin.from('admission_notes').delete().eq('employee_id', employeeId).eq('company_id', companyId)
     await admin.from('admission_interviews').delete().eq('employee_id', employeeId).eq('company_id', companyId)
     await admin.from('admission_offers').delete().eq('employee_id', employeeId).eq('company_id', companyId)
+    // Exames: os ASOs ficam no armazenamento só enquanto há histórico (aqui, sem candidatura, não há)
+    const { data: exames } = await admin.from('admission_exams').delete().eq('employee_id', employeeId).eq('company_id', companyId).select('aso_path')
+    const asos = (exames ?? []).map((e) => (e as { aso_path?: string | null }).aso_path).filter((p): p is string => !!p)
+    if (asos.length) await admin.storage.from('documentos').remove(asos)
   }
 
   const { error } = await admin.from('employees').delete().eq('id', employeeId).eq('company_id', companyId)
   if (error) return { error: error.message }
 
   const arquivos = Object.entries(emp as unknown as Record<string, unknown>)
-    .filter(([k, v]) => k !== 'id' && typeof v === 'string' && v)
+    .filter(([k, v]) => ehArquivo(k) && typeof v === 'string' && v)
     .map(([, v]) => v as string)
   if (arquivos.length) await admin.storage.from('documentos').remove(arquivos)
   return {}

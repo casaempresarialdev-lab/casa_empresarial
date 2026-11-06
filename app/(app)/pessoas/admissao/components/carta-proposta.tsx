@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/lib/toast'
 import { cartaSchema, fmtDataHora, preencherModelo, type CartaInput } from '@/lib/validations/admissao'
-import { enviarCartaAction } from '../actions'
+import { Modal } from '@/components/ui/modal'
+import { enviarCartaAction, registrarAceiteAction } from '../actions'
 import { getEmployeeDocUrlAction } from '../../funcionarios/actions'
 import { fmtDate, fmtMoney, tipoLabel } from '../../funcionarios/components/ficha/ficha-config'
 import type { Carta, ConfigAdmissao, EmAdmissao } from '../queries'
@@ -23,13 +24,17 @@ interface Props {
   companyId: string
 }
 
-// Etapa "Enviar carta proposta": preparar e enviar; depois, acompanhar a resposta
+// Etapa "Enviar carta proposta": enviar ou reenviar a carta, ou registrar o aceite no painel (candidato aceitou
+// pessoalmente). O aceite libera o preenchimento dos dados.
 export function CartaProposta({ emp, carta, config, empresa, companyId }: Props) {
   const router = useRouter()
   const [abrirForm, setAbrirForm] = useState(false)
   const [linkEnviado, setLinkEnviado] = useState<string | null>(null)
   const [baixando, setBaixando] = useState(false)
   const [agora] = useState(() => Date.now())
+  // Aceite no painel: da carta que aguarda resposta, ou do formulário (sem enviar e-mail)
+  const [aceite, setAceite] = useState<{ modo: 'enviada' } | { modo: 'form'; dados: CartaInput } | null>(null)
+  const [registrando, setRegistrando] = useState(false)
 
   const expirada = carta?.status === 'enviada' && Date.parse(carta.expira_em) < agora
   const aguardando = carta?.status === 'enviada' && !expirada
@@ -87,6 +92,26 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
     void handleSubmit(enviar)()
   }
 
+  // Mesmo texto da tela no aceite sem envio
+  function pedirAceiteSemEnviar() {
+    setValue('conteudo', textoAtual)
+    void handleSubmit((d) => setAceite({ modo: 'form', dados: { ...d, conteudo: textoAtual } }))()
+  }
+
+  async function confirmarAceite() {
+    if (!aceite) return
+    setRegistrando(true)
+    const r = await toast.promise(registrarAceiteAction(companyId, emp.id, aceite.modo === 'form' ? aceite.dados : null), {
+      loading: 'Registrando o aceite…',
+      success: 'Aceite registrado. Agora é o preenchimento dos dados.',
+      error: 'Não foi possível registrar o aceite.',
+    })
+    setRegistrando(false)
+    if ('error' in r) return
+    setAceite(null)
+    router.refresh()
+  }
+
   async function copiarLink(link: string) {
     await navigator.clipboard.writeText(link)
     toast('Link copiado.')
@@ -108,7 +133,9 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
       <div className="rounded-xl border p-3.5 flex flex-wrap items-center justify-between gap-3" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
         <div>
           <p className="text-sm font-semibold" style={{ color: '#15803D' }}>Aceita em {fmtDataHora(carta.respondida_em!)}</p>
-          {carta.resposta_ip && <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>IP {carta.resposta_ip}</p>}
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            {carta.aceite_registrado_por ? `Aceite registrado no painel por ${carta.aceite_registrado_por}` : carta.resposta_ip ? `Pelo link · IP ${carta.resposta_ip}` : 'Pelo link'}
+          </p>
         </div>
         {carta.pdf_path && <Button type="button" variant="secondary" size="sm" onClick={baixarPdf} loading={baixando}>Baixar PDF</Button>}
       </div>
@@ -126,7 +153,8 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" size="sm" onClick={() => copiarLink(linkEnviado ?? linkPublico)}>Copiar link</Button>
-            {!abrirForm && <Button type="button" variant="ghost" size="sm" onClick={() => setAbrirForm(true)}>Enviar nova carta</Button>}
+            {!abrirForm && <Button type="button" variant="secondary" size="sm" onClick={() => setAbrirForm(true)}>Reenviar carta</Button>}
+            <Button type="button" size="sm" onClick={() => setAceite({ modo: 'enviada' })}>Registrar aceite</Button>
           </div>
         </div>
       )}
@@ -175,12 +203,29 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
           </div>
           <div className="flex justify-end gap-2">
             {abrirForm && aguardando && <Button type="button" variant="secondary" size="sm" onClick={() => setAbrirForm(false)}>Cancelar</Button>}
+            <Button type="button" variant="secondary" size="sm" onClick={pedirAceiteSemEnviar}>Registrar aceite sem enviar</Button>
             <Button type="submit" size="sm" loading={isSubmitting}>
               {emp.email ? `Enviar para ${emp.email}` : 'Enviar carta'}
             </Button>
           </div>
         </form>
       )}
+
+      <Modal open={!!aceite} onClose={() => { if (!registrando) setAceite(null) }} title="Registrar aceite da carta proposta">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            Use quando {emp.nome.split(' ')[0]} aceitou a proposta pessoalmente.
+            {aceite?.modo === 'form' ? ' A carta é registrada como está, sem enviar e-mail.' : ' Vale a carta que está aguardando resposta, e o link enviado deixa de funcionar.'}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            Fica registrado que o aceite foi feito por você no painel, com data e hora, e o PDF da carta vai para os arquivos. Em seguida vem o preenchimento dos dados.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setAceite(null)} disabled={registrando}>Cancelar</Button>
+            <Button type="button" onClick={confirmarAceite} loading={registrando}>Registrar aceite</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

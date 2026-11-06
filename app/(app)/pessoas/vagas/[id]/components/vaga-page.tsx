@@ -17,10 +17,11 @@ interface Props {
   companyId: string
   companyBenefits: CompanyBenefit[]
   abrirDados: boolean
+  avisaReprovacao: boolean
 }
 
 // Vaga: candidaturas recebidas + abas com os dados da vaga
-export function VagaPage({ vaga, candidaturas, companyId, companyBenefits, abrirDados }: Props) {
+export function VagaPage({ vaga, candidaturas, companyId, companyBenefits, abrirDados, avisaReprovacao }: Props) {
   const router = useRouter()
   const encerrada = vaga.status === 'encerrada'
 
@@ -65,7 +66,7 @@ export function VagaPage({ vaga, candidaturas, companyId, companyBenefits, abrir
             companyBenefits={companyBenefits}
             abasExtras={[{
               label: `Candidaturas (${candidaturas.length})`,
-              content: <CandidaturasLista candidaturas={candidaturas} companyId={companyId} />,
+              content: <CandidaturasLista candidaturas={candidaturas} companyId={companyId} avisaReprovacao={avisaReprovacao} />,
             }]}
             abrirDados={abrirDados}
             acoes={

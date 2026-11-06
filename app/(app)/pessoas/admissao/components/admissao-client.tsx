@@ -4,25 +4,17 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { AddButton } from '@/components/ui/add-button'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Modal } from '@/components/ui/modal'
-import { Icon } from '@/components/ui/icon'
 import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-select'
 import { toast } from '@/lib/toast'
 import { fmtDataHora } from '@/lib/validations/admissao'
-import { finalizarAdmissaoAction, moverEtapaAction } from '../actions'
-import { ETAPAS, ETAPA_CARTA, ETAPA_FINAL, ETAPA_INICIAL, isEtapa, type EtapaKey } from '../etapas'
+import { moverEtapaAction } from '../actions'
+import { ETAPAS, ETAPA_CARTA, ETAPA_EXAME, ETAPA_FINAL, ETAPA_INICIAL, ETAPA_RESULTADO_EXAME, isEtapa, type EtapaKey,
+  ETAPA_AGUARDAR_CONTABILIDADE, ETAPA_CONTABILIDADE, ETAPA_CONTRATO,
+} from '../etapas'
 import { iniciais } from '../../funcionarios/components/ficha/ficha-config'
-import { PainelAdmissao } from './painel-admissao'
-import type { Carta, ConfigAdmissao, EmAdmissao, Entrevistador, Historico, OnboardingTokenInfo } from '../queries'
+import type { Carta, EmAdmissao, Exame, Historico, OnboardingTokenInfo } from '../queries'
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
-
-function hojeIso() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 function situacaoLink(t: OnboardingTokenInfo | undefined): 'none' | 'pending' | 'done' | 'expired' {
   if (!t) return 'none'
@@ -52,24 +44,17 @@ interface Props {
   companyId: string
   photoUrls: Record<string, string>
   historicos: Record<string, Historico>
-  entrevistadores: Entrevistador[]
-  usuarioId: string
   cartas: Record<string, Carta>
-  config: ConfigAdmissao
-  empresa: string
+  exames: Record<string, Exame[]>
 }
 
-export function AdmissaoClient({ employees, tokens, photoUrls, companyId, historicos, entrevistadores, usuarioId, cartas, config, empresa }: Props) {
+export function AdmissaoClient({ employees, tokens, photoUrls, companyId, historicos, cartas, exames }: Props) {
   const router = useRouter()
   // Movimento já mostrado na tela enquanto o servidor confirma
   const [movidos, setMovidos] = useState<Record<string, EtapaKey>>({})
   const [arrastando, setArrastando] = useState<string | null>(null)
   const [sobre, setSobre] = useState<EtapaKey | null>(null)
   const [movendo, setMovendo] = useState<string | null>(null)
-  const [aberto, setAberto] = useState<string | null>(null)
-  const [finalizar, setFinalizar] = useState<EmAdmissao | null>(null)
-  const [dataAdmissao, setDataAdmissao] = useState('')
-  const [finalizando, setFinalizando] = useState(false)
 
   const [vagaFiltro, setVagaFiltro] = useState('todas')
   const [busca, setBusca] = useState('')
@@ -93,21 +78,30 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
     .filter((e) => vagaFiltro === 'todas' || (vagaFiltro === 'sem' ? !e.vaga : e.vaga?.id === vagaFiltro))
     .filter((e) => !q || e.nome.toLowerCase().includes(q) || (e.cargo ?? '').toLowerCase().includes(q) || (e.vaga?.titulo ?? '').toLowerCase().includes(q))
 
-  function pedirFinalizacao(e: EmAdmissao) {
-    setAberto(null)
-    setDataAdmissao(e.data_admissao ?? hojeIso())
-    setFinalizar(e)
-  }
-
   async function mover(e: EmAdmissao, etapa: EtapaKey) {
     if (etapaDe(e) === etapa) return
-    // Da entrevista só se sai com a decisão, que fica no card
+    // Da entrevista só se sai com a decisão, que fica na ficha de admissão
     if (etapaDe(e) === ETAPA_INICIAL) {
-      setAberto(e.id)
-      toast.error('Registre a decisão da entrevista: aprovar ou reprovar.')
+      toast.error('Abra a ficha de admissão para aprovar ou reprovar a entrevista.')
       return
     }
-    if (etapa === ETAPA_FINAL) { pedirFinalizacao(e); return }
+    // Do exame só se sai pela ficha, encaminhando o candidato
+    const avancando = ETAPAS.findIndex((x) => x.key === etapa) > ETAPAS.findIndex((x) => x.key === etapaDe(e))
+    if (etapaDe(e) === ETAPA_EXAME && avancando) {
+      toast.error('Abra a ficha de admissão e encaminhe o candidato para o exame: o card segue sozinho.')
+      return
+    }
+    if (etapaDe(e) === ETAPA_RESULTADO_EXAME && avancando) {
+      toast.error('Abra a ficha de admissão e registre o resultado do exame: o card segue sozinho.')
+      return
+    }
+    // Arrastando, só para trás: para frente, cada etapa avança pela ação dela na ficha (o fim, com o contrato assinado)
+    if (avancando) {
+      toast.error(etapa === ETAPA_FINAL
+        ? 'Abra a ficha de admissão e anexe o contrato assinado para finalizar.'
+        : 'Abra a ficha de admissão: cada etapa avança pela ação dela.')
+      return
+    }
     setMovendo(e.id)
     setMovidos((m) => ({ ...m, [e.id]: etapa }))
     const r = await moverEtapaAction(e.id, companyId, etapa)
@@ -117,26 +111,12 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
     if ('error' in r) toast.error(r.error ?? 'Não foi possível mover.')
   }
 
-  async function confirmarFinalizacao() {
-    const e = finalizar
-    if (!e) return
-    setFinalizando(true)
-    const r = await toast.promise(finalizarAdmissaoAction(e.id, companyId, dataAdmissao), {
-      loading: 'Finalizando a admissão…',
-      success: `${e.nome} entrou na Equipe.`,
-      error: 'Não foi possível finalizar.',
-    })
-    setFinalizando(false)
-    if ('error' in r) return
-    setFinalizar(null)
-    router.refresh()
-  }
-
-  const selecionado = employees.find((e) => e.id === aberto) ?? null
   const [agora] = useState(() => Date.now())
 
   return (
     <>
+      {/* Ocupa a tela toda na vertical: altura da janela menos o espaçamento da área de conteúdo (ver app/(app)/layout.tsx) */}
+      <div className="flex flex-col min-h-[calc(100dvh-5.5rem)] md:min-h-[calc(100dvh-3rem)]">
       <div className="mb-6">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
@@ -146,7 +126,7 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
         </div>
       </div>
 
-      <div className="app-card p-5 flex flex-col gap-4">
+      <div className="app-card p-5 flex flex-col gap-4 flex-1">
         {/* Título e subtítulo + "Nova admissão" à direita */}
         <div>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -174,9 +154,9 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
         </div>
 
         {/* Kanban: etapas fixas, na ordem do fluxo */}
-        <div className="overflow-x-auto pb-2 -mx-1 px-1">
-          <div className="flex gap-3" style={{ minWidth: `${ETAPAS.length * 252}px` }}>
-            {ETAPAS.map((etapa, i) => {
+        <div className="overflow-x-auto pb-2 -mx-1 px-1 flex-1 flex flex-col">
+          <div className="flex gap-3 flex-1" style={{ minWidth: `${ETAPAS.length * 252}px` }}>
+            {ETAPAS.map((etapa) => {
               const cards = visiveis.filter((e) => etapaDe(e) === etapa.key)
               const destacar = sobre === etapa.key
               const final = etapa.key === ETAPA_FINAL
@@ -186,8 +166,9 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
                   aria-label={etapa.label}
                   className="flex flex-col rounded-xl flex-1 min-w-[240px]"
                   style={{
-                    backgroundColor: destacar ? `${etapa.color}14` : 'var(--color-bg-surface)',
-                    border: `2px solid ${destacar ? etapa.color : 'transparent'}`,
+                    // Cor primária bem transparente; mais forte ao arrastar um card por cima
+                    backgroundColor: `color-mix(in srgb, var(--color-brand) ${destacar ? 20 : 10}%, transparent)`,
+                    border: `2px solid ${destacar ? 'var(--color-brand)' : 'transparent'}`,
                     transition: 'background-color 0.15s, border-color 0.15s',
                   }}
                   onDragOver={(ev) => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; setSobre(etapa.key) }}
@@ -201,10 +182,9 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
                   }}
                 >
                   <header className="flex items-center gap-2 px-3 pt-3 pb-2">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: etapa.color }} />
-                    <h3 className="text-xs font-semibold flex-1" style={{ color: 'var(--color-text-secondary)' }}>{etapa.label}</h3>
+                    <h3 className="text-xs font-bold flex-1" style={{ color: 'var(--color-brand)' }}>{etapa.label}</h3>
                     {!final && (
-                      <span className="text-xs rounded-full px-1.5 py-0.5 font-semibold shrink-0" style={{ backgroundColor: `${etapa.color}22`, color: 'var(--color-text-secondary)' }}>
+                      <span className="text-xs rounded-full px-1.5 py-0.5 font-semibold shrink-0" style={{ backgroundColor: 'color-mix(in srgb, var(--color-brand) 15%, transparent)', color: 'var(--color-brand)' }}>
                         {cards.length}
                       </span>
                     )}
@@ -212,16 +192,15 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
 
                   <div className="flex flex-col gap-2 px-2 pb-3 flex-1 min-h-[96px]">
                     {final && (
-                      <p className="text-xs text-center px-2 py-6 rounded-lg border-2 border-dashed" style={{ borderColor: destacar ? etapa.color : 'var(--color-card-border)', color: 'var(--color-text-muted)' }}>
-                        Solte aqui para finalizar. A pessoa entra na Equipe.
+                      <p className="text-xs text-center px-2 py-6 rounded-lg border-2 border-dashed" style={{ borderColor: destacar ? 'var(--color-brand)' : 'color-mix(in srgb, var(--color-brand) 35%, transparent)', color: 'var(--color-text-muted)' }}>
+                        A admissão termina ao anexar o contrato assinado na ficha. A pessoa entra na Equipe.
                       </p>
                     )}
                     {cards.map((e) => {
                       const situacao = situacaoLink(tokens[e.id])
                       // Próxima entrevista marcada (a lista vem da mais recente para a mais antiga)
                       const marcada = historicos[e.id]?.entrevistas.filter((x) => x.status === 'agendada' && Date.parse(x.data_hora) > agora).at(-1)
-                      const anterior = i > 0 ? ETAPAS[i - 1] : null
-                      const proxima = ETAPAS[i + 1] ?? null
+                      const realizada = historicos[e.id]?.entrevistas.some((x) => x.status === 'agendada' && Date.parse(x.data_hora) <= agora)
                       const ocupado = movendo === e.id
                       return (
                         <article
@@ -229,58 +208,55 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
                           draggable
                           onDragStart={(ev) => { ev.dataTransfer.setData('empId', e.id); ev.dataTransfer.effectAllowed = 'move'; setArrastando(e.id) }}
                           onDragEnd={() => { setArrastando(null); setSobre(null) }}
-                          onClick={() => setAberto(e.id)}
-                          className="rounded-lg border bg-white cursor-pointer select-none"
+                          onClick={() => router.push(`/pessoas/admissao/${e.id}`)}
+                          className="rounded-lg border bg-white cursor-pointer select-none min-h-24"
                           style={{
                             borderColor: 'var(--color-card-border)',
                             opacity: arrastando === e.id ? 0.35 : ocupado || e.admissao_em_espera ? 0.65 : 1,
                             boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
                           }}
                         >
-                          <div className="px-3 pt-3 pb-2 flex items-start gap-2">
-                            <Avatar src={photoUrls[e.id]} nome={e.nome} size={28} />
-                            <div className="flex-1 min-w-0">
+                          <div className="p-3 flex flex-col gap-2">
+                            {/* Vaga e foto (à direita) na mesma linha; o nome embaixo, com a largura toda do card */}
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs truncate flex-1 min-w-0" style={{ color: 'var(--color-text-muted)' }}>{e.vaga?.titulo ?? e.cargo ?? 'Sem vaga'}</p>
+                              <Avatar src={photoUrls[e.id]} nome={e.nome} size={28} />
+                            </div>
+                            <div className="min-w-0">
                               <p className="text-xs font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>{e.nome}</p>
-                              <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{e.vaga?.titulo ?? e.cargo ?? 'Sem vaga'}</p>
-                              <div className="flex flex-wrap gap-1 mt-1 empty:hidden">
+                              <div className="flex flex-wrap gap-1 mt-3 empty:hidden">
                                 {e.admissao_em_espera && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Em espera</span>}
-                                {marcada && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#E0E7FF', color: '#4338CA' }}>{fmtDataHora(marcada.data_hora)}</span>}
+                                {/* Situação da entrevista; o texto pode quebrar em duas linhas, por isso o canto menos arredondado */}
+                                {etapa.key === ETAPA_INICIAL && (
+                                  marcada
+                                    ? <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Entrevista marcada para {fmtDataHora(marcada.data_hora)}</span>
+                                    : realizada
+                                      ? <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}>Entrevista realizada</span>
+                                      : <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Entrevista ainda não marcada</span>
+                                )}
                                 {etapa.key === ETAPA_CARTA && cartas[e.id]?.status === 'enviada' && (
                                   Date.parse(cartas[e.id].expira_em) < agora
                                     ? <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>Carta expirada</span>
                                     : <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Carta enviada</span>
                                 )}
                                 {etapa.key === ETAPA_CARTA && cartas[e.id]?.status === 'aceita' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}>Carta aceita</span>}
-                                {situacao === 'done' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}>Dados preenchidos</span>}
-                                {situacao === 'pending' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Aguardando dados</span>}
-                                {situacao === 'expired' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>Link expirado</span>}
+                                {etapa.key === ETAPA_EXAME && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Exame ainda não encaminhado</span>}
+                                {etapa.key === ETAPA_RESULTADO_EXAME && (() => {
+                                  const exame = exames[e.id]?.find((x) => x.status === 'encaminhado')
+                                  if (!exame) return <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Aguardando resultado</span>
+                                  if (!exame.data_hora || Date.parse(exame.data_hora) <= agora) return <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Aguardando resultado</span>
+                                  return exame.data_hora
+                                    ? <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Exame marcado para {fmtDataHora(exame.data_hora)}</span>
+                                    : <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Encaminhado à {exame.clinica_nome}</span>
+                                })()}
+                                {etapa.key === ETAPA_CONTABILIDADE && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Ficha ainda não enviada</span>}
+                                {etapa.key === ETAPA_AGUARDAR_CONTABILIDADE && e.admissao_contabilidade_enviada_em && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Enviada em {fmtDataHora(e.admissao_contabilidade_enviada_em).split(' às ')[0]}</span>}
+                                {etapa.key === ETAPA_CONTRATO && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Aguardando contrato assinado</span>}
+                                {etapa.key === ETAPA_CARTA && situacao === 'done' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}>Dados preenchidos</span>}
+                                {etapa.key === ETAPA_CARTA && situacao === 'pending' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Aguardando dados</span>}
+                                {etapa.key === ETAPA_CARTA && situacao === 'expired' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>Link expirado</span>}
                               </div>
                             </div>
-                          </div>
-                          {/* Setas: não abrem o painel */}
-                          <div className="border-t px-2 py-1 flex items-center justify-between" style={{ borderColor: 'var(--color-card-border)' }} onClick={(ev) => ev.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => anterior && mover(e, anterior.key)}
-                              disabled={!anterior || ocupado}
-                              className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-25 transition-colors"
-                              style={{ color: 'var(--color-text-muted)' }}
-                              aria-label={anterior ? `Voltar para ${anterior.label}` : 'Primeira etapa'}
-                              title={anterior?.label}
-                            >
-                              <Icon name="chevron-left" size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => proxima && mover(e, proxima.key)}
-                              disabled={!proxima || ocupado}
-                              className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-25 transition-colors"
-                              style={{ color: 'var(--color-text-muted)' }}
-                              aria-label={proxima ? `Avançar para ${proxima.label}` : 'Última etapa'}
-                              title={proxima?.label}
-                            >
-                              <Icon name="chevron-right" size={14} />
-                            </button>
                           </div>
                         </article>
                       )
@@ -292,38 +268,7 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
           </div>
         </div>
       </div>
-
-      {selecionado && (
-        <PainelAdmissao
-          key={selecionado.id}
-          emp={selecionado}
-          historico={historicos[selecionado.id] ?? { entrevistas: [], anotacoes: [] }}
-          entrevistadores={entrevistadores}
-          usuarioId={usuarioId}
-          carta={cartas[selecionado.id]}
-          config={config}
-          empresa={empresa}
-          token={tokens[selecionado.id]}
-          companyId={companyId}
-          onClose={() => setAberto(null)}
-          onFinalizar={() => pedirFinalizacao(selecionado)}
-        />
-      )}
-
-      <Modal open={!!finalizar} onClose={() => { if (!finalizando) setFinalizar(null) }} title={`Finalizar admissão de ${finalizar?.nome ?? ''}`}>
-        <div className="flex flex-col gap-4">
-          <Input label="Data de admissão *" type="date" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} />
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            {finalizar?.tipo_contrato === 'clt'
-              ? 'A pessoa entra na Equipe em experiência, com o período e as férias calculados a partir desta data.'
-              : 'A pessoa entra na Equipe como ativa.'}
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setFinalizar(null)} disabled={finalizando}>Cancelar</Button>
-            <Button type="button" onClick={confirmarFinalizacao} loading={finalizando} disabled={!dataAdmissao}>Finalizar</Button>
-          </div>
-        </div>
-      </Modal>
+      </div>
     </>
   )
 }

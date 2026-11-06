@@ -67,6 +67,7 @@ export const ARQUIVOS = [
   { key: 'exame_admissional', label: 'Exame Admissional', col: 'doc_exame_admissional_path' },
   // Gerado no aceite: é o registro da proposta, não pode ser trocado
   { key: 'carta_proposta', label: 'Carta proposta aceita', col: 'doc_carta_proposta_path', somenteLeitura: true },
+  { key: 'contrato', label: 'Contrato de trabalho', col: 'doc_contrato_path' },
 ] as const satisfies readonly { key: string; label: string; col: keyof Employee; somenteLeitura?: boolean }[]
 
 export type ArquivoKey = (typeof ARQUIVOS)[number]['key']

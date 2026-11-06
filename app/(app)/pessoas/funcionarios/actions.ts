@@ -19,7 +19,7 @@ const MAX_DOC_SIZE = 20 * 1024 * 1024
 
 const DOC_KEYS = [
   'foto', 'rg_cnh_frente', 'rg_verso', 'exame_admissional', 'cpf',
-  'comprovante_residencia', 'titulo_eleitor', 'ctps', 'pis', 'certidao',
+  'comprovante_residencia', 'titulo_eleitor', 'ctps', 'pis', 'certidao', 'contrato',
 ] as const
 
 export type DocKey = typeof DOC_KEYS[number]
@@ -205,7 +205,8 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
   const admin = createAdminClient()
   const { data: current } = await admin
     .from('employees')
-    .select('company_id, foto_path, doc_rg_cnh_frente_path, doc_rg_verso_path, doc_exame_admissional_path, doc_cpf_path, doc_comprovante_residencia_path, doc_titulo_eleitor_path, doc_ctps_path, doc_pis_path, doc_certidao_path')
+    // '*': doc_contrato_path pode ainda não existir (migration 20261106000084)
+    .select('*')
     .eq('id', employeeId)
     .single()
 
@@ -227,6 +228,7 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
     ctps: current.doc_ctps_path,
     pis: current.doc_pis_path,
     certidao: current.doc_certidao_path,
+    contrato: current.doc_contrato_path ?? null,
   }
 
   const { updates: docUpdates, error: docErr } = await uploadEmployeeDocs(admin, current.company_id, employeeId, formData, existingDocs)
@@ -286,7 +288,8 @@ export async function getEmployeeDocUrlAction(
   const col = key === 'foto' ? 'foto_path' : `doc_${key}_path`
   const { data: row } = await admin
     .from('employees')
-    .select('company_id, profile_id, foto_path, doc_rg_cnh_frente_path, doc_rg_verso_path, doc_exame_admissional_path, doc_cpf_path, doc_comprovante_residencia_path, doc_titulo_eleitor_path, doc_ctps_path, doc_pis_path, doc_certidao_path, doc_carta_proposta_path')
+    // '*': doc_contrato_path pode ainda não existir (migration 20261106000084)
+    .select('*')
     .eq('id', employeeId)
     .single()
   const emp = row as (Record<string, string | null> & { company_id: string; profile_id: string | null }) | null

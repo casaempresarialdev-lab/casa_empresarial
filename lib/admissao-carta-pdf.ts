@@ -10,8 +10,10 @@ export function gerarCartaPdf(opcoes: {
   conteudo: string
   aceitaEm: string
   ip: string | null
+  /** Aceite registrado no painel por um usuário (candidato aceitou pessoalmente) */
+  registradoPor?: string
 }) {
-  const { empresa, candidato, conteudo, aceitaEm, ip } = opcoes
+  const { empresa, candidato, conteudo, aceitaEm, ip, registradoPor } = opcoes
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const margem = 56
   const largura = doc.internal.pageSize.getWidth() - margem * 2
@@ -40,7 +42,9 @@ export function gerarCartaPdf(opcoes: {
   doc.line(margem, y, margem + largura, y)
   y += 20
   escrever('Registro do aceite', 10, true)
-  escrever(`Aceita por ${candidato} em ${aceitaEm} (horário de Brasília)${ip ? `, a partir do IP ${ip}` : ''}.`, 10)
+  escrever(registradoPor
+    ? `Aceite de ${candidato} registrado no sistema por ${registradoPor} em ${aceitaEm} (horário de Brasília).`
+    : `Aceita por ${candidato} em ${aceitaEm} (horário de Brasília)${ip ? `, a partir do IP ${ip}` : ''}.`, 10)
 
   return Buffer.from(doc.output('arraybuffer'))
 }

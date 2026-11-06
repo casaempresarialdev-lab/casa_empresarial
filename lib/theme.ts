@@ -55,6 +55,24 @@ export function deriveThemeColors(corPrimaria: string | null): typeof DEFAULT {
   }
 }
 
+/** Mesmas variáveis do tema como objeto de estilo, para páginas públicas (fora da área logada) */
+export function themeStyle(corPrimaria: string | null) {
+  const t = deriveThemeColors(corPrimaria)
+  return {
+    '--color-primary': t.primary,
+    '--color-primary-dark': t.dark,
+    '--color-primary-darker': t.darker,
+    '--color-brand': t.brand,
+    '--color-brand-light': t.brandLight,
+  } as React.CSSProperties
+}
+
+/** Cor do texto sobre a cor da marca: escuro em marcas muito claras, branco nas demais */
+export function textoSobreMarca(corPrimaria: string | null) {
+  const [, , l] = hexToHsl(deriveThemeColors(corPrimaria).brand)
+  return l > 70 ? '#05070F' : '#FFFFFF'
+}
+
 /** CSS com as variáveis do tema da empresa (aplicado no <body> da área logada) */
 export function themeCssVars(corPrimaria: string | null): string {
   const t = deriveThemeColors(corPrimaria)

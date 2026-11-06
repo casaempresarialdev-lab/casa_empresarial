@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS reminder_series (
 
 ALTER TABLE reminder_series ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "reminder_series_owner_policy" ON reminder_series;
 CREATE POLICY "reminder_series_owner_policy" ON reminder_series
   USING (profile_id = auth.uid())
   WITH CHECK (profile_id = auth.uid());

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { getCandidaturas, getVagaById } from '../queries'
 import { getActiveCompanyBenefits } from '../../beneficios/queries'
+import { getConfigAdmissao } from '../../admissao/queries'
 import { VagaPage } from './components/vaga-page'
 
 export const dynamic = 'force-dynamic'
@@ -30,9 +31,10 @@ export default async function VagaDetalhePage({ params, searchParams }: Props) {
   const vaga = await getVagaById(id, companyId)
   if (!vaga) notFound()
 
-  const [candidaturas, companyBenefits] = await Promise.all([
+  const [candidaturas, companyBenefits, config] = await Promise.all([
     getCandidaturas(id, companyId),
     getActiveCompanyBenefits(companyId),
+    getConfigAdmissao(companyId),
   ])
 
   return (
@@ -43,6 +45,7 @@ export default async function VagaDetalhePage({ params, searchParams }: Props) {
         companyId={companyId}
         companyBenefits={companyBenefits}
         abrirDados={aba === 'dados'}
+        avisaReprovacao={config.reprovacao_notificar}
       />
     </div>
   )

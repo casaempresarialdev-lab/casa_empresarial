@@ -2,13 +2,12 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { pdf } from '@react-pdf/renderer'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { toast } from '@/lib/toast'
 import { FuncionarioFicha } from '../../components/ficha/funcionario-ficha'
-import { FichaPdf } from '../../components/ficha/ficha-pdf'
+import { baixarFichaPdf } from '../../components/ficha/baixar-ficha-pdf'
 import { STATUS_CFG, iniciais, tipoLabel, type SecaoId } from '../../components/ficha/ficha-config'
 import { MeusDadosForm } from './meus-dados-form'
 import type { Employee } from '../../queries'
@@ -25,22 +24,6 @@ interface Props {
   abaInicial?: SecaoId
   /** Colaborador vendo a própria ficha: edita só os dados de contato (Meus Dados) */
   isColaboradorSelf: boolean
-}
-
-// Foto baixada como data URL para o PDF (sem foto, ou se falhar, o PDF usa as iniciais)
-async function fotoParaPdf(url: string | null) {
-  if (!url) return null
-  try {
-    const blob = await (await fetch(url)).blob()
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-  } catch {
-    return null
-  }
 }
 
 // Ficha do funcionário: visualizar (abas, campos fechados) e editar (mesmas abas, campos abertos)
@@ -64,22 +47,7 @@ export function FuncionarioPage({ modo, employee: emp, companyId, company, compa
   async function exportarPdf() {
     setGerandoPdf(true)
     try {
-      const agora = new Date()
-      const geradoEm = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-      const doc = (foto: string | null) => <FichaPdf employee={emp} company={company} foto={foto} benefits={companyBenefits} geradoEm={geradoEm} />
-      // Se a logo/foto não carregar, gera de novo sem as imagens
-      let blob: Blob
-      try {
-        blob = await pdf(doc(await fotoParaPdf(fotoUrl))).toBlob()
-      } catch {
-        blob = await pdf(<FichaPdf employee={emp} company={company ? { ...company, logo_url: null } : null} foto={null} benefits={companyBenefits} geradoEm={geradoEm} />).toBlob()
-      }
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `ficha-${emp.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-')}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      await baixarFichaPdf({ employee: emp, company, benefits: companyBenefits, fotoUrl })
     } catch {
       toast.error('Não foi possível gerar o PDF da ficha.')
     } finally {

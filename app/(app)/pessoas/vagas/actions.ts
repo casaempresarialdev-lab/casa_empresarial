@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { requireGestor as autorizar } from '@/lib/auth/gestor'
 import { vagaSchema } from '@/lib/validations/vaga'
 import { ETAPA_INICIAL } from '../admissao/etapas'
-import { getHistoricoCandidatura } from '../admissao/queries'
+import { getConfigAdmissao, getHistoricoCandidatura } from '../admissao/queries'
+import { avisarReprovacao } from '@/lib/admissao-email'
 import { isPjOuAutonomo, maskCpf } from '../funcionarios/components/ficha/ficha-config'
 import { avisarProcessoEncerrado } from '@/lib/vagas-email'
 import { normalizarValor } from '../funcionarios/components/ficha/ficha-config'
@@ -165,13 +166,33 @@ export async function avaliarCandidaturaAction(id: string, companyId: string, st
     .eq('id', id)
     .eq('company_id', companyId)
     .in('status', status === 'reprovada' ? ['nova'] : ['reprovada'])
-    .select('vaga_id')
+    .select('vaga_id, nome, email, job_openings(titulo, cargo)')
     .maybeSingle()
 
   if (error) return { error: error.message }
   if (!data) return { error: 'Esta candidatura não pode mais ser alterada.' }
+
+  // Configuração ligada: o aviso sai direto; falha no e-mail não desfaz a reprovação
+  let avisoFalhou = false
+  if (status === 'reprovada') {
+    const config = await getConfigAdmissao(companyId)
+    if (config.reprovacao_notificar) {
+      const vaga = data.job_openings as unknown as { titulo: string; cargo: string | null } | null
+      const envio = await avisarReprovacao({
+        companyId,
+        assunto: config.reprovacao_assunto,
+        modelo: config.reprovacao_modelo,
+        nome: data.nome as string,
+        email: data.email as string,
+        vagaTitulo: vaga?.titulo ?? null,
+        cargo: vaga?.cargo ?? null,
+      })
+      avisoFalhou = envio.status !== 'enviado'
+    }
+  }
+
   revalidar(data.vaga_id as string)
-  return { success: true as const }
+  return { success: true as const, avisoFalhou }
 }
 
 /**

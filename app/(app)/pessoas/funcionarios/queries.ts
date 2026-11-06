@@ -50,6 +50,11 @@ export type Employee = {
   doc_pis_path: string | null
   doc_certidao_path: string | null
   doc_carta_proposta_path: string | null
+  /** Contrato assinado, anexado no fim da admissão (migration 20261106000084) */
+  doc_contrato_path?: string | null
+  admissao_contabilidade_enviada_em?: string | null
+  admissao_contabilidade_enviada_por?: string | null
+  admissao_contabilidade_retorno_em?: string | null
   created_at: string
   updated_at: string
   employee_benefits: { benefit_id: string }[]

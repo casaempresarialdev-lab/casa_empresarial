@@ -1,28 +1,14 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { PublicoAviso, PublicoShell } from '@/components/layout/publico-shell'
+import { fmtDataHora } from '@/lib/validations/admissao'
 import { AutoCadastroForm } from './components/auto-cadastro-form'
+import { submitOnboardingAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
-function MessagePage({ icon, title, body }: { icon: string; title: string; body: string }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: '#FAF8F9' }}>
-      <div className="text-center max-w-sm">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-5"
-          style={{ backgroundColor: '#F3F4F6' }}>
-          {icon}
-        </div>
-        <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'Manrope', color: '#1F2937' }}>{title}</h2>
-        <p className="text-sm" style={{ color: '#6B7280' }}>{body}</p>
-      </div>
-    </div>
-  )
-}
+const TITULO = 'Seus dados de admissão'
 
-export default async function AutoCadastroPage({
-  params,
-}: {
-  params: Promise<{ token: string }>
-}) {
+export default async function AutoCadastroPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const admin = createAdminClient()
 
@@ -30,79 +16,78 @@ export default async function AutoCadastroPage({
     .from('employee_onboarding_tokens')
     .select('employee_id, company_id, expires_at, used_at')
     .eq('token', token)
-    .single()
+    .maybeSingle()
 
   if (!tokenRow) {
     return (
-      <MessagePage
-        icon="🔗"
-        title="Link inválido"
-        body="Este link não existe ou foi removido. Solicite um novo link ao seu empregador."
-      />
-    )
-  }
-
-  if (tokenRow.used_at) {
-    const { data: emp } = await admin
-      .from('employees')
-      .select('nome')
-      .eq('id', tokenRow.employee_id)
-      .single()
-
-    return (
-      <MessagePage
-        icon="✅"
-        title="Formulário já preenchido"
-        body={`Obrigado${emp?.nome ? ', ' + emp.nome.split(' ')[0] : ''}! Seus dados já foram recebidos com sucesso.`}
-      />
-    )
-  }
-
-  if (new Date(tokenRow.expires_at) < new Date()) {
-    return (
-      <MessagePage
-        icon="⏰"
-        title="Link expirado"
-        body="Este link expirou após 7 dias. Solicite um novo link ao seu empregador."
-      />
+      <PublicoShell titulo={TITULO} cor={null}>
+        <PublicoAviso icon="info" titulo="Link inválido" texto="Este link não existe ou foi removido. Solicite um novo link à empresa." />
+      </PublicoShell>
     )
   }
 
   const [{ data: employee }, { data: company }] = await Promise.all([
     admin.from('employees')
-      .select('nome, cpf, rg, nascimento, telefone, email, grau_instrucao, dependentes, pis_pasep, serie_ctps, certificado_reservista, dados_bancarios, tipo_contrato, doc_cpf_path, doc_ctps_path, doc_comprovante_residencia_path')
+      .select('nome, cargo, cpf, rg, nascimento, telefone, email, grau_instrucao, dependentes, pis_pasep, serie_ctps, certificado_reservista, dados_bancarios, tipo_contrato, doc_cpf_path, doc_ctps_path, doc_comprovante_residencia_path')
       .eq('id', tokenRow.employee_id)
-      .single(),
-    admin.from('companies').select('nome_fantasia, razao_social').eq('id', tokenRow.company_id).single(),
+      .maybeSingle(),
+    admin.from('companies').select('nome_fantasia, razao_social, cor_primaria').eq('id', tokenRow.company_id).maybeSingle(),
   ])
 
-  const employeeName = employee?.nome ?? 'Funcionário'
-  const companyName  = company?.nome_fantasia ?? company?.razao_social ?? 'Empresa'
+  const marca = {
+    empresa: company?.nome_fantasia || company?.razao_social || 'Empresa',
+    cor: (company?.cor_primaria as string | null) ?? null,
+  }
+  const nome = employee?.nome ?? 'Funcionário'
+
+  if (tokenRow.used_at) {
+    return (
+      <PublicoShell titulo={TITULO} {...marca}>
+        <PublicoAviso icon="check" tom="sucesso" titulo="Formulário já preenchido" texto={`Obrigado, ${nome.split(' ')[0]}! Seus dados já foram recebidos.`} />
+      </PublicoShell>
+    )
+  }
+
+  if (new Date(tokenRow.expires_at) < new Date()) {
+    return (
+      <PublicoShell titulo={TITULO} {...marca}>
+        <PublicoAviso icon="alarm" titulo="Link expirado" texto="O prazo deste link terminou. Solicite um novo à empresa." />
+      </PublicoShell>
+    )
+  }
+
+  const destaques = [
+    { icon: 'user' as const, texto: nome },
+    ...(employee?.cargo ? [{ icon: 'briefcase' as const, texto: employee.cargo as string }] : []),
+    { icon: 'alarm' as const, texto: `Preencha até ${fmtDataHora(tokenRow.expires_at)}` },
+  ]
 
   return (
-    <AutoCadastroForm
-      token={token}
-      employeeName={employeeName}
-      companyName={companyName}
-      inicial={{
-        cpf: employee?.cpf ?? '',
-        rg: employee?.rg ?? '',
-        nascimento: employee?.nascimento ?? '',
-        telefone: employee?.telefone ?? '',
-        email: employee?.email ?? '',
-        grau_instrucao: employee?.grau_instrucao ?? '',
-        dependentes: String(employee?.dependentes ?? 0),
-        pis_pasep: employee?.pis_pasep ?? '',
-        serie_ctps: employee?.serie_ctps ?? '',
-        certificado_reservista: employee?.certificado_reservista ?? '',
-        dados_bancarios: employee?.dados_bancarios ?? '',
-      }}
-      tipoContrato={employee?.tipo_contrato ?? null}
-      docsExistentes={[
-        employee?.doc_cpf_path ? 'cpf' : null,
-        employee?.doc_ctps_path ? 'ctps' : null,
-        employee?.doc_comprovante_residencia_path ? 'comprovante_residencia' : null,
-      ].filter((d): d is string => !!d)}
-    />
+    <PublicoShell titulo={TITULO} {...marca} destaques={destaques} largo>
+      <AutoCadastroForm
+        enviar={submitOnboardingAction.bind(null, token)}
+        employeeName={nome}
+        companyName={marca.empresa}
+        inicial={{
+          cpf: employee?.cpf ?? '',
+          rg: employee?.rg ?? '',
+          nascimento: employee?.nascimento ?? '',
+          telefone: employee?.telefone ?? '',
+          email: employee?.email ?? '',
+          grau_instrucao: employee?.grau_instrucao ?? '',
+          dependentes: String(employee?.dependentes ?? 0),
+          pis_pasep: employee?.pis_pasep ?? '',
+          serie_ctps: employee?.serie_ctps ?? '',
+          certificado_reservista: employee?.certificado_reservista ?? '',
+          dados_bancarios: employee?.dados_bancarios ?? '',
+        }}
+        tipoContrato={employee?.tipo_contrato ?? null}
+        docsExistentes={[
+          employee?.doc_cpf_path ? 'cpf' : null,
+          employee?.doc_ctps_path ? 'ctps' : null,
+          employee?.doc_comprovante_residencia_path ? 'comprovante_residencia' : null,
+        ].filter((d): d is string => !!d)}
+      />
+    </PublicoShell>
   )
 }

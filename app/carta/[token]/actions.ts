@@ -2,10 +2,9 @@
 
 import { headers } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/server'
-import { gerarCartaPdf } from '@/lib/admissao-carta-pdf'
+import { registrarAceite } from '@/lib/admissao-aceite'
 import { avisarRespostaCarta } from '@/lib/admissao-email'
 import { removerDaAdmissao } from '@/lib/admissao-remover'
-import { fmtDataHora } from '@/lib/validations/admissao'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -56,70 +55,10 @@ export async function aceitarCartaAction(token: string): Promise<{ url?: string;
   const carta = await cartaValida(admin, token)
   if (!carta) return { error: INDISPONIVEL }
 
-  const { data: emp } = await admin
-    .from('employees')
-    .select('id, nome, tipo_contrato')
-    .eq('id', carta.employee_id as string)
-    .eq('status', 'admissao')
-    .maybeSingle()
-  if (!emp) return { error: INDISPONIVEL }
-
-  const ip = await ipDoCliente()
-  const agora = new Date().toISOString()
-
-  // Só o primeiro aceite vale, mesmo com dois cliques
-  const { data: aceita, error } = await admin
-    .from('admission_offers')
-    .update({ status: 'aceita', respondida_em: agora, resposta_ip: ip })
-    .eq('id', carta.id as string)
-    .eq('status', 'enviada')
-    .select('id')
-    .maybeSingle()
-  if (error) return { error: 'Não foi possível registrar o aceite. Tente novamente.' }
-  if (!aceita) return { error: INDISPONIVEL }
-
-  const companyId = carta.company_id as string
-  const employeeId = emp.id as string
-  const pj = emp.tipo_contrato === 'pj' || emp.tipo_contrato === 'autonomo'
-
-  const { error: errEmp } = await admin
-    .from('employees')
-    .update({
-      cargo: carta.cargo,
-      local_trabalho: carta.local_trabalho,
-      data_admissao: carta.data_inicio,
-      ...(carta.salario != null && (pj ? { valor_servico: carta.salario } : { salario: carta.salario })),
-    })
-    .eq('id', employeeId)
-  if (errEmp) console.error('[carta] condições não copiadas para o cadastro:', errEmp.message)
-
-  const { data: cand } = await admin.from('job_applications').select('id').eq('employee_id', employeeId).maybeSingle()
-  await admin.from('admission_notes').insert({
-    company_id: companyId,
-    employee_id: employeeId,
-    application_id: cand?.id ?? null,
-    texto: `Carta proposta aceita${ip ? ` (IP ${ip})` : ''}.`,
-    autor_nome: emp.nome,
-  })
-
-  // PDF: o aceite vale mesmo se o arquivo falhar (o texto e o registro ficam no banco)
-  try {
-    const { data: empresa } = await admin.from('companies').select('nome_fantasia, razao_social').eq('id', companyId).maybeSingle()
-    const pdf = gerarCartaPdf({
-      empresa: empresa?.nome_fantasia || empresa?.razao_social || '',
-      candidato: emp.nome as string,
-      conteudo: carta.conteudo as string,
-      aceitaEm: fmtDataHora(agora),
-      ip,
-    })
-    const path = `funcionarios/${companyId}/${employeeId}/carta_proposta_${Date.now()}.pdf`
-    const { error: errUp } = await admin.storage.from('documentos').upload(path, pdf, { contentType: 'application/pdf', upsert: false })
-    if (errUp) throw new Error(errUp.message)
-    await admin.from('admission_offers').update({ pdf_path: path }).eq('id', carta.id as string)
-    await admin.from('employees').update({ doc_carta_proposta_path: path }).eq('id', employeeId)
-  } catch (e) {
-    console.error('[carta] PDF não gerado:', e instanceof Error ? e.message : e)
-  }
+  const r = await registrarAceite(admin, { cartaId: carta.id as string, ip: await ipDoCliente() })
+  if ('error' in r) return { error: r.error }
+  const { companyId, employeeId } = r
+  const emp = { nome: r.nome }
 
   const { data: link, error: errLink } = await admin
     .from('employee_onboarding_tokens')

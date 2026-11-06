@@ -22,9 +22,11 @@ interface Props {
   companyId: string
   /** Vaga encerrada: só consulta, baixar e excluir dados */
   encerrada?: boolean
+  /** Configurações: a reprovação avisa o candidato por e-mail */
+  avisaReprovacao?: boolean
 }
 
-export function CandidaturasLista({ candidaturas, companyId, encerrada = false }: Props) {
+export function CandidaturasLista({ candidaturas, companyId, encerrada = false, avisaReprovacao = false }: Props) {
   const router = useRouter()
   const [filtro, setFiltro] = useState<string[]>([])
   const [busca, setBusca] = useState('')
@@ -96,7 +98,9 @@ export function CandidaturasLista({ candidaturas, companyId, encerrada = false }
     setProcessando(false)
     setReprovar(null)
     setMotivo('')
-    if (!('error' in r)) router.refresh()
+    if ('error' in r) return
+    if (r.avisoFalhou) toast.error('O e-mail de reprovação não foi enviado. Avise o candidato por outro meio.')
+    router.refresh()
   }
 
   async function voltarParaNovas(c: Candidatura) {
@@ -211,6 +215,9 @@ export function CandidaturasLista({ candidaturas, companyId, encerrada = false }
               className="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', backgroundColor: '#fff' }}
             />
+            {avisaReprovacao && (
+              <p className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>O candidato recebe o e-mail de reprovação das Configurações.</p>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => { setReprovar(null); setMotivo('') }} disabled={processando}>Cancelar</Button>

@@ -58,18 +58,136 @@ export const CAMPOS_CARTA = [
 
 type CampoCarta = (typeof CAMPOS_CARTA)[number]['campo']
 
+// ── Reprovação ───────────────────────────────────────────────────────────────
+
+export const REPROVACAO_ASSUNTO_PADRAO = 'Retorno do seu processo seletivo: {empresa}'
+
+export const REPROVACAO_MODELO_PADRAO = `Olá, {nome}.
+
+Agradecemos o seu interesse na vaga {vaga} e o tempo dedicado ao nosso processo seletivo.
+
+Depois de avaliar as candidaturas, decidimos não seguir com a sua neste momento.
+
+Desejamos sucesso na sua trajetória profissional.
+
+Atenciosamente,
+{empresa}`
+
+/** Campos disponíveis no e-mail de reprovação */
+export const CAMPOS_REPROVACAO = CAMPOS_CARTA.filter((c) => (['nome', 'empresa', 'vaga', 'cargo'] as string[]).includes(c.campo))
+
+// ── Exame admissional ────────────────────────────────────────────────────────
+
+export const EXAME_ASSUNTO_PADRAO = 'Exame admissional: {empresa}'
+
+export const EXAME_MODELO_PADRAO = `Olá, {nome}.
+
+Você foi encaminhado para o exame admissional da {empresa}.
+
+Clínica: {clinica}
+Endereço: {endereco}
+Telefone: {telefone_clinica}
+Quando: {data_exame}
+
+Orientações:
+{orientacoes}
+
+Atenciosamente,
+{empresa}`
+
+/** Campos disponíveis no e-mail de encaminhamento para o exame */
+export const CAMPOS_EXAME = [
+  ...CAMPOS_REPROVACAO,
+  { campo: 'clinica', descricao: 'Nome da clínica' },
+  { campo: 'endereco', descricao: 'Endereço da clínica' },
+  { campo: 'telefone_clinica', descricao: 'Telefone da clínica' },
+  { campo: 'data_exame', descricao: 'Data e hora do exame' },
+  { campo: 'orientacoes', descricao: 'Orientações' },
+] as const
+
+type CampoModelo = CampoCarta | (typeof CAMPOS_EXAME)[number]['campo']
+const CAMPOS_CONHECIDOS = new Set<string>([...CAMPOS_CARTA, ...CAMPOS_EXAME].map((c) => c.campo))
+
 /** Troca os campos {nome}, {cargo}… pelos valores; os vazios viram "A combinar" */
-export function preencherModelo(modelo: string, valores: Partial<Record<CampoCarta, string>>) {
+export function preencherModelo(modelo: string, valores: Partial<Record<CampoModelo, string>>) {
   return modelo.replace(/\{(\w+)\}/g, (original, campo: string) => {
-    if (!CAMPOS_CARTA.some((c) => c.campo === campo)) return original
-    return valores[campo as CampoCarta]?.trim() || 'A combinar'
+    if (!CAMPOS_CONHECIDOS.has(campo)) return original
+    return valores[campo as CampoModelo]?.trim() || 'A combinar'
   })
 }
+
+export const clinicaSchema = z.object({
+  nome: z.string().trim().min(1, 'Informe o nome da clínica').max(120, 'Use até 120 caracteres'),
+  endereco: z.string().trim().max(300, 'Use até 300 caracteres'),
+  telefone: z.string().trim().max(30, 'Use até 30 caracteres'),
+  orientacoes: z.string().trim().max(2000, 'Use até 2.000 caracteres'),
+})
+
+export type ClinicaInput = z.infer<typeof clinicaSchema>
+
+/** Encaminhamento: data e hora juntas, ou nenhuma das duas (ordem de chegada) */
+export const exameSchema = z.object({
+  clinic_id: z.string().uuid('Escolha a clínica'),
+  data: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/, 'Data inválida'),
+  hora: z.string().regex(/^(\d{2}:\d{2})?$/, 'Hora inválida'),
+  orientacoes: z.string().trim().max(2000, 'Use até 2.000 caracteres'),
+}).superRefine((d, ctx) => {
+  if (d.data && !d.hora) ctx.addIssue({ code: 'custom', path: ['hora'], message: 'Informe a hora, ou deixe a data em branco' })
+  if (d.hora && !d.data) ctx.addIssue({ code: 'custom', path: ['data'], message: 'Informe a data, ou deixe a hora em branco' })
+})
+
+export type ExameInput = z.infer<typeof exameSchema>
+
+// ── Resultado do exame ───────────────────────────────────────────────────────
+
+export const EXAME_REPROVACAO_ASSUNTO_PADRAO = 'Resultado do exame admissional: {empresa}'
+
+export const EXAME_REPROVACAO_MODELO_PADRAO = `Olá, {nome}.
+
+Agradecemos a sua participação no processo de admissão para a vaga {vaga}.
+
+O resultado do exame admissional não permitiu seguir com a sua contratação neste momento.
+
+Desejamos sucesso na sua trajetória profissional.
+
+Atenciosamente,
+{empresa}`
+
+/** Inapto: novo exame (volta para o encaminhamento) ou reprovação */
+export const resultadoExameSchema = z.object({
+  resultado: z.enum(['apto', 'inapto'], { message: 'Escolha o resultado' }),
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data do exame'),
+  observacoes: z.string().trim().max(1000, 'Use até 1.000 caracteres'),
+  decisao: z.enum(['novo_exame', 'reprovar']).optional(),
+}).superRefine((d, ctx) => {
+  if (d.resultado === 'inapto' && !d.decisao) ctx.addIssue({ code: 'custom', path: ['decisao'], message: 'Escolha o que fazer com o candidato' })
+})
+
+export type ResultadoExameInput = z.infer<typeof resultadoExameSchema>
+
+/** Contrato assinado: PDF ou imagem, até 20 MB */
+export const CONTRATO_MAX_BYTES = 20 * 1024 * 1024
+
+/** ASO: PDF ou imagem, até 10 MB */
+export const ASO_MAX_BYTES = 10 * 1024 * 1024
+
+/** Guias de encaminhamento: PDF ou imagem, até 4 MB (vai anexada no e-mail) */
+export const GUIA_TIPOS = ['application/pdf', 'image/jpeg', 'image/png']
+export const GUIA_MAX_BYTES = 4 * 1024 * 1024
 
 export const configAdmissaoSchema = z.object({
   carta_validade_dias: z.string().regex(/^\d{1,2}$/, 'Informe de 1 a 60 dias').refine((v) => Number(v) >= 1 && Number(v) <= 60, 'Informe de 1 a 60 dias'),
   carta_assunto: z.string().trim().min(1, 'Informe o assunto').max(200, 'Use até 200 caracteres'),
   carta_modelo: z.string().trim().min(1, 'Escreva o modelo da carta').max(10000, 'Use até 10.000 caracteres'),
+  reprovacao_notificar: z.boolean(),
+  reprovacao_assunto: z.string().trim().min(1, 'Informe o assunto').max(200, 'Use até 200 caracteres'),
+  reprovacao_modelo: z.string().trim().min(1, 'Escreva o texto do e-mail').max(10000, 'Use até 10.000 caracteres'),
+  exame_notificar: z.boolean(),
+  exame_assunto: z.string().trim().min(1, 'Informe o assunto').max(200, 'Use até 200 caracteres'),
+  exame_modelo: z.string().trim().min(1, 'Escreva o texto do e-mail').max(10000, 'Use até 10.000 caracteres'),
+  exame_reprovacao_notificar: z.boolean(),
+  exame_reprovacao_assunto: z.string().trim().min(1, 'Informe o assunto').max(200, 'Use até 200 caracteres'),
+  exame_reprovacao_modelo: z.string().trim().min(1, 'Escreva o texto do e-mail').max(10000, 'Use até 10.000 caracteres'),
 })
 
 export type ConfigAdmissaoInput = z.infer<typeof configAdmissaoSchema>

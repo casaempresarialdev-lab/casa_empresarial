@@ -4,7 +4,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DEFAULT_BRAND_COLOR } from '@/lib/theme'
 import { PageTitle } from '@/components/layout/page-title'
 import { getCompany } from '../empresa/queries'
-import { getConfigAdmissao } from '../pessoas/admissao/queries'
+import { getClinicas, getConfigAdmissao } from '../pessoas/admissao/queries'
 import { ConfigIdentidadeVisual } from './components/config-identidade-visual'
 import { ConfigAbas } from './components/config-abas'
 import { ConfigAdmissao } from './components/config-admissao'
@@ -21,8 +21,9 @@ export default async function ConfiguracoesPage() {
   if (!companyId) redirect('/empresa')
 
   const admin = createAdminClient()
-  const [configAdmissao, company, { data: row }] = await Promise.all([
+  const [configAdmissao, clinicas, company, { data: row }] = await Promise.all([
     getConfigAdmissao(companyId),
+    getClinicas(companyId),
     getCompany(companyId),
     // select('*'): as colunas opcionais (migrations 20261023000053/54) podem ainda não existir
     admin.from('companies').select('*').eq('id', companyId).maybeSingle(),
@@ -47,7 +48,7 @@ export default async function ConfiguracoesPage() {
             corPrimaria={company?.cor_primaria ?? DEFAULT_BRAND_COLOR}
           />
         }
-        admissao={<ConfigAdmissao companyId={companyId} inicial={configAdmissao} />}
+        admissao={<ConfigAdmissao companyId={companyId} inicial={configAdmissao} clinicas={clinicas} />}
       />
     </div>
   )
