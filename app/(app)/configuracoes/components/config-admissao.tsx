@@ -17,6 +17,7 @@ import {
 import { salvarConfigAdmissaoAction } from '../actions'
 import type { Clinica, ConfigAdmissao as Config } from '../../pessoas/admissao/queries'
 import { ConfigExame } from './config-exame'
+import { ConfigEtapas } from './config-etapas'
 
 type CampoModelo = 'carta_modelo' | 'reprovacao_modelo' | 'exame_modelo' | 'exame_reprovacao_modelo'
 type Secao = 'carta' | 'reprovacao' | 'exame' | 'exame_reprovacao'
@@ -126,6 +127,9 @@ export function ConfigAdmissao({ companyId, inicial, clinicas }: { companyId: st
   }
 
   return (
+    <div className="flex flex-col gap-4">
+    {/* Fora do formulário: as etapas são salvas no botão próprio */}
+    <ConfigEtapas companyId={companyId} inicial={inicial.etapas} />
     <form onSubmit={handleSubmit(salvar, invalido)} noValidate className="flex flex-col gap-4">
       <Accordion
         titulo="Carta proposta"
@@ -255,5 +259,6 @@ export function ConfigAdmissao({ companyId, inicial, clinicas }: { companyId: st
         <Button type="submit" loading={isSubmitting}>Salvar</Button>
       </div>
     </form>
+    </div>
   )
 }

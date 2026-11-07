@@ -1,12 +1,15 @@
 import type { createAdminClient } from '@/lib/supabase/server'
 import { gerarCartaPdf } from '@/lib/admissao-carta-pdf'
 import { fmtDataHora } from '@/lib/validations/admissao'
+import { seguirEtapa } from '@/lib/admissao-concluir'
+import { ETAPA_CARTA } from '@/app/(app)/pessoas/admissao/etapas'
 
 type Admin = ReturnType<typeof createAdminClient>
 
 /**
  * Aceite da carta, pelo link (candidato) ou pelo painel (quem registrou): grava data, hora e IP ou quem registrou,
- * leva as condições da carta para o cadastro, anota na linha do tempo e guarda o PDF nos arquivos do funcionário.
+ * leva as condições da carta para o cadastro, anota na linha do tempo, leva o card para a próxima etapa ativa
+ * e guarda o PDF nos arquivos do funcionário.
  */
 export async function registrarAceite(admin: Admin, opcoes: {
   cartaId: string
@@ -18,14 +21,24 @@ export async function registrarAceite(admin: Admin, opcoes: {
   const agora = new Date().toISOString()
 
   // Só o primeiro aceite vale, mesmo com dois cliques
-  const { data: carta, error } = await admin
+  const aceitar = (comQuemRegistrou: boolean) => admin
     .from('admission_offers')
-    .update({ status: 'aceita', respondida_em: agora, resposta_ip: ip, ...(registradoPor && { aceite_registrado_por: registradoPor.nome }) })
+    .update({ status: 'aceita', respondida_em: agora, resposta_ip: ip, ...(comQuemRegistrou && registradoPor && { aceite_registrado_por: registradoPor.nome }) })
     .eq('id', cartaId)
     .eq('status', 'enviada')
     .select('company_id, employee_id, conteudo, cargo, salario, data_inicio, local_trabalho')
     .maybeSingle()
-  if (error) return { error: 'Não foi possível registrar o aceite. Tente novamente.' }
+
+  let { data: carta, error } = await aceitar(true)
+  // Sem a coluna aceite_registrado_por (migration 20261106000081 pendente): grava sem ela; quem registrou fica na linha do tempo
+  if (error && registradoPor && error.message.includes('aceite_registrado_por')) {
+    console.error('[carta] coluna aceite_registrado_por ausente; aplique a migration 20261106000081')
+    ;({ data: carta, error } = await aceitar(false))
+  }
+  if (error) {
+    console.error('[carta] aceite não registrado:', error.message)
+    return { error: `Não foi possível registrar o aceite: ${error.message}` }
+  }
   if (!carta?.employee_id) return { error: 'Esta proposta não está mais disponível.' }
 
   const companyId = carta.company_id as string
@@ -55,6 +68,10 @@ export async function registrarAceite(admin: Admin, opcoes: {
     autor_id: registradoPor?.id ?? null,
     autor_nome: registradoPor?.nome ?? nome,
   })
+
+  // Proposta aceita: o card segue para a próxima etapa ativa (os dados são preenchidos pelo link ou na ficha)
+  const avanco = await seguirEtapa(admin, { companyId, employeeId, de: ETAPA_CARTA, autor: { id: registradoPor?.id ?? null, nome: registradoPor?.nome ?? nome } })
+  if ('error' in avanco) console.error('[carta] card não avançou após o aceite:', avanco.error)
 
   // PDF: o aceite vale mesmo se o arquivo falhar (o texto e o registro ficam no banco)
   try {

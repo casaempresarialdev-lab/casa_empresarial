@@ -1,5 +1,6 @@
 import type { createAdminClient } from '@/lib/supabase/server'
-import { ETAPA_APOS_CARTA, ETAPA_CARTA } from '@/app/(app)/pessoas/admissao/etapas'
+import { ETAPA_CARTA } from '@/app/(app)/pessoas/admissao/etapas'
+import { seguirEtapa } from '@/lib/admissao-concluir'
 import { docsObrigatorios } from '@/app/auto-cadastro/docs-obrigatorios'
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -15,8 +16,8 @@ const coluna = (key: string) => (key === 'foto' ? 'foto_path' : `doc_${key}_path
 
 /**
  * Preenchimento dos dados da admissão, pelo próprio candidato (link) ou por quem usa o painel.
- * O que vier em branco não apaga o que já existe (ex.: dados da candidatura). Ao concluir na etapa da carta,
- * o card segue sozinho para "Encaminhar para exame".
+ * O que vier em branco não apaga o que já existe (ex.: dados da candidatura). Normalmente o card já saiu da
+ * carta no aceite; se ainda estiver nela, segue para a próxima etapa ativa.
  */
 export async function salvarDadosAdmissao(admin: Admin, opcoes: {
   employeeId: string
@@ -76,27 +77,20 @@ export async function salvarDadosAdmissao(admin: Admin, opcoes: {
   const { error } = await admin.from('employees').update({ ...campos, ...arquivos }).eq('id', employeeId).eq('company_id', companyId)
   if (error) return { error: error.message }
 
-  // Fim da etapa da carta: o card segue sozinho para o exame
-  if (atual.admission_stage === ETAPA_CARTA) {
-    const { data: movido } = await admin
-      .from('employees')
-      .update({ admission_stage: ETAPA_APOS_CARTA })
-      .eq('id', employeeId)
-      .eq('status', 'admissao')
-      .select('id')
-      .maybeSingle()
-    if (movido) {
-      const { data: cand } = await admin.from('job_applications').select('id').eq('employee_id', employeeId).maybeSingle()
-      await admin.from('admission_notes').insert({
-        company_id: companyId,
-        employee_id: employeeId,
-        application_id: cand?.id ?? null,
-        texto: autor ? 'Dados e documentos preenchidos no painel.' : 'Dados e documentos preenchidos pelo candidato.',
-        tipo: 'evento',
-        autor_id: autor?.id ?? null,
-        autor_nome: autor?.nome ?? (atual.nome as string),
-      })
-    }
-  }
+  // Registro no histórico (a ficha usa para saber que os dados foram preenchidos)
+  const quem = { id: autor?.id ?? null, nome: autor?.nome ?? (atual.nome as string) }
+  const { data: cand } = await admin.from('job_applications').select('id').eq('employee_id', employeeId).maybeSingle()
+  await admin.from('admission_notes').insert({
+    company_id: companyId,
+    employee_id: employeeId,
+    application_id: cand?.id ?? null,
+    texto: autor ? 'Dados e documentos preenchidos no painel.' : 'Dados e documentos preenchidos pelo candidato.',
+    tipo: 'evento',
+    autor_id: quem.id,
+    autor_nome: quem.nome,
+  })
+
+  // Ainda na etapa da carta (dados preenchidos antes do aceite): o card segue para a próxima etapa ativa
+  if (atual.admission_stage === ETAPA_CARTA) await seguirEtapa(admin, { companyId, employeeId, de: ETAPA_CARTA, autor: quem })
   return {}
 }

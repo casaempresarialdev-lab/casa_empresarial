@@ -3,7 +3,7 @@ import type { Employee } from '../funcionarios/queries'
 import {
   ASSUNTO_PADRAO, EXAME_ASSUNTO_PADRAO, EXAME_MODELO_PADRAO, EXAME_REPROVACAO_ASSUNTO_PADRAO, EXAME_REPROVACAO_MODELO_PADRAO, MODELO_PADRAO, REPROVACAO_ASSUNTO_PADRAO, REPROVACAO_MODELO_PADRAO, VALIDADE_PADRAO,
 } from '@/lib/validations/admissao'
-import { ETAPA_FINAL } from './etapas'
+import { ETAPA_FINAL, montarEtapas, type Etapa } from './etapas'
 
 export type EmAdmissao = Employee & {
   admissao_em_espera?: boolean
@@ -29,9 +29,15 @@ export type ConfigAdmissao = {
   exame_reprovacao_notificar: boolean
   exame_reprovacao_assunto: string
   exame_reprovacao_modelo: string
+  /** Etapas do processo da empresa, na ordem (inclui as inativas) */
+  etapas: Etapa[]
 }
 
 /** Configurações da empresa; o que não foi configurado usa o padrão do sistema */
+export async function getEtapasAdmissao(companyId: string): Promise<Etapa[]> {
+  return (await getConfigAdmissao(companyId)).etapas
+}
+
 export async function getConfigAdmissao(companyId: string): Promise<ConfigAdmissao> {
   const admin = createAdminClient()
   const { data } = await admin
@@ -55,6 +61,8 @@ export async function getConfigAdmissao(companyId: string): Promise<ConfigAdmiss
     exame_reprovacao_notificar: data?.exame_reprovacao_notificar ?? false,
     exame_reprovacao_assunto: data?.exame_reprovacao_assunto || EXAME_REPROVACAO_ASSUNTO_PADRAO,
     exame_reprovacao_modelo: data?.exame_reprovacao_modelo || EXAME_REPROVACAO_MODELO_PADRAO,
+    // Sem a coluna (migration 20261107000085 pendente) ou sem configuração: fluxo padrão
+    etapas: montarEtapas(data?.etapas),
   }
 }
 

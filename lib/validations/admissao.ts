@@ -193,8 +193,11 @@ export const configAdmissaoSchema = z.object({
 export type ConfigAdmissaoInput = z.infer<typeof configAdmissaoSchema>
 
 export const cartaSchema = z.object({
-  cargo: z.string().trim().max(120, 'Use até 120 caracteres'),
-  salario: z.string().trim().regex(/^(\d{1,3}(\.\d{3})*|\d+)([.,]\d{1,2})?$|^$/, 'Informe um valor válido, como 2.500,00'),
+  cargo: z.string().trim().min(1, 'Informe o cargo').max(120, 'Use até 120 caracteres'),
+  salario: z.string().trim()
+    .min(1, 'Informe a remuneração')
+    .regex(/^(\d{1,3}(\.\d{3})*|\d+)([.,]\d{1,2})?$/, 'Informe um valor válido, como 2.500,00')
+    .refine((v) => Number(v.replace(/\./g, '').replace(',', '.')) > 0, 'Informe a remuneração'),
   beneficios: z.string().trim().max(1000, 'Use até 1.000 caracteres'),
   data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data de início'),
   local_trabalho: z.string().trim().max(160, 'Use até 160 caracteres'),

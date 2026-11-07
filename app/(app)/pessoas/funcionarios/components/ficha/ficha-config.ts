@@ -68,6 +68,8 @@ export const ARQUIVOS = [
   // Gerado no aceite: é o registro da proposta, não pode ser trocado
   { key: 'carta_proposta', label: 'Carta proposta aceita', col: 'doc_carta_proposta_path', somenteLeitura: true },
   { key: 'contrato', label: 'Contrato de trabalho', col: 'doc_contrato_path' },
+  { key: 'exame_demissional', label: 'Exame Demissional', col: 'doc_exame_demissional_path' },
+  { key: 'trct', label: 'TRCT assinado', col: 'doc_trct_path' },
 ] as const satisfies readonly { key: string; label: string; col: keyof Employee; somenteLeitura?: boolean }[]
 
 export type ArquivoKey = (typeof ARQUIVOS)[number]['key']
@@ -238,6 +240,16 @@ export function valoresIniciais(e: Employee | null): Valores {
 }
 
 /** "2.500,50" / "2500.5" → "2500.50" (o servidor espera ponto decimal) */
+/**
+ * Máscara de moeda ao digitar: os dígitos viram centavos, como em app de banco
+ * ("2" → "0,02", "250000" → "2.500,00"). Apagando tudo, fica vazio.
+ */
+export function maskMoeda(v: string) {
+  const digitos = v.replace(/\D/g, '').replace(/^0+/, '').slice(0, 13)
+  if (!digitos) return ''
+  return (Number(digitos) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 export function normalizarValor(v: string) {
   const s = v.trim().replace(/[R$\s]/g, '')
   if (!s) return ''

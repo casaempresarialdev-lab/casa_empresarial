@@ -32,6 +32,7 @@ const ROUTE_LABELS: Record<string, string> = {
   pessoas: 'Pessoas',
   funcionarios: 'Funcionários',
   admissao: 'Admissão',
+  rescisao: 'Rescisão',
   vagas: 'Vagas',
   nova: 'Nova',
   editar: 'Editar',

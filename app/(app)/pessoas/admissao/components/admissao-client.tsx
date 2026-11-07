@@ -8,8 +8,8 @@ import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-
 import { toast } from '@/lib/toast'
 import { fmtDataHora } from '@/lib/validations/admissao'
 import { moverEtapaAction } from '../actions'
-import { ETAPAS, ETAPA_CARTA, ETAPA_EXAME, ETAPA_FINAL, ETAPA_INICIAL, ETAPA_RESULTADO_EXAME, isEtapa, type EtapaKey,
-  ETAPA_AGUARDAR_CONTABILIDADE, ETAPA_CONTABILIDADE, ETAPA_CONTRATO,
+import { ETAPA_CARTA, ETAPA_EXAME, ETAPA_FINAL, ETAPA_INICIAL, ETAPA_RESULTADO_EXAME,
+  ETAPA_AGUARDAR_CONTABILIDADE, ETAPA_CONTABILIDADE, ETAPA_CONTRATO, indiceEtapa, type Etapa,
 } from '../etapas'
 import { iniciais } from '../../funcionarios/components/ficha/ficha-config'
 import type { Carta, EmAdmissao, Exame, Historico, OnboardingTokenInfo } from '../queries'
@@ -46,21 +46,27 @@ interface Props {
   historicos: Record<string, Historico>
   cartas: Record<string, Carta>
   exames: Record<string, Exame[]>
+  /** Etapas da empresa, na ordem (inclui as inativas) */
+  etapas: Etapa[]
 }
 
-export function AdmissaoClient({ employees, tokens, photoUrls, companyId, historicos, cartas, exames }: Props) {
+export function AdmissaoClient({ employees, tokens, photoUrls, companyId, historicos, cartas, exames, etapas }: Props) {
   const router = useRouter()
   // Movimento já mostrado na tela enquanto o servidor confirma
-  const [movidos, setMovidos] = useState<Record<string, EtapaKey>>({})
+  const [movidos, setMovidos] = useState<Record<string, string>>({})
   const [arrastando, setArrastando] = useState<string | null>(null)
-  const [sobre, setSobre] = useState<EtapaKey | null>(null)
+  const [sobre, setSobre] = useState<string | null>(null)
   const [movendo, setMovendo] = useState<string | null>(null)
 
   const [vagaFiltro, setVagaFiltro] = useState('todas')
   const [busca, setBusca] = useState('')
   const [exibirEspera, setExibirEspera] = useState(false)
 
-  const etapaDe = (e: EmAdmissao): EtapaKey => movidos[e.id] ?? (isEtapa(e.admission_stage) ? e.admission_stage : ETAPA_INICIAL)
+  const etapaDe = (e: EmAdmissao): string =>
+    movidos[e.id] ?? (e.admission_stage && indiceEtapa(etapas, e.admission_stage) >= 0 ? e.admission_stage : ETAPA_INICIAL)
+
+  // Colunas: as etapas ativas; uma inativa só aparece enquanto ainda tiver alguém nela
+  const colunas = etapas.filter((x) => x.ativo || employees.some((e) => etapaDe(e) === x.key))
 
   const emEspera = employees.filter((e) => e.admissao_em_espera).length
   const vagas = [...new Map(employees.filter((e) => e.vaga).map((e) => [e.vaga!.id, e.vaga!.titulo])).entries()]
@@ -78,30 +84,20 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
     .filter((e) => vagaFiltro === 'todas' || (vagaFiltro === 'sem' ? !e.vaga : e.vaga?.id === vagaFiltro))
     .filter((e) => !q || e.nome.toLowerCase().includes(q) || (e.cargo ?? '').toLowerCase().includes(q) || (e.vaga?.titulo ?? '').toLowerCase().includes(q))
 
-  async function mover(e: EmAdmissao, etapa: EtapaKey) {
+  async function mover(e: EmAdmissao, etapa: string) {
     if (etapaDe(e) === etapa) return
-    // Da entrevista só se sai com a decisão, que fica na ficha de admissão
-    if (etapaDe(e) === ETAPA_INICIAL) {
-      toast.error('Abra a ficha de admissão para aprovar ou reprovar a entrevista.')
+    if (!etapas.find((x) => x.key === etapa)?.ativo) {
+      toast.error('Esta etapa está inativa nas configurações.')
       return
     }
-    // Do exame só se sai pela ficha, encaminhando o candidato
-    const avancando = ETAPAS.findIndex((x) => x.key === etapa) > ETAPAS.findIndex((x) => x.key === etapaDe(e))
-    if (etapaDe(e) === ETAPA_EXAME && avancando) {
-      toast.error('Abra a ficha de admissão e encaminhe o candidato para o exame: o card segue sozinho.')
+    // Para frente (ou saindo da entrevista, que pede a decisão), cada etapa avança pela ação dela:
+    // abre a ficha, já com a etapa atual aberta, para registrar a ação
+    const avancando = indiceEtapa(etapas, etapa) > indiceEtapa(etapas, etapaDe(e))
+    if (avancando || etapaDe(e) === ETAPA_INICIAL) {
+      router.push(`/pessoas/admissao/${e.id}`)
       return
     }
-    if (etapaDe(e) === ETAPA_RESULTADO_EXAME && avancando) {
-      toast.error('Abra a ficha de admissão e registre o resultado do exame: o card segue sozinho.')
-      return
-    }
-    // Arrastando, só para trás: para frente, cada etapa avança pela ação dela na ficha (o fim, com o contrato assinado)
-    if (avancando) {
-      toast.error(etapa === ETAPA_FINAL
-        ? 'Abra a ficha de admissão e anexe o contrato assinado para finalizar.'
-        : 'Abra a ficha de admissão: cada etapa avança pela ação dela.')
-      return
-    }
+    // Para trás, o card muda de etapa direto
     setMovendo(e.id)
     setMovidos((m) => ({ ...m, [e.id]: etapa }))
     const r = await moverEtapaAction(e.id, companyId, etapa)
@@ -153,10 +149,10 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
           {filtrando && <FilterResult total={visiveis.length} onClear={() => { setVagaFiltro('todas'); setBusca('') }} />}
         </div>
 
-        {/* Kanban: etapas fixas, na ordem do fluxo */}
+        {/* Kanban: etapas da empresa, na ordem do fluxo */}
         <div className="overflow-x-auto pb-2 -mx-1 px-1 flex-1 flex flex-col">
-          <div className="flex gap-3 flex-1" style={{ minWidth: `${ETAPAS.length * 252}px` }}>
-            {ETAPAS.map((etapa) => {
+          <div className="flex gap-3 flex-1" style={{ minWidth: `${colunas.length * 252}px` }}>
+            {colunas.map((etapa) => {
               const cards = visiveis.filter((e) => etapaDe(e) === etapa.key)
               const destacar = sobre === etapa.key
               const final = etapa.key === ETAPA_FINAL
@@ -182,7 +178,10 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
                   }}
                 >
                   <header className="flex items-center gap-2 px-3 pt-3 pb-2">
-                    <h3 className="text-xs font-bold flex-1" style={{ color: 'var(--color-brand)' }}>{etapa.label}</h3>
+                    <h3 className="text-xs font-bold flex-1" style={{ color: 'var(--color-brand)' }}>
+                      {etapa.label}
+                      {!etapa.ativo && <span className="ml-1.5 font-semibold" style={{ color: 'var(--color-text-muted)' }}>· inativa</span>}
+                    </h3>
                     {!final && (
                       <span className="text-xs rounded-full px-1.5 py-0.5 font-semibold shrink-0" style={{ backgroundColor: 'color-mix(in srgb, var(--color-brand) 15%, transparent)', color: 'var(--color-brand)' }}>
                         {cards.length}
@@ -193,7 +192,7 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
                   <div className="flex flex-col gap-2 px-2 pb-3 flex-1 min-h-[96px]">
                     {final && (
                       <p className="text-xs text-center px-2 py-6 rounded-lg border-2 border-dashed" style={{ borderColor: destacar ? 'var(--color-brand)' : 'color-mix(in srgb, var(--color-brand) 35%, transparent)', color: 'var(--color-text-muted)' }}>
-                        A admissão termina ao anexar o contrato assinado na ficha. A pessoa entra na Equipe.
+                        A admissão termina ao concluir a última etapa na ficha. A pessoa entra na Equipe.
                       </p>
                     )}
                     {cards.map((e) => {
@@ -252,6 +251,7 @@ export function AdmissaoClient({ employees, tokens, photoUrls, companyId, histor
                                 {etapa.key === ETAPA_CONTABILIDADE && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Ficha ainda não enviada</span>}
                                 {etapa.key === ETAPA_AGUARDAR_CONTABILIDADE && e.admissao_contabilidade_enviada_em && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Enviada em {fmtDataHora(e.admissao_contabilidade_enviada_em).split(' às ')[0]}</span>}
                                 {etapa.key === ETAPA_CONTRATO && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Aguardando contrato assinado</span>}
+                                {!etapa.padrao && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: '#F3F4F6', color: '#4B5563' }}>Controle interno</span>}
                                 {etapa.key === ETAPA_CARTA && situacao === 'done' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}>Dados preenchidos</span>}
                                 {etapa.key === ETAPA_CARTA && situacao === 'pending' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>Aguardando dados</span>}
                                 {etapa.key === ETAPA_CARTA && situacao === 'expired' && <span className="text-[11px] font-semibold px-1.5 rounded-full" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>Link expirado</span>}

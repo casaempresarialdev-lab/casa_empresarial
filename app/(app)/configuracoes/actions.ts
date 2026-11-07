@@ -4,7 +4,14 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DEFAULT_BRAND_COLOR } from '@/lib/theme'
 import { requireGestor } from '@/lib/auth/gestor'
+import { z } from 'zod'
 import { GUIA_MAX_BYTES, GUIA_TIPOS, clinicaSchema, configAdmissaoSchema } from '@/lib/validations/admissao'
+import { configRescisaoSchema } from '@/lib/validations/rescisao'
+import { ETAPA_LABEL_MAX, isPersonalizada, montarEtapasDe, paraSalvarDe, type DefProcesso, type Etapa } from '@/lib/etapas-processo'
+import { DEF_ADMISSAO } from '../pessoas/admissao/etapas'
+import { getEtapasAdmissao } from '../pessoas/admissao/queries'
+import { DEF_RESCISAO } from '../pessoas/rescisao/etapas'
+import { getEtapasRescisao } from '../pessoas/rescisao/queries'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -36,6 +43,112 @@ export async function salvarConfigAdmissaoAction(companyId: string, data: unknow
 
   revalidatePath('/configuracoes')
   revalidatePath('/pessoas/admissao')
+  return { success: true as const }
+}
+
+// ── Etapas dos processos (admissão e rescisão) ───────────────────────────────
+
+const etapasSchema = z.array(z.object({
+  key: z.string().min(1).max(80),
+  label: z.string().max(ETAPA_LABEL_MAX).optional(),
+  ativo: z.boolean().optional(),
+})).max(40)
+
+/**
+ * Etapas da empresa (admissão ou rescisão): as padrão só ativam ou inativam (a ordem é fixa); as personalizadas
+ * entram em qualquer posição. Uma personalizada com alguém nela não pode ser excluída; etapa inativa com alguém
+ * nela segue aparecendo no kanban até esvaziar.
+ */
+async function salvarEtapas(companyId: string, data: unknown, p: {
+  def: DefProcesso
+  anteriores: (companyId: string) => Promise<Etapa[]>
+  /** Etapas personalizadas (entre as informadas) que ainda têm alguém */
+  ocupadas: (admin: Admin, companyId: string, keys: string[]) => Promise<string[]>
+  tabela: 'admission_settings' | 'termination_settings'
+  rota: string
+}) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { admin } = auth
+  const { def } = p
+
+  const parsed = etapasSchema.safeParse(data)
+  if (!parsed.success) return { error: 'Lista de etapas inválida.' }
+  if (parsed.data.some((e) => isPersonalizada(e.key) && !e.label?.trim())) return { error: 'Dê um nome a cada etapa personalizada.' }
+  if (parsed.data.some((e) => !isPersonalizada(e.key) && !def.etapas.some((x) => x.key === e.key))) return { error: 'Lista de etapas inválida.' }
+
+  // Conferido no que veio (montarEtapasDe reativaria a reserva sozinho)
+  if (!parsed.data.some((e) => e.key !== def.final && (isPersonalizada(e.key) || e.ativo !== false))) {
+    return { error: 'Deixe pelo menos uma etapa ativa antes de "Finalizado".' }
+  }
+  const etapas = montarEtapasDe(def, parsed.data)
+  const nomes = etapas.map((e) => e.label.toLocaleLowerCase('pt-BR'))
+  if (new Set(nomes).size !== nomes.length) return { error: 'Há duas etapas com o mesmo nome.' }
+
+  // Personalizada excluída com gente nela: o card ficaria sem etapa
+  const removidas = (await p.anteriores(companyId)).filter((a) => !a.padrao && !etapas.some((e) => e.key === a.key))
+  if (removidas.length) {
+    const ocupadas = await p.ocupadas(admin, companyId, removidas.map((r) => r.key))
+    const ocupada = removidas.find((r) => ocupadas.includes(r.key))
+    if (ocupada) return { error: `Ainda há pessoas em "${ocupada.label}". Mova-as para outra etapa antes de excluir.` }
+  }
+
+  const { error } = await admin.from(p.tabela).upsert({
+    company_id: companyId,
+    etapas: paraSalvarDe(def, etapas),
+    updated_at: new Date().toISOString(),
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/configuracoes')
+  revalidatePath(p.rota, 'layout')
+  return { success: true as const }
+}
+
+export async function salvarEtapasAdmissaoAction(companyId: string, data: unknown) {
+  return salvarEtapas(companyId, data, {
+    def: DEF_ADMISSAO,
+    anteriores: getEtapasAdmissao,
+    ocupadas: async (admin, cid, keys) => {
+      const { data: rows } = await admin.from('employees').select('admission_stage').eq('company_id', cid).eq('status', 'admissao').in('admission_stage', keys)
+      return (rows ?? []).map((r) => r.admission_stage as string)
+    },
+    tabela: 'admission_settings',
+    rota: '/pessoas/admissao',
+  })
+}
+
+export async function salvarEtapasRescisaoAction(companyId: string, data: unknown) {
+  return salvarEtapas(companyId, data, {
+    def: DEF_RESCISAO,
+    anteriores: getEtapasRescisao,
+    ocupadas: async (admin, cid, keys) => {
+      const { data: rows } = await admin.from('employee_terminations').select('etapa').eq('company_id', cid).eq('status', 'em_andamento').in('etapa', keys)
+      return (rows ?? []).map((r) => r.etapa as string)
+    },
+    tabela: 'termination_settings',
+    rota: '/pessoas/rescisao',
+  })
+}
+
+/** E-mail do exame demissional (as clínicas e a guia geral são as da admissão) */
+export async function salvarConfigRescisaoAction(companyId: string, data: unknown) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+
+  const parsed = configRescisaoSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  const { error } = await auth.admin.from('termination_settings').upsert({
+    company_id: companyId,
+    exame_notificar: parsed.data.exame_notificar,
+    exame_assunto: parsed.data.exame_assunto,
+    exame_modelo: parsed.data.exame_modelo,
+    updated_at: new Date().toISOString(),
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/configuracoes')
   return { success: true as const }
 }
 

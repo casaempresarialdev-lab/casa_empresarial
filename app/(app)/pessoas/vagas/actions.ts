@@ -3,11 +3,11 @@
 import { revalidatePath } from 'next/cache'
 import { requireGestor as autorizar } from '@/lib/auth/gestor'
 import { vagaSchema } from '@/lib/validations/vaga'
-import { ETAPA_INICIAL } from '../admissao/etapas'
-import { getConfigAdmissao, getHistoricoCandidatura } from '../admissao/queries'
+import { primeiraEtapa } from '../admissao/etapas'
+import { getConfigAdmissao, getEtapasAdmissao, getHistoricoCandidatura } from '../admissao/queries'
 import { avisarReprovacao } from '@/lib/admissao-email'
 import { isPjOuAutonomo, maskCpf } from '../funcionarios/components/ficha/ficha-config'
-import { avisarProcessoEncerrado } from '@/lib/vagas-email'
+import { encerrarVaga } from '@/lib/vagas-encerrar'
 import { normalizarValor } from '../funcionarios/components/ficha/ficha-config'
 
 const BUCKET = 'documentos'
@@ -100,49 +100,16 @@ export async function alterarStatusVagaAction(vagaId: string, companyId: string,
   return { success: true as const }
 }
 
-/**
- * Encerra (desativa) a vaga: nada é apagado e ela não reabre. Quem ainda não foi selecionado recebe o aviso e
- * fica como "Processo encerrado"; os dados seguem guardados até o prazo do aceite (lib/candidaturas-retencao.ts).
- */
+/** Encerra (desativa) a vaga — ver lib/vagas-encerrar.ts */
 export async function encerrarVagaAction(vagaId: string, companyId: string) {
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
-  const { admin } = auth
 
-  const { data: vaga } = await admin
-    .from('job_openings')
-    .select('titulo')
-    .eq('id', vagaId)
-    .eq('company_id', companyId)
-    .neq('status', 'encerrada')
-    .maybeSingle()
-  if (!vaga) return { error: 'Vaga não encontrada.' }
-
-  const agora = new Date().toISOString()
-  const { error } = await admin
-    .from('job_openings')
-    .update({ status: 'encerrada', encerrada_em: agora, updated_at: agora })
-    .eq('id', vagaId)
-    .eq('company_id', companyId)
-  if (error) return { error: error.message }
-
-  const { data: encerradas, error: errCand } = await admin
-    .from('job_applications')
-    .update({ status: 'processo_encerrado' })
-    .eq('vaga_id', vagaId)
-    .eq('company_id', companyId)
-    .eq('status', 'nova')
-    .select('nome, email')
-  if (errCand) return { error: `Vaga encerrada, mas as candidaturas não foram atualizadas: ${errCand.message}` }
-
-  const { enviados, falhas } = await avisarProcessoEncerrado({
-    companyId,
-    vagaTitulo: vaga.titulo as string,
-    candidatos: (encerradas ?? []) as { nome: string; email: string }[],
-  })
+  const res = await encerrarVaga(auth.admin, companyId, vagaId)
+  if ('error' in res) return { error: res.error }
 
   revalidar(vagaId)
-  return { success: true as const, enviados, falhas }
+  return { success: true as const, enviados: res.enviados, falhas: res.falhas }
 }
 
 /** Reprovar uma candidatura nova, ou devolver uma reprovada para as novas */
@@ -258,7 +225,7 @@ export async function iniciarAdmissaoAction(id: string, companyId: string) {
       tipo_contrato: vaga.tipo_contrato,
       ...(pj ? { valor_servico: vaga.salario } : { salario: vaga.salario }),
       status: 'admissao',
-      admission_stage: ETAPA_INICIAL,
+      admission_stage: primeiraEtapa(await getEtapasAdmissao(companyId), true),
     })
     .select('id')
     .single()

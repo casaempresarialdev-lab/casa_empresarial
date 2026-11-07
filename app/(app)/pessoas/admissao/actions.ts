@@ -8,15 +8,17 @@ import { avisarEntrevista, avisarExame, avisarReprovacao, enviarCartaProposta } 
 import { cancelarEntrevistasFuturas, removerDaAdmissao } from '@/lib/admissao-remover'
 import { registrarAceite } from '@/lib/admissao-aceite'
 import { salvarDadosAdmissao } from '@/lib/admissao-dados'
+import { seguirEtapa } from '@/lib/admissao-concluir'
 import {
   ASO_MAX_BYTES, CONTRATO_MAX_BYTES, GUIA_TIPOS, cartaSchema, type CartaInput, entrevistaParaIso, entrevistaSchema, exameSchema, fmtDataHora, preencherModelo, resultadoExameSchema,
 } from '@/lib/validations/admissao'
 import {
-  ETAPAS, ETAPA_CARTA, ETAPA_EXAME, ETAPA_FINAL, ETAPA_INICIAL, ETAPA_POS_EXAME, ETAPA_RESULTADO_EXAME, isEtapa,
+  ETAPA_CARTA, ETAPA_EXAME, ETAPA_FINAL, ETAPA_INICIAL, ETAPA_RESULTADO_EXAME,
   ETAPA_AGUARDAR_CONTABILIDADE, ETAPA_CONTABILIDADE, ETAPA_CONTRATO,
+  indiceEtapa, isPersonalizada, labelEtapa,
 } from './etapas'
-import { getConfigAdmissao } from './queries'
-import { addDays, normalizarValor } from '../funcionarios/components/ficha/ficha-config'
+import { getConfigAdmissao, getEtapasAdmissao } from './queries'
+import { normalizarValor } from '../funcionarios/components/ficha/ficha-config'
 
 const FORA_DO_KANBAN = 'Esta admissão não está mais no kanban.'
 const SAIR_DO_RESULTADO = 'Abra a ficha de admissão e registre o resultado do exame: o card segue sozinho.'
@@ -59,6 +61,8 @@ async function nomeDe(admin: Admin, profileId: string) {
   const { data } = await admin.from('profiles').select('name').eq('id', profileId).maybeSingle()
   return (data?.name as string | undefined) || 'Usuário'
 }
+
+const autorDe = async (admin: Admin, profileId: string) => ({ id: profileId, nome: await nomeDe(admin, profileId) })
 
 /** Linha do tempo da ficha: por padrão, um evento registrado pelo sistema */
 async function registrarAnotacao(admin: Admin, opcoes: { companyId: string; employeeId: string; applicationId: string | null; autorId: string; texto: string; tipo?: 'anotacao' | 'evento' }) {
@@ -234,14 +238,17 @@ export async function enviarCartaAction(companyId: string, employeeId: string, d
 export async function moverEtapaAction(employeeId: string, companyId: string, etapa: string) {
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
-  if (!isEtapa(etapa) || etapa === ETAPA_FINAL) return { error: 'Etapa inválida.' }
+  const etapas = await getEtapasAdmissao(companyId)
+  const destino = etapas.find((e) => e.key === etapa)
+  if (!destino || etapa === ETAPA_FINAL) return { error: 'Etapa inválida.' }
+  if (!destino.ativo) return { error: 'Esta etapa está inativa nas configurações.' }
 
   const emp = await buscarEmAdmissao(auth.admin, employeeId, companyId)
   if (!emp) return { error: FORA_DO_KANBAN }
   if (emp.admission_stage === ETAPA_INICIAL && etapa !== ETAPA_INICIAL) {
     return { error: 'Abra o card para aprovar ou reprovar a entrevista.' }
   }
-  const avancando = ETAPAS.findIndex((e) => e.key === etapa) > ETAPAS.findIndex((e) => e.key === emp.admission_stage)
+  const avancando = indiceEtapa(etapas, etapa) > indiceEtapa(etapas, emp.admission_stage)
   // Da carta só se sai preenchendo os dados (o card avança sozinho ao concluir)
   if (emp.admission_stage === ETAPA_CARTA && avancando) {
     return { error: 'Abra a ficha de admissão: a etapa avança ao concluir o preenchimento dos dados.' }
@@ -262,10 +269,37 @@ export async function moverEtapaAction(employeeId: string, companyId: string, et
   if (error) return { error: error.message }
   await registrarAnotacao(auth.admin, {
     companyId, employeeId, applicationId: emp.applicationId, autorId: auth.user.id,
-    texto: `Movido para "${ETAPAS.find((e) => e.key === etapa)?.label}".`,
+    texto: `Movido para "${destino.label}".`,
   })
   revalidatePath('/pessoas/admissao')
   return { success: true as const }
+}
+
+/**
+ * Etapa personalizada (controle interno, sem integração): a anotação, se houver, entra no histórico
+ * e o card segue para a próxima etapa ativa.
+ */
+export async function avancarEtapaPersonalizadaAction(companyId: string, employeeId: string, anotacao?: string, dataAdmissao?: string) {
+  const auth = await requireGestor(companyId)
+  if ('error' in auth) return { error: auth.error }
+  const { admin, user } = auth
+  if (dataAdmissao && !/^\d{4}-\d{2}-\d{2}$/.test(dataAdmissao)) return { error: 'Data de admissão inválida.' }
+
+  const emp = await buscarEmAdmissao(admin, employeeId, companyId)
+  if (!emp) return { error: FORA_DO_KANBAN }
+  if (!isPersonalizada(emp.admission_stage)) return { error: 'Esta etapa avança pela ação dela na ficha.' }
+
+  const etapas = await getEtapasAdmissao(companyId)
+  const atual = emp.admission_stage!
+
+  const limpo = anotacao?.trim().slice(0, 5000)
+  if (limpo) await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: limpo, tipo: 'anotacao' })
+  await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: `"${labelEtapa(etapas, atual)}" concluída.` })
+
+  const r = await seguirEtapa(admin, { companyId, employeeId, de: atual, autor: await autorDe(admin, user.id), dataAdmissao })
+  if ('error' in r) return { error: r.error }
+  revalidar()
+  return { ...r, proxima: labelEtapa(etapas, r.proxima) }
 }
 
 /** "Deixar em espera": o card fica na etapa, oculto até pedir para exibir */
@@ -630,22 +664,21 @@ export async function registrarResultadoExameAction(companyId: string, employeeI
 
   if (apto) {
     const { data: ficha } = await admin.from('employees').select('doc_exame_admissional_path').eq('id', employeeId).maybeSingle()
-    const { error } = await admin
-      .from('employees')
-      .update({ admission_stage: ETAPA_POS_EXAME, doc_exame_admissional_path: asoPath })
-      .eq('id', employeeId)
-      .eq('company_id', companyId)
-    if (error) return { error: error.message }
-    // ASO anterior do cadastro (ex.: enviado à mão) deixa de ser usado
-    const anterior = ficha?.doc_exame_admissional_path as string | null | undefined
-    if (anterior && anterior !== asoPath) await admin.storage.from('documentos').remove([anterior])
-
     await registrarAnotacao(admin, {
       companyId, employeeId, applicationId: emp.applicationId, autorId: user.id,
       texto: `Apto no exame admissional (${exame.clinica_nome}).${obs}`,
     })
+    const r = await seguirEtapa(admin, {
+      companyId, employeeId, de: ETAPA_RESULTADO_EXAME, autor: { id: user.id, nome: autorNome },
+      campos: { doc_exame_admissional_path: asoPath },
+    })
+    if ('error' in r) return { error: r.error }
+    // ASO anterior do cadastro (ex.: enviado à mão) deixa de ser usado
+    const anterior = ficha?.doc_exame_admissional_path as string | null | undefined
+    if (anterior && anterior !== asoPath) await admin.storage.from('documentos').remove([anterior])
+
     revalidar()
-    return { success: true as const, resultado: 'apto' as const }
+    return { ...r, proxima: labelEtapa(await getEtapasAdmissao(companyId), r.proxima), resultado: 'apto' as const }
   }
 
   if (d.decisao === 'novo_exame') {
@@ -731,17 +764,13 @@ export async function aprovarEntrevistaAction(employeeId: string, companyId: str
   if (!emp) return { error: FORA_DO_KANBAN }
   if (emp.admission_stage !== ETAPA_INICIAL) return { error: 'Este candidato não está na etapa de entrevista.' }
 
-  const { error } = await admin
-    .from('employees')
-    .update({ admission_stage: 'enviar_carta_proposta', admissao_em_espera: false })
-    .eq('id', employeeId)
-    .eq('company_id', companyId)
-  if (error) return { error: error.message }
+  await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: 'Aprovado na entrevista.' })
+  const r = await seguirEtapa(admin, { companyId, employeeId, de: ETAPA_INICIAL, autor: await autorDe(admin, user.id), campos: { admissao_em_espera: false } })
+  if ('error' in r) return { error: r.error }
 
   await cancelarEntrevistasFuturas(admin, employeeId, companyId)
-  await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: 'Aprovado na entrevista.' })
-  revalidatePath('/pessoas/admissao')
-  return { success: true as const }
+  revalidar()
+  return { ...r, proxima: labelEtapa(await getEtapasAdmissao(companyId), r.proxima) }
 }
 
 /** Reprovado: a candidatura volta para a vaga e o cadastro em admissão é apagado (ver removerDaAdmissao) */
@@ -826,21 +855,19 @@ export async function registrarRetornoContabilidadeAction(companyId: string, emp
   if (!emp) return { error: FORA_DO_KANBAN }
   if (emp.admission_stage !== ETAPA_AGUARDAR_CONTABILIDADE) return { error: 'Este candidato não está aguardando o retorno da contabilidade.' }
 
-  const { error } = await admin
-    .from('employees')
-    .update({ admission_stage: ETAPA_CONTRATO, admissao_contabilidade_retorno_em: new Date().toISOString() })
-    .eq('id', employeeId)
-    .eq('company_id', companyId)
-  if (error) return { error: error.message }
-
   await registrarAnotacao(admin, { companyId, employeeId, applicationId: emp.applicationId, autorId: user.id, texto: 'Retorno da contabilidade recebido.' })
-  revalidatePath('/pessoas/admissao')
-  return { success: true as const }
+  const r = await seguirEtapa(admin, {
+    companyId, employeeId, de: ETAPA_AGUARDAR_CONTABILIDADE, autor: await autorDe(admin, user.id),
+    campos: { admissao_contabilidade_retorno_em: new Date().toISOString() },
+  })
+  if ('error' in r) return { error: r.error }
+  revalidar()
+  return { ...r, proxima: labelEtapa(await getEtapasAdmissao(companyId), r.proxima) }
 }
 
 /**
- * Fim do fluxo: com o contrato assinado anexado, a pessoa entra na Equipe.
- * CLT começa em experiência (datas calculadas pela admissão); os demais, ativos.
+ * Contrato assinado anexado, com a data de admissão: segue para a próxima etapa ativa ou, sendo a última,
+ * a pessoa entra na Equipe (ver lib/admissao-concluir.ts).
  */
 export async function finalizarAdmissaoAction(companyId: string, employeeId: string, formData: FormData) {
   const auth = await requireGestor(companyId)
@@ -870,37 +897,23 @@ export async function finalizarAdmissaoAction(companyId: string, employeeId: str
   const { error: errUpload } = await admin.storage.from('documentos').upload(contratoPath, await contrato.arrayBuffer(), { contentType: contrato.type })
   if (errUpload) return { error: `Não foi possível enviar o contrato: ${errUpload.message}` }
 
-  const clt = emp.tipo_contrato === 'clt'
-  const pj = emp.tipo_contrato === 'pj' || emp.tipo_contrato === 'autonomo'
-  const fim1 = emp.fim_experiencia_1 ?? addDays(dataAdmissao, 44)
-  const vcto = emp.vcto_ferias ?? addDays(dataAdmissao, 364)
-
-  const { error } = await admin
-    .from('employees')
-    .update({
-      status: clt ? 'experiencia' : 'ativo',
-      admission_stage: ETAPA_FINAL,
-      admissao_em_espera: false,
-      data_admissao: dataAdmissao,
-      doc_contrato_path: contratoPath,
-      ...(clt && { fim_experiencia_1: fim1, fim_experiencia_2: emp.fim_experiencia_2 ?? addDays(fim1, 45) }),
-      ...(!pj && { vcto_ferias: vcto, conceder_ferias_ate: emp.conceder_ferias_ate ?? addDays(vcto, 330) }),
-    })
-    .eq('id', employeeId)
-    .eq('company_id', companyId)
-
-  if (error) {
+  const { data: cand } = await admin.from('job_applications').select('id').eq('employee_id', employeeId).eq('company_id', companyId).maybeSingle()
+  await registrarAnotacao(admin, {
+    companyId, employeeId, applicationId: (cand?.id as string | undefined) ?? null, autorId: user.id,
+    texto: `Contrato assinado anexado. Data de admissão: ${dataAdmissao.split('-').reverse().join('/')}.`,
+  })
+  const r = await seguirEtapa(admin, {
+    companyId, employeeId, de: ETAPA_CONTRATO, autor: await autorDe(admin, user.id),
+    campos: { data_admissao: dataAdmissao, doc_contrato_path: contratoPath },
+    dataAdmissao,
+  })
+  if ('error' in r) {
     await admin.storage.from('documentos').remove([contratoPath])
-    return { error: error.message }
+    return { error: r.error }
   }
   // Contrato anterior (ex.: enviado à mão nos dados cadastrais) deixa de ser usado
   if (emp.doc_contrato_path && emp.doc_contrato_path !== contratoPath) await admin.storage.from('documentos').remove([emp.doc_contrato_path as string])
 
-  const { data: cand } = await admin.from('job_applications').select('id').eq('employee_id', employeeId).eq('company_id', companyId).maybeSingle()
-  await registrarAnotacao(admin, {
-    companyId, employeeId, applicationId: (cand?.id as string | undefined) ?? null, autorId: user.id,
-    texto: `Contrato assinado anexado. Admissão finalizada em ${dataAdmissao.split('-').reverse().join('/')}.`,
-  })
   revalidar()
-  return { success: true as const, status: clt ? 'experiencia' : 'ativo' }
+  return { ...r, proxima: labelEtapa(await getEtapasAdmissao(companyId), r.proxima) }
 }

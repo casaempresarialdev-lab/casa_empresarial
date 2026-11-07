@@ -11,7 +11,7 @@ import { cartaSchema, fmtDataHora, preencherModelo, type CartaInput } from '@/li
 import { Modal } from '@/components/ui/modal'
 import { enviarCartaAction, registrarAceiteAction } from '../actions'
 import { getEmployeeDocUrlAction } from '../../funcionarios/actions'
-import { fmtDate, fmtMoney, tipoLabel } from '../../funcionarios/components/ficha/ficha-config'
+import { fmtDate, fmtMoney, maskMoeda, tipoLabel } from '../../funcionarios/components/ficha/ficha-config'
 import type { Carta, ConfigAdmissao, EmAdmissao } from '../queries'
 
 const brl = (n: number | null) => (n != null ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
@@ -53,6 +53,9 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
       conteudo: '',
     },
   })
+
+  // Remuneração formatada como moeda enquanto digita
+  const salarioCampo = register('salario')
 
   // O texto acompanha os campos até a pessoa editar à mão
   const [textoEditado, setTextoEditado] = useState(false)
@@ -103,7 +106,7 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
     setRegistrando(true)
     const r = await toast.promise(registrarAceiteAction(companyId, emp.id, aceite.modo === 'form' ? aceite.dados : null), {
       loading: 'Registrando o aceite…',
-      success: 'Aceite registrado. Agora é o preenchimento dos dados.',
+      success: 'Aceite registrado. O card seguiu para a próxima etapa; os dados podem ser preenchidos na ficha.',
       error: 'Não foi possível registrar o aceite.',
     })
     setRegistrando(false)
@@ -170,8 +173,8 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
             <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>A nova carta substitui a anterior, e o link antigo deixa de funcionar.</p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Input label="Cargo" error={errors.cargo?.message} {...register('cargo')} />
-            <Input label="Remuneração (R$)" inputMode="decimal" placeholder="0,00" error={errors.salario?.message} {...register('salario')} />
+            <Input label="Cargo *" error={errors.cargo?.message} {...register('cargo')} />
+            <Input label="Remuneração (R$) *" inputMode="numeric" placeholder="0,00" error={errors.salario?.message} {...salarioCampo} onChange={(e) => { e.target.value = maskMoeda(e.target.value); void salarioCampo.onChange(e) }} />
             <Input label="Data de início *" type="date" error={errors.data_inicio?.message} {...register('data_inicio')} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

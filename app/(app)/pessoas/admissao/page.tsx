@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
-import { getAdmissaoEmployees, getCartas, getExames, getHistoricos, getOnboardingTokens, type OnboardingTokenInfo } from './queries'
+import { getAdmissaoEmployees, getCartas, getEtapasAdmissao, getExames, getHistoricos, getOnboardingTokens, type OnboardingTokenInfo } from './queries'
 import { AdmissaoClient } from './components/admissao-client'
 
 export const dynamic = 'force-dynamic'
@@ -19,9 +19,10 @@ export default async function AdmissaoPage() {
   const viewer = await getViewerContext(companyId)
   if (viewer?.isColaborador) redirect('/pessoas/registro-de-ponto')
 
-  const [employees, tokensArr] = await Promise.all([
+  const [employees, tokensArr, etapas] = await Promise.all([
     getAdmissaoEmployees(companyId),
     getOnboardingTokens(companyId),
+    getEtapasAdmissao(companyId),
   ])
   const ids = employees.map((e) => e.id)
   const [historicos, cartas, exames] = await Promise.all([getHistoricos(companyId, ids), getCartas(companyId, ids), getExames(companyId, ids)])
@@ -54,6 +55,7 @@ export default async function AdmissaoPage() {
         historicos={historicos}
         cartas={cartas}
         exames={exames}
+        etapas={etapas}
       />
     </div>
   )

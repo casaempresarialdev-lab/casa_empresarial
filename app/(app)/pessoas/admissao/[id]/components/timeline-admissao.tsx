@@ -11,14 +11,17 @@ import type { Anotacao } from '../../queries'
 
 interface Props {
   anotacoes: Anotacao[]
-  /** Início da admissão: primeiro item da linha do tempo */
+  /** Início do processo: primeiro item da linha do tempo */
   iniciadaEm: string
   employeeId: string
   companyId: string
+  /** Outro processo (ex.: rescisão): texto do primeiro item e como gravar a anotação */
+  inicioTexto?: string
+  adicionar?: (texto: string) => Promise<{ error?: string } | { success: true }>
 }
 
 // Lado direito da ficha: registro de anotações, com os eventos do processo na mesma linha do tempo
-export function TimelineAdmissao({ anotacoes, iniciadaEm, employeeId, companyId }: Props) {
+export function TimelineAdmissao({ anotacoes, iniciadaEm, employeeId, companyId, inicioTexto = 'Admissão iniciada', adicionar }: Props) {
   const router = useRouter()
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -36,9 +39,9 @@ export function TimelineAdmissao({ anotacoes, iniciadaEm, employeeId, companyId 
   async function enviar() {
     if (!texto.trim() || enviando) return
     setEnviando(true)
-    const r = await adicionarAnotacaoAction(companyId, employeeId, texto)
+    const r = adicionar ? await adicionar(texto) : await adicionarAnotacaoAction(companyId, employeeId, texto)
     setEnviando(false)
-    if ('error' in r) { toast.error(r.error ?? 'Não foi possível salvar a anotação.'); return }
+    if ('error' in r && r.error) { toast.error(r.error); return }
     setTexto('')
     router.refresh()
   }
@@ -51,7 +54,7 @@ export function TimelineAdmissao({ anotacoes, iniciadaEm, employeeId, companyId 
       </header>
 
       <ol ref={listaRef} className="flex-1 min-h-0 overflow-y-auto px-5 pt-5 pb-1">
-        <Evento texto="Admissão iniciada" em={iniciadaEm} />
+        <Evento texto={inicioTexto} em={iniciadaEm} />
         {itens.map((a) => (a.tipo === 'evento'
           ? <Evento key={a.id} texto={a.texto} em={a.created_at} autor={a.autor_nome} />
           : <Registro key={a.id} anotacao={a} />

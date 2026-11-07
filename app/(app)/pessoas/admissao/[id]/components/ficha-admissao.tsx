@@ -19,9 +19,11 @@ import {
 } from '../../actions'
 import { AutoCadastroForm } from '@/app/auto-cadastro/[token]/components/auto-cadastro-form'
 import { generateOnboardingTokenAction } from '../../../funcionarios/actions'
-import { ETAPAS, ETAPA_CARTA, ETAPA_EXAME, ETAPA_INICIAL, ETAPA_RESULTADO_EXAME, isEtapa,
+import { ETAPA_CARTA, ETAPA_EXAME, ETAPA_FINAL, ETAPA_INICIAL, ETAPA_RESULTADO_EXAME,
   ETAPA_AGUARDAR_CONTABILIDADE, ETAPA_CONTABILIDADE, ETAPA_CONTRATO,
+  indiceEtapa, isPersonalizada, labelEtapa, proximaEtapa,
 } from '../../etapas'
+import { EtapaPersonalizada } from './etapa-personalizada'
 import { fmtDate, iniciais, maskCpf, tipoLabel } from '../../../funcionarios/components/ficha/ficha-config'
 import { CartaProposta } from '../../components/carta-proposta'
 import { ListaEntrevistas } from '../../components/historico-admissao'
@@ -133,8 +135,12 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
 
   const situacao = situacaoLink(token)
   const emEspera = !!emp.admissao_em_espera
-  const atual = isEtapa(emp.admission_stage) ? emp.admission_stage : ETAPA_INICIAL
-  const idxAtual = ETAPAS.findIndex((e) => e.key === atual)
+  const etapas = config.etapas
+  const atual = emp.admission_stage && indiceEtapa(etapas, emp.admission_stage) >= 0 ? emp.admission_stage : ETAPA_INICIAL
+  const idxAtual = indiceEtapa(etapas, atual)
+  const naPersonalizada = isPersonalizada(atual)
+  const ativa = (key: string) => !!etapas.find((e) => e.key === key)?.ativo
+  const aposCarta = labelEtapa(etapas, proximaEtapa(etapas, ETAPA_CARTA))
   const naEntrevista = atual === ETAPA_INICIAL
   const naCarta = atual === ETAPA_CARTA
   const noExame = atual === ETAPA_EXAME
@@ -142,10 +148,13 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
   const naContabilidade = atual === ETAPA_CONTABILIDADE
   const aguardandoContabilidade = atual === ETAPA_AGUARDAR_CONTABILIDADE
   const naAssinatura = atual === ETAPA_CONTRATO
-  const idxContabilidade = ETAPAS.findIndex((e) => e.key === ETAPA_CONTABILIDADE)
+  const idxContabilidade = indiceEtapa(etapas, ETAPA_CONTABILIDADE)
   const cartaAceita = carta?.status === 'aceita'
 
-  const idxCarta = ETAPAS.findIndex((e) => e.key === ETAPA_CARTA)
+  const idxCarta = indiceEtapa(etapas, ETAPA_CARTA)
+  // Dados preenchidos: pelo link (usado) ou no painel/link, registrado no histórico.
+  // A etapa não serve de prova: o aceite da carta já leva o card adiante.
+  const dadosOk = situacao === 'done' || historico.anotacoes.some((a) => a.texto.startsWith('Dados e documentos preenchidos'))
   const agora = useState(() => Date.now())[0]
   const entrevistaMarcada = historico.entrevistas.filter((e) => e.status === 'agendada' && Date.parse(e.data_hora) > agora).at(-1)
 
@@ -162,7 +171,7 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
     ? `Marcada para ${fmtDataHora(entrevistaMarcada.data_hora)}`
     : historico.entrevistas.length ? `${historico.entrevistas.length} no histórico` : 'Ainda não marcada'
   const resumoCarta = cartaAceita ? `Aceita em ${fmtDataHora(carta!.respondida_em!)}` : carta ? `Enviada em ${fmtDataHora(carta.created_at)}` : 'Ainda não enviada'
-  const resumoDados = idxAtual > idxCarta ? 'Dados preenchidos' : situacao === 'done' ? `Preenchidos em ${fmtDate(token!.used_at)}` : situacao === 'pending' ? 'Aguardando o preenchimento' : situacao === 'expired' ? 'O link expirou' : 'Link ainda não gerado'
+  const resumoDados = dadosOk && situacao !== 'done' ? 'Dados preenchidos' : situacao === 'done' ? `Preenchidos em ${fmtDate(token!.used_at)}` : situacao === 'pending' ? 'Aguardando o preenchimento' : situacao === 'expired' ? 'O link expirou' : 'Link ainda não gerado'
 
   const resumoContabilidade = fichaCompleta.admissao_contabilidade_retorno_em
     ? `Retorno em ${fmtDataHora(fichaCompleta.admissao_contabilidade_retorno_em)}`
@@ -396,9 +405,9 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
           )}
 
           {/* Preenchimento dos dados: depois do aceite */}
-          {(cartaAceita || !!token || idxAtual > idxCarta) && (
+          {(cartaAceita || !!token || idxAtual > idxCarta || !ativa(ETAPA_CARTA)) && (
             <Accordion titulo="Preenchimento dos dados" resumo={resumoDados} aberto={estaAberta('dados')} onAlternar={() => alternar('dados')}>
-              {idxAtual > idxCarta || situacao === 'done' ? (
+              {dadosOk ? (
                 <p className="text-sm" style={{ color: '#15803D' }}>
                   {situacao === 'done' ? `Dados preenchidos pelo candidato em ${fmtDate(token!.used_at)}.` : 'Dados preenchidos.'} Para alterar, use &quot;Dados cadastrais&quot;.
                 </p>
@@ -411,7 +420,7 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
                   <AutoCadastroForm
                     semCartao
                     enviar={(fd) => preencherDadosAction(companyId, emp.id, fd)}
-                    onConcluido={() => { setPreenchendo(false); toast('Dados salvos. O candidato seguiu para "Encaminhar para exame".'); router.refresh() }}
+                    onConcluido={() => { setPreenchendo(false); toast(naCarta ? `Dados salvos. O candidato seguiu para "${aposCarta}".` : 'Dados salvos.'); router.refresh() }}
                     employeeName={emp.nome}
                     companyName={empresa}
                     tipoContrato={emp.tipo_contrato}
@@ -438,7 +447,7 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
               ) : (
                 <div className="flex flex-col gap-3">
                   <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                    O candidato preenche pelo link, ou você preenche aqui. Ao concluir, ele segue para &quot;Encaminhar para exame&quot;.
+                    O candidato preenche pelo link, ou você preenche aqui.{naCarta && <> Ao concluir, ele segue para &quot;{aposCarta}&quot;.</>}
                   </p>
                   {link && (
                     <div className="rounded-xl border p-3 flex flex-col gap-2" style={{ borderColor: 'var(--color-card-border)', backgroundColor: 'var(--color-brand-light)' }}>
@@ -487,7 +496,7 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
           )}
 
           {/* Contabilidade (externa): na etapa de envio, aguardando o retorno e, depois, como consulta */}
-          {idxAtual >= idxContabilidade && (
+          {idxAtual >= idxContabilidade && (ativa(ETAPA_CONTABILIDADE) || !!fichaCompleta.admissao_contabilidade_enviada_em) && (
             <Accordion
               titulo="Contabilidade"
               resumo={resumoContabilidade}
@@ -506,9 +515,22 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
             </Accordion>
           )}
 
+          {/* Etapa personalizada: controle interno, com anotação e o botão para avançar */}
+          {naPersonalizada && (
+            <Accordion titulo={labelEtapa(etapas, atual)} resumo="Etapa de controle interno" selo={seloAtual} aberto={estaAberta(atual)} onAlternar={() => alternar(atual)}>
+              <EtapaPersonalizada
+                companyId={companyId}
+                employeeId={emp.id}
+                proxima={labelEtapa(etapas, proximaEtapa(etapas, atual))}
+                ultima={proximaEtapa(etapas, atual) === ETAPA_FINAL}
+                dataSugerida={fichaCompleta.data_admissao ?? carta?.data_inicio ?? null}
+              />
+            </Accordion>
+          )}
+
           {naAssinatura && (
             <Accordion titulo="Assinar contrato" selo={seloAtual} aberto={estaAberta('contrato')} onAlternar={() => alternar('contrato')}>
-              <ContratoAdmissao employee={fichaCompleta} dataInicio={carta?.data_inicio ?? null} companyId={companyId} onFinalizado={voltarAoKanban} />
+              <ContratoAdmissao employee={fichaCompleta} dataInicio={carta?.data_inicio ?? null} companyId={companyId} onFinalizado={() => router.refresh()} />
             </Accordion>
           )}
         </div>

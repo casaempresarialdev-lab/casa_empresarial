@@ -12,7 +12,7 @@ import { vagaSchema, type VagaInput } from '@/lib/validations/vaga'
 import { salvarVagaAction } from '../actions'
 import type { Vaga } from '../queries'
 import type { CompanyBenefit } from '../../beneficios/queries'
-import { TIPO_OPTIONS, fmtMoney, isPjOuAutonomo } from '../../funcionarios/components/ficha/ficha-config'
+import { TIPO_OPTIONS, fmtMoney, isPjOuAutonomo, maskMoeda } from '../../funcionarios/components/ficha/ficha-config'
 
 // Etapas no cadastro, abas na edição
 const ETAPAS: { label: string; campos: (keyof VagaInput)[] }[] = [
@@ -65,6 +65,8 @@ export function VagaForm({ companyId, vaga, companyBenefits, abasExtras = [], ab
     resolver: zodResolver(vagaSchema),
     defaultValues: valoresIniciais(vaga),
   })
+  // Salário formatado como moeda enquanto digita
+  const salarioCampo = register('salario')
 
   const tipo = watch('tipo_contrato')
   const benefitIds = watch('benefit_ids')
@@ -141,7 +143,7 @@ export function VagaForm({ companyId, vaga, companyBenefits, abasExtras = [], ab
         <div className={etapa === 1 ? 'flex flex-col gap-4' : 'hidden'}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="Forma de contratação *" options={TIPO_OPTIONS} placeholder="Selecionar..." error={errors.tipo_contrato?.message} {...register('tipo_contrato')} />
-            <Input label={pj ? 'Valor do contrato (R$)' : 'Salário (R$)'} placeholder="0,00" inputMode="decimal" hint="Usado na carta proposta." error={errors.salario?.message} {...register('salario')} />
+            <Input label={pj ? 'Valor do contrato (R$)' : 'Salário (R$)'} placeholder="0,00" inputMode="numeric" hint="Usado na carta proposta." error={errors.salario?.message} {...salarioCampo} onChange={(e) => { e.target.value = maskMoeda(e.target.value); void salarioCampo.onChange(e) }} />
           </div>
           <label className="flex items-center gap-2.5 text-sm cursor-pointer self-start" style={{ color: 'var(--color-text-secondary)' }}>
             <input type="checkbox" className="w-4 h-4" style={{ accentColor: 'var(--color-brand)' }} {...register('exibir_salario')} />

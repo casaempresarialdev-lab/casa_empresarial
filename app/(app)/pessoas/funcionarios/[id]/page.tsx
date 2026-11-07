@@ -7,6 +7,7 @@ import { getActiveCompanyBenefits } from '../../beneficios/queries'
 import { getCompany } from '../../../empresa/queries'
 import { isSecaoId } from '../components/ficha/ficha-config'
 import { FuncionarioPage } from './components/funcionario-page'
+import { getRescisaoAtiva } from '../../rescisao/queries'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,11 +28,12 @@ export default async function FuncionarioViewPage({ params, searchParams }: Prop
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const [employee, companyBenefits, company, viewer] = await Promise.all([
+  const [employee, companyBenefits, company, viewer, rescisaoAtiva] = await Promise.all([
     getEmployeeById(id, companyId),
     getActiveCompanyBenefits(companyId),
     getCompany(companyId),
     getViewerContext(companyId),
+    getRescisaoAtiva(companyId, id),
   ])
   if (!employee) notFound()
 
@@ -57,6 +59,7 @@ export default async function FuncionarioViewPage({ params, searchParams }: Prop
         fotoUrl={fotoUrl}
         abaInicial={isSecaoId(aba) ? aba : undefined}
         isColaboradorSelf={isColaboradorSelf}
+        rescisaoAtivaId={isColaboradorSelf ? null : rescisaoAtiva?.id ?? null}
       />
     </div>
   )

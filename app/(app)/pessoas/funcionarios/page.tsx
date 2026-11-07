@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getEmployees } from './queries'
 import { FuncionariosClient } from './components/funcionarios-client'
+import { getRescisoes } from '../rescisao/queries'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,9 @@ export default async function FuncionariosPage() {
   const companyId = cookieStore.get('active_company_id')?.value
   if (!companyId) redirect('/empresa')
 
-  const employees = await getEmployees(companyId)
+  const [employees, emRescisao] = await Promise.all([getEmployees(companyId), getRescisoes(companyId)])
+  // Quem já tem rescisão em andamento: o menu leva à ficha dela em vez de iniciar outra
+  const rescisoes = Object.fromEntries(emRescisao.map((r) => [r.employee_id, r.id]))
 
   // Signed URLs das fotos (bucket privado, TTL 1h)
   const admin = createAdminClient()
@@ -34,6 +37,8 @@ export default async function FuncionariosPage() {
       <FuncionariosClient
         employees={employees}
         photoUrls={photoUrls}
+        companyId={companyId}
+        rescisoes={rescisoes}
       />
     </div>
   )

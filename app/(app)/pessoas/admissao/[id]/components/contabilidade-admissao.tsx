@@ -62,7 +62,13 @@ export function ContabilidadeAdmissao({ employee, company, benefits, fotoUrl, et
       acao === 'envio' ? registrarEnvioContabilidadeAction(companyId, employee.id) : registrarRetornoContabilidadeAction(companyId, employee.id),
       acao === 'envio'
         ? { loading: 'Registrando o envio…', success: 'Envio registrado. O card seguiu para "Aguardando contabilidade".', error: 'Não foi possível registrar.' }
-        : { loading: 'Registrando o retorno…', success: 'Retorno registrado. O card seguiu para "Assinar contrato".', error: 'Não foi possível registrar.' },
+        : {
+            loading: 'Registrando o retorno…',
+            success: (res) => 'finalizado' in res && res.finalizado
+              ? 'Retorno registrado. Admissão concluída: a pessoa entrou na Equipe.'
+              : `Retorno registrado. O card seguiu para "${'proxima' in res ? res.proxima : ''}".`,
+            error: 'Não foi possível registrar.',
+          },
     )
     setEnviando(false)
     if (!('error' in r)) router.refresh()
@@ -161,9 +167,11 @@ export function ContratoAdmissao({ employee, dataInicio, companyId, onFinalizado
     fd.append('data_admissao', data)
     setEnviando(true)
     const r = await toast.promise(finalizarAdmissaoAction(companyId, employee.id, fd), {
-      loading: 'Finalizando a admissão…',
-      success: `${employee.nome} entrou na Equipe.`,
-      error: 'Não foi possível finalizar.',
+      loading: 'Registrando o contrato…',
+      success: (res) => !('finalizado' in res) ? 'Contrato registrado.'
+        : res.finalizado ? `${employee.nome} entrou na Equipe.${res.vagaEncerrada ? ` Vaga "${res.vagaEncerrada}" encerrada.` : ''}`
+        : `Contrato registrado. O card seguiu para "${res.proxima}".`,
+      error: 'Não foi possível registrar o contrato.',
     })
     setEnviando(false)
     if (!('error' in r)) onFinalizado()

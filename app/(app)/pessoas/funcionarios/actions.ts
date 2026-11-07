@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
-import { ETAPA_FINAL, ETAPA_SEM_VAGA } from '../admissao/etapas'
+import { ETAPA_FINAL, primeiraEtapa } from '../admissao/etapas'
+import { getEtapasAdmissao } from '../admissao/queries'
 import { findUserIdByEmail, adicionarContaExistente, enviarConvite } from '@/lib/invitations'
 
 async function getAppUrl() {
@@ -20,6 +21,8 @@ const MAX_DOC_SIZE = 20 * 1024 * 1024
 const DOC_KEYS = [
   'foto', 'rg_cnh_frente', 'rg_verso', 'exame_admissional', 'cpf',
   'comprovante_residencia', 'titulo_eleitor', 'ctps', 'pis', 'certidao', 'contrato',
+  // Rescisão (migration 20261107000086)
+  'exame_demissional', 'trct',
 ] as const
 
 export type DocKey = typeof DOC_KEYS[number]
@@ -178,8 +181,8 @@ export async function createEmployeeAction(companyId: string, formData: FormData
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    // Admissão sem vaga entra no kanban depois da entrevista
-    .insert({ company_id: companyId, ...(fields.status === 'admissao' && { admission_stage: ETAPA_SEM_VAGA }), ...fields })
+    // Admissão sem vaga entra no kanban na primeira etapa ativa, pulando a entrevista
+    .insert({ company_id: companyId, ...(fields.status === 'admissao' && { admission_stage: primeiraEtapa(await getEtapasAdmissao(companyId), false) }), ...fields })
     .select('id')
     .single()
 
@@ -229,6 +232,8 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
     pis: current.doc_pis_path,
     certidao: current.doc_certidao_path,
     contrato: current.doc_contrato_path ?? null,
+    exame_demissional: current.doc_exame_demissional_path ?? null,
+    trct: current.doc_trct_path ?? null,
   }
 
   const { updates: docUpdates, error: docErr } = await uploadEmployeeDocs(admin, current.company_id, employeeId, formData, existingDocs)

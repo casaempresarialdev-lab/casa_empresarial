@@ -11,6 +11,7 @@ import { toast } from '@/lib/toast'
 import { deleteEmployeeAction } from '../actions'
 import { ETAPA_FINAL } from '../../admissao/etapas'
 import type { Employee } from '../queries'
+import { IniciarRescisao } from '../../rescisao/components/iniciar-rescisao'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 // Mesmo critério da Documentação: "vencendo" = até 30 dias
 const VENCENDO_DIAS = 30
@@ -118,10 +119,17 @@ function Avatar({ src, nome }: { src?: string; nome: string }) {
 interface Props {
   employees: Employee[]
   photoUrls: Record<string, string>
+  companyId: string
+  /** Rescisões em andamento: id do funcionário → id da rescisão */
+  rescisoes: Record<string, string>
 }
 
-export function FuncionariosClient({ employees, photoUrls }: Props) {
+// Quem pode ter a rescisão iniciada: está na Equipe
+const NA_EQUIPE = ['experiencia', 'ativo', 'ferias', 'afastado']
+
+export function FuncionariosClient({ employees, photoUrls, companyId, rescisoes }: Props) {
   const router = useRouter()
+  const [rescisaoDe, setRescisaoDe] = useState<Employee | null>(null)
   const [tipoFiltro, setTipoFiltro] = useState('todos')
   // Status marcados (vazio = todos); padrão: todos os status ativos
   const [statusFiltro, setStatusFiltro] = useState<string[]>(ATIVOS_STATUS)
@@ -324,6 +332,11 @@ export function FuncionariosClient({ employees, photoUrls }: Props) {
                   actions={[
                     { icon: 'eye', label: 'Visualizar', onClick: () => router.push(`/pessoas/funcionarios/${emp.id}`) },
                     { icon: 'pencil', label: 'Editar', onClick: () => router.push(`/pessoas/funcionarios/${emp.id}/editar`) },
+                    ...(rescisoes[emp.id]
+                      ? [{ icon: 'logout' as const, label: 'Ver rescisão', onClick: () => router.push(`/pessoas/rescisao/${rescisoes[emp.id]}`) }]
+                      : NA_EQUIPE.includes(emp.status)
+                        ? [{ icon: 'logout' as const, label: 'Iniciar rescisão', onClick: () => setRescisaoDe(emp) }]
+                        : []),
                     { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setConfirmTarget(emp), disabled: deletingId === emp.id },
                   ]}
                 />
@@ -340,6 +353,15 @@ export function FuncionariosClient({ employees, photoUrls }: Props) {
         loading={!!deletingId}
         title="Excluir funcionário"
         message={<p>Excluir <strong>{confirmTarget?.nome}</strong>? Esta ação não pode ser desfeita.</p>}
+      />
+
+      {/* key: cada pessoa abre o formulário limpo */}
+      <IniciarRescisao
+        key={rescisaoDe?.id ?? 'nenhum'}
+        open={!!rescisaoDe}
+        onClose={() => setRescisaoDe(null)}
+        companyId={companyId}
+        employee={rescisaoDe ? { id: rescisaoDe.id, nome: rescisaoDe.nome } : undefined}
       />
     </>
   )

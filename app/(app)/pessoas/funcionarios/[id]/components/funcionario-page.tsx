@@ -10,6 +10,7 @@ import { FuncionarioFicha } from '../../components/ficha/funcionario-ficha'
 import { baixarFichaPdf } from '../../components/ficha/baixar-ficha-pdf'
 import { STATUS_CFG, iniciais, tipoLabel, type SecaoId } from '../../components/ficha/ficha-config'
 import { MeusDadosForm } from './meus-dados-form'
+import { IniciarRescisao } from '../../../rescisao/components/iniciar-rescisao'
 import type { Employee } from '../../queries'
 import type { CompanyBenefit } from '../../../beneficios/queries'
 import type { Company } from '../../../../empresa/queries'
@@ -24,14 +25,20 @@ interface Props {
   abaInicial?: SecaoId
   /** Colaborador vendo a própria ficha: edita só os dados de contato (Meus Dados) */
   isColaboradorSelf: boolean
+  /** Rescisão em andamento desta pessoa: o botão abre a ficha dela em vez de iniciar outra */
+  rescisaoAtivaId?: string | null
 }
 
+// Quem pode ter a rescisão iniciada: está na Equipe
+const NA_EQUIPE = ['experiencia', 'ativo', 'ferias', 'afastado']
+
 // Ficha do funcionário: visualizar (abas, campos fechados) e editar (mesmas abas, campos abertos)
-export function FuncionarioPage({ modo, employee: emp, companyId, company, companyBenefits, fotoUrl, abaInicial, isColaboradorSelf }: Props) {
+export function FuncionarioPage({ modo, employee: emp, companyId, company, companyBenefits, fotoUrl, abaInicial, isColaboradorSelf, rescisaoAtivaId = null }: Props) {
   const router = useRouter()
   const abaRef = useRef<SecaoId>(abaInicial ?? 'identificacao')
   const [gerandoPdf, setGerandoPdf] = useState(false)
   const [meusDadosOpen, setMeusDadosOpen] = useState(false)
+  const [iniciandoRescisao, setIniciandoRescisao] = useState(false)
 
   const base = `/pessoas/funcionarios/${emp.id}`
   const status = STATUS_CFG[emp.status]
@@ -114,6 +121,12 @@ export function FuncionarioPage({ modo, employee: emp, companyId, company, compa
           podeGerenciar={!isColaboradorSelf}
           acoes={!editando && (
             <>
+              {!isColaboradorSelf && rescisaoAtivaId && (
+                <Button type="button" variant="secondary" onClick={() => router.push(`/pessoas/rescisao/${rescisaoAtivaId}`)}>Ver rescisão</Button>
+              )}
+              {!isColaboradorSelf && !rescisaoAtivaId && NA_EQUIPE.includes(emp.status) && (
+                <Button type="button" variant="ghost" onClick={() => setIniciandoRescisao(true)} style={{ color: '#B91C1C' }}>Iniciar rescisão</Button>
+              )}
               <Button type="button" variant="secondary" onClick={exportarPdf} loading={gerandoPdf}>
                 {!gerandoPdf && <Icon name="download" size={16} />}
                 Exportar PDF
@@ -130,6 +143,9 @@ export function FuncionarioPage({ modo, employee: emp, companyId, company, compa
       </div>
 
       {isColaboradorSelf && <MeusDadosForm open={meusDadosOpen} onClose={() => setMeusDadosOpen(false)} employee={emp} />}
+      {!isColaboradorSelf && (
+        <IniciarRescisao open={iniciandoRescisao} onClose={() => setIniciandoRescisao(false)} companyId={companyId} employee={{ id: emp.id, nome: emp.nome }} />
+      )}
     </div>
   )
 }

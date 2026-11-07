@@ -18,7 +18,7 @@ import type { Employee } from '../../queries'
 import type { CompanyBenefit } from '../../../beneficios/queries'
 import {
   ARQUIVOS, CONTRATO_OPTIONS, GRAU_OPTIONS, STATUS_OPTIONS, STATUS_OPTIONS_PJ, TIPO_OPTIONS,
-  addDays, fmtDate, fmtMoney, isPjOuAutonomo, labelDe, maskCnpj, maskCpf, maskTelefone, secoesVisiveis,
+  addDays, fmtDate, fmtMoney, isPjOuAutonomo, labelDe, maskCnpj, maskCpf, maskMoeda, maskTelefone, secoesVisiveis,
   tipoPorCaminho, valoresIniciais, valoresParaFormData,
   type ArquivoKey, type SecaoId, type Valores,
 } from './ficha-config'
@@ -375,7 +375,7 @@ export function FuncionarioFicha({
             <Input label="Serviço prestado" value={v.servico} onChange={txt('servico')} placeholder="Ex.: Consultoria de TI, limpeza…" />
           </Campo>
           <Campo label="Valor do contrato (R$)" valor={fmtMoney(v.valor_servico)}>
-            <Input label="Valor do contrato (R$)" value={v.valor_servico} onChange={txt('valor_servico')} placeholder="0,00" inputMode="decimal" />
+            <Input label="Valor do contrato (R$)" value={v.valor_servico} onChange={(e) => set('valor_servico')(maskMoeda(e.target.value))} placeholder="0,00" inputMode="numeric" />
           </Campo>
           <Campo label="Data de início" valor={fmtDate(v.data_admissao)}>
             <Input label="Data de início" type="date" value={v.data_admissao} onChange={txt('data_admissao')} />
@@ -411,7 +411,7 @@ export function FuncionarioFicha({
         <Bloco titulo="Remuneração" descricao="Vale-alimentação e vale-transporte são vinculados na aba Benefícios e acessos.">
           <Grade>
             <Campo label="Salário bruto (R$)" valor={fmtMoney(v.salario)}>
-              <Input label="Salário bruto (R$)" value={v.salario} onChange={txt('salario')} placeholder="0,00" inputMode="decimal" />
+              <Input label="Salário bruto (R$)" value={v.salario} onChange={(e) => set('salario')(maskMoeda(e.target.value))} placeholder="0,00" inputMode="numeric" />
             </Campo>
             <Campo label="Plano de saúde" valor={v.plano_saude ? 'Sim' : 'Não'}>
               <div className="flex flex-col gap-1">

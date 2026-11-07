@@ -8,6 +8,8 @@ import { getClinicas, getConfigAdmissao } from '../pessoas/admissao/queries'
 import { ConfigIdentidadeVisual } from './components/config-identidade-visual'
 import { ConfigAbas } from './components/config-abas'
 import { ConfigAdmissao } from './components/config-admissao'
+import { ConfigRescisao } from './components/config-rescisao'
+import { getConfigRescisao } from '../pessoas/rescisao/queries'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,8 +23,9 @@ export default async function ConfiguracoesPage() {
   if (!companyId) redirect('/empresa')
 
   const admin = createAdminClient()
-  const [configAdmissao, clinicas, company, { data: row }] = await Promise.all([
+  const [configAdmissao, configRescisao, clinicas, company, { data: row }] = await Promise.all([
     getConfigAdmissao(companyId),
+    getConfigRescisao(companyId),
     getClinicas(companyId),
     getCompany(companyId),
     // select('*'): as colunas opcionais (migrations 20261023000053/54) podem ainda não existir
@@ -49,6 +52,7 @@ export default async function ConfiguracoesPage() {
           />
         }
         admissao={<ConfigAdmissao companyId={companyId} inicial={configAdmissao} clinicas={clinicas} />}
+        rescisao={<ConfigRescisao companyId={companyId} inicial={configRescisao} clinicas={clinicas.length} />}
       />
     </div>
   )

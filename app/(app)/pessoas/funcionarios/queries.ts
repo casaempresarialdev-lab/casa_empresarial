@@ -55,6 +55,9 @@ export type Employee = {
   admissao_contabilidade_enviada_em?: string | null
   admissao_contabilidade_enviada_por?: string | null
   admissao_contabilidade_retorno_em?: string | null
+  /** Arquivos da rescisão (migration 20261107000086) */
+  doc_exame_demissional_path?: string | null
+  doc_trct_path?: string | null
   created_at: string
   updated_at: string
   employee_benefits: { benefit_id: string }[]
