@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
+import { semAcesso } from '@/lib/auth/acesso'
+import { isRegraDesconto } from '@/lib/beneficios-calculo'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -15,7 +17,20 @@ async function assertCanManage(companyId: string) {
   return viewer?.isColaborador ? { error: 'Sem permissão para esta ação.' } : null
 }
 
+/** Regra de desconto do formulário */
+function lerDesconto(formData: FormData) {
+  const tipo = formData.get('desconto_tipo')
+  if (!isRegraDesconto(tipo)) return { error: 'Escolha a regra de desconto.' }
+  const valor = tipo === 'nenhum' ? 0 : parseFloat(String(formData.get('desconto_valor') ?? ''))
+  if (tipo !== 'nenhum' && !(valor > 0)) return { error: 'Informe o valor do desconto.' }
+  if ((tipo === 'percentual_salario' || tipo === 'percentual_beneficio') && valor > 100) return { error: 'O percentual pode ser de até 100%.' }
+  return { campos: { desconto_tipo: tipo, desconto_valor: valor, desconta_salario: tipo !== 'nenhum' } }
+}
+
 export async function createBenefitAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.beneficios', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const guard = await assertCanManage(companyId)
@@ -23,6 +38,8 @@ export async function createBenefitAction(companyId: string, formData: FormData)
 
   const nome = (formData.get('nome') as string)?.trim()
   if (!nome) return { error: 'Nome é obrigatório.' }
+  const desconto = lerDesconto(formData)
+  if ('error' in desconto) return { error: desconto.error }
 
   const admin = createAdminClient()
   const { error } = await admin.from('company_benefits').insert({
@@ -30,7 +47,7 @@ export async function createBenefitAction(companyId: string, formData: FormData)
     nome,
     valor: parseFloat((formData.get('valor') as string)?.replace(',', '.') || '0') || 0,
     por_dia_trabalhado: formData.get('por_dia_trabalhado') === 'true',
-    desconta_salario: formData.get('desconta_salario') === 'true',
+    ...desconto.campos,
     ativo: true,
   })
 
@@ -40,6 +57,9 @@ export async function createBenefitAction(companyId: string, formData: FormData)
 }
 
 export async function updateBenefitAction(benefitId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.beneficios')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -49,12 +69,14 @@ export async function updateBenefitAction(benefitId: string, formData: FormData)
   if (!current) return { error: 'Benefício não encontrado.' }
   const guard = await assertCanManage(current.company_id)
   if (guard) return guard
+  const desconto = lerDesconto(formData)
+  if ('error' in desconto) return { error: desconto.error }
 
   const { error } = await admin.from('company_benefits').update({
     nome: (formData.get('nome') as string)?.trim(),
     valor: parseFloat((formData.get('valor') as string)?.replace(',', '.') || '0') || 0,
     por_dia_trabalhado: formData.get('por_dia_trabalhado') === 'true',
-    desconta_salario: formData.get('desconta_salario') === 'true',
+    ...desconto.campos,
     ativo: formData.get('ativo') !== 'false',
   }).eq('id', benefitId)
 
@@ -65,6 +87,9 @@ export async function updateBenefitAction(benefitId: string, formData: FormData)
 }
 
 export async function deleteBenefitAction(benefitId: string) {
+  const negado = await semAcesso('pessoas.beneficios')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -88,6 +113,9 @@ export async function toggleEmployeeBenefitAction(
   benefitId: string,
   active: boolean,
 ) {
+  const negado = await semAcesso('pessoas.beneficios', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const guard = await assertCanManage(companyId)

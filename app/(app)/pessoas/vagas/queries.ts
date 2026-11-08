@@ -8,6 +8,8 @@ export type Vaga = {
   token: string
   titulo: string
   descricao: string | null
+  /** Cargo da Estrutura (migration 20261108000090) */
+  position_id?: string | null
   cargo: string | null
   departamento: string | null
   local_trabalho: string | null
@@ -31,10 +33,11 @@ export type Candidatura = {
   id: string
   vaga_id: string
   nome: string
-  cpf: string
+  /** Admissão aberta direto no sistema pode não ter CPF nem currículo */
+  cpf: string | null
   email: string
   telefone: string
-  anexo_nome: string
+  anexo_nome: string | null
   anexo_tipo: string | null
   status: CandidaturaStatus
   motivo: string | null

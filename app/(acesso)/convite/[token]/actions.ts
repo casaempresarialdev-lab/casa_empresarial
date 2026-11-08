@@ -10,10 +10,10 @@ import { buscarConvitePorToken, findUserIdByEmail, vincularMembro } from '@/lib/
 
 async function concluirConvite(
   admin: ReturnType<typeof createAdminClient>,
-  inv: { id: string; company_id: string; role: string; employee_id: string | null },
+  inv: { id: string; company_id: string; role: string; employee_id: string | null; access_profile_ids: string[] },
   profileId: string,
 ) {
-  const vinculo = await vincularMembro(admin, inv.company_id, profileId, inv.role)
+  const vinculo = await vincularMembro(admin, inv.company_id, profileId, inv.role, inv.access_profile_ids)
   // Já ser membro não impede concluir o convite
   if ('error' in vinculo && vinculo.error !== 'Este usuário já é membro desta empresa.') return vinculo
   if (inv.employee_id) await admin.from('employees').update({ profile_id: profileId }).eq('id', inv.employee_id)

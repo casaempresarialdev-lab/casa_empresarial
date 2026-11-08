@@ -142,7 +142,7 @@ export function PerfilClient({ perfil, email, abaInicial }: Props) {
         {/* Título e breadcrumb na mesma linha */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-            Meu Perfil
+            Minha conta
           </h1>
           <Breadcrumb />
         </div>

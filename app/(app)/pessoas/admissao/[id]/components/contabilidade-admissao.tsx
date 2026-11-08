@@ -65,7 +65,7 @@ export function ContabilidadeAdmissao({ employee, company, benefits, fotoUrl, et
         : {
             loading: 'Registrando o retorno…',
             success: (res) => 'finalizado' in res && res.finalizado
-              ? 'Retorno registrado. Admissão concluída: a pessoa entrou na Equipe.'
+              ? `Retorno registrado. Admissão concluída: a pessoa entrou na Equipe.${'acesso' in res && res.acesso ? ` ${res.acesso}` : ''}`
               : `Retorno registrado. O card seguiu para "${'proxima' in res ? res.proxima : ''}".`,
             error: 'Não foi possível registrar.',
           },
@@ -169,7 +169,7 @@ export function ContratoAdmissao({ employee, dataInicio, companyId, onFinalizado
     const r = await toast.promise(finalizarAdmissaoAction(companyId, employee.id, fd), {
       loading: 'Registrando o contrato…',
       success: (res) => !('finalizado' in res) ? 'Contrato registrado.'
-        : res.finalizado ? `${employee.nome} entrou na Equipe.${res.vagaEncerrada ? ` Vaga "${res.vagaEncerrada}" encerrada.` : ''}`
+        : res.finalizado ? `${employee.nome} entrou na Equipe.${res.vagaEncerrada ? ` Vaga "${res.vagaEncerrada}" encerrada.` : ''}${res.acesso ? ` ${res.acesso}` : ''}`
         : `Contrato registrado. O card seguiu para "${res.proxima}".`,
       error: 'Não foi possível registrar o contrato.',
     })

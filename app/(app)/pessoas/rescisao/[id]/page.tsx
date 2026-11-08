@@ -8,11 +8,14 @@ import { getActiveCompanyBenefits } from '../../beneficios/queries'
 import { getClinicas } from '../../admissao/queries'
 import { getAnotacoesRescisao, getConfigRescisao, getExamesRescisao, getRescisao } from '../queries'
 import { FichaRescisao } from './components/ficha-rescisao'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 // Ficha da rescisão: aberta ao clicar no card do kanban (ou depois, como consulta)
 export default async function FichaRescisaoPage({ params }: { params: Promise<{ id: string }> }) {
+  await exigirAcessoPagina('pessoas.rescisao')
+
   const { id } = await params
 
   const supabase = await createClient()

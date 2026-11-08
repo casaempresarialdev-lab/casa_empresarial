@@ -12,6 +12,8 @@ import { Modal } from '@/components/ui/modal'
 import { enviarCartaAction, registrarAceiteAction } from '../actions'
 import { getEmployeeDocUrlAction } from '../../funcionarios/actions'
 import { fmtDate, fmtMoney, maskMoeda, tipoLabel } from '../../funcionarios/components/ficha/ficha-config'
+import { CampoCargo } from '../../../empresa/estrutura/components/campo-cargo'
+import type { CargoOpcao } from '../../../empresa/estrutura/tipos'
 import type { Carta, ConfigAdmissao, EmAdmissao } from '../queries'
 
 const brl = (n: number | null) => (n != null ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
@@ -22,11 +24,12 @@ interface Props {
   config: ConfigAdmissao
   empresa: string
   companyId: string
+  cargos: CargoOpcao[]
 }
 
 // Etapa "Enviar carta proposta": enviar ou reenviar a carta, ou registrar o aceite no painel (candidato aceitou
 // pessoalmente). O aceite libera o preenchimento dos dados.
-export function CartaProposta({ emp, carta, config, empresa, companyId }: Props) {
+export function CartaProposta({ emp, carta, config, empresa, companyId, cargos }: Props) {
   const router = useRouter()
   const [abrirForm, setAbrirForm] = useState(false)
   const [linkEnviado, setLinkEnviado] = useState<string | null>(null)
@@ -45,6 +48,7 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<CartaInput>({
     resolver: zodResolver(cartaSchema),
     defaultValues: {
+      position_id: emp.position_id ?? cargos.find((c) => c.nome === emp.cargo)?.id ?? '',
       cargo: emp.cargo ?? '',
       salario: brl(salarioInicial),
       beneficios: emp.beneficios.join(', '),
@@ -173,7 +177,13 @@ export function CartaProposta({ emp, carta, config, empresa, companyId }: Props)
             <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>A nova carta substitui a anterior, e o link antigo deixa de funcionar.</p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Input label="Cargo *" error={errors.cargo?.message} {...register('cargo')} />
+            <CampoCargo
+              cargos={cargos}
+              label="Cargo *"
+              value={watch('position_id') ?? ''}
+              error={errors.cargo?.message}
+              onChange={(c) => { setValue('position_id', c?.id ?? ''); setValue('cargo', c?.nome ?? '', { shouldValidate: true }) }}
+            />
             <Input label="Remuneração (R$) *" inputMode="numeric" placeholder="0,00" error={errors.salario?.message} {...salarioCampo} onChange={(e) => { e.target.value = maskMoeda(e.target.value); void salarioCampo.onChange(e) }} />
             <Input label="Data de início *" type="date" error={errors.data_inicio?.message} {...register('data_inicio')} />
           </div>

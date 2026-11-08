@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -36,6 +37,9 @@ function parseProductFields(formData: FormData) {
 }
 
 export async function createProductAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('operacional.produtos', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -70,6 +74,9 @@ export async function createProductAction(companyId: string, formData: FormData)
 }
 
 export async function updateProductAction(productId: string, formData: FormData) {
+  const negado = await semAcesso('operacional.produtos')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -85,6 +92,9 @@ export async function updateProductAction(productId: string, formData: FormData)
 }
 
 export async function toggleProductAtivoAction(productId: string, ativo: boolean) {
+  const negado = await semAcesso('operacional.produtos')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -97,6 +107,9 @@ export async function toggleProductAtivoAction(productId: string, ativo: boolean
 }
 
 export async function deleteProductAction(productId: string) {
+  const negado = await semAcesso('operacional.produtos')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getServiceOrders, getContacts } from './queries'
 import { OrdensServicoClient } from './components/ordens-servico-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function OrdensDeServicoPage() {
+  await exigirAcessoPagina('operacional.ordens-de-servico')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

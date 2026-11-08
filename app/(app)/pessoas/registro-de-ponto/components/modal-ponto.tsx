@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createTimeRecordAction, updateTimeRecordAction } from '../actions'
 import { generateMonth } from '@/lib/escala/generate'
+import { horaDe as extractTime } from '@/lib/validations/ponto'
 import type { TimeRecord } from '../queries'
 import type { ScheduleRule, ScheduleException } from '@/lib/escala/generate'
 
@@ -25,11 +26,6 @@ interface Props {
   defaultEntrada?: string | null
   defaultSaida?: string | null
   defaultTipo?: string
-}
-
-function extractTime(ts: string | null): string {
-  if (!ts) return ''
-  return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
 function todayStr(mes: number, ano: number) {
@@ -165,7 +161,7 @@ export function ModalPonto({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label style={labelStyle}>Data *</label>
-            <Input type="date" value={data} onChange={e => setData(e.target.value)} required />
+            <Input type="date" value={data} onChange={e => setData(e.target.value)} required disabled={isEdit} />
           </div>
           <div>
             <label style={labelStyle}>Tipo</label>
@@ -251,6 +247,10 @@ export function ModalPonto({
             style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
           />
         </div>
+
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          Este lançamento prevalece: substitui o ponto já registrado no dia e encerra o ajuste em análise do colaborador.
+        </p>
 
         {error && (
           <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{error}</p>

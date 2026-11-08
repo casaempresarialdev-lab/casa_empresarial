@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getSocios } from './queries'
 import { SociosClient } from './components/socios-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function QuadroSocietarioPage() {
+  await exigirAcessoPagina('admin.quadro-societario')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

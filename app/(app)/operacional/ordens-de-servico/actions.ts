@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { OrdemServicoItem } from './queries'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -27,6 +28,9 @@ function parseOrdemFields(formData: FormData) {
 }
 
 export async function createServiceOrderAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('operacional.ordens-de-servico', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -42,6 +46,9 @@ export async function createServiceOrderAction(companyId: string, formData: Form
 }
 
 export async function updateServiceOrderAction(orderId: string, formData: FormData) {
+  const negado = await semAcesso('operacional.ordens-de-servico')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -55,6 +62,9 @@ export async function updateServiceOrderAction(orderId: string, formData: FormDa
 }
 
 export async function updateServiceOrderStatusAction(orderId: string, status: string) {
+  const negado = await semAcesso('operacional.ordens-de-servico')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -92,6 +102,9 @@ export async function updateServiceOrderStatusAction(orderId: string, status: st
 }
 
 export async function deleteServiceOrderAction(orderId: string) {
+  const negado = await semAcesso('operacional.ordens-de-servico')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

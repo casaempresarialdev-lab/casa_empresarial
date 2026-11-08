@@ -1,282 +1,229 @@
 'use client'
 
-import { useState, useRef, useEffect, useTransition } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ModalBeneficio } from './modal-beneficio'
-import { deleteBenefitAction } from '../actions'
-import type { CompanyBenefit, EmployeeWithBenefits } from '../queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { AddButton } from '@/components/ui/add-button'
+import { StatusBadge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-select'
+import { Tabs } from '@/components/ui/form-steps'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
+import { custoEmpresaMensal, descontoMensal, descricaoDesconto, valorMensal, DIAS_UTEIS_MES } from '@/lib/beneficios-calculo'
+import { iniciais } from '../../funcionarios/components/ficha/ficha-config'
+import { deleteBenefitAction } from '../actions'
+import { ModalBeneficio } from './modal-beneficio'
+import type { CompanyBenefit, EmployeeWithBenefits } from '../queries'
 
 interface Props {
   companyId: string
   benefits: CompanyBenefit[]
   employees: EmployeeWithBenefits[]
+  photoUrls: Record<string, string>
 }
 
-function fmtCurrency(v: number) {
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
+const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
 
-const DIAS_UTEIS = 22
-
-function calcTotalBeneficios(emp: EmployeeWithBenefits, benefits: CompanyBenefit[]): number {
-  return emp.employee_benefits.reduce((sum, eb) => {
-    const benefit = benefits.find(b => b.id === eb.benefit_id)
-    if (!benefit) return sum
-    const valor = eb.valor_override ?? benefit.valor
-    return sum + (benefit.por_dia_trabalhado ? valor * DIAS_UTEIS : valor)
-  }, 0)
-}
-
-function ThreeDotMenu({ onEdit, onDelete, loading }: {
-  onEdit: () => void
-  onDelete: () => void
-  loading: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, right: 0 })
-  const menuRef = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false)
+/** Oferecido, descontado e custo da empresa de uma pessoa, por mês */
+function totaisDe(emp: EmployeeWithBenefits, benefits: CompanyBenefit[]) {
+  return emp.employee_benefits.reduce((t, eb) => {
+    const b = benefits.find((x) => x.id === eb.benefit_id)
+    if (!b) return t
+    return {
+      oferecido: t.oferecido + valorMensal(b, eb.valor_override),
+      descontado: t.descontado + descontoMensal(b, eb.valor_override, emp.salario),
+      custo: t.custo + custoEmpresaMensal(b, eb.valor_override, emp.salario),
     }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
+  }, { oferecido: 0, descontado: 0, custo: 0 })
+}
 
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const openUp = rect.bottom + 92 > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - 88, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen((v) => !v)
-  }
-
+function Selo({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={handleOpen}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
-        style={{ color: 'var(--color-text-muted)' }}
-        aria-label="Opções"
-      >
-        ···
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
-          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
-        >
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
-            onClick={() => { setOpen(false); onEdit() }}
-          >
-            Editar
-          </button>
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
-            style={{ color: 'var(--color-error)' }}
-            onClick={() => { setOpen(false); onDelete() }}
-            disabled={loading}
-          >
-            {loading ? 'Excluindo…' : 'Excluir'}
-          </button>
-        </div>
-      )}
-    </div>
+    <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+      {children}
+    </span>
   )
 }
 
-const TAB_STYLE = (active: boolean) => ({
-  padding: '0.5rem 1rem',
-  fontSize: '0.875rem',
-  fontWeight: 500,
-  color: active ? 'var(--color-primary-darker)' : 'var(--color-text-muted)',
-  cursor: 'pointer',
-  background: 'none',
-  border: 'none',
-  borderBottom: active ? '2px solid var(--color-primary-darker)' : '2px solid transparent',
-})
+function Avatar({ src, nome }: { src?: string; nome: string }) {
+  return (
+    <span className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 text-sm font-bold" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {src ? <img src={src} alt={nome} className="w-full h-full object-cover" /> : iniciais(nome)}
+    </span>
+  )
+}
 
-export function BeneficiosClient({ companyId, benefits, employees }: Props) {
+// Benefícios: o que cada funcionário recebe e o catálogo da empresa. Ações dentro da caixa, como nas demais telas.
+export function BeneficiosClient({ companyId, benefits, employees, photoUrls }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'catalogo' | 'funcionarios'>('funcionarios')
+  const [aba, setAba] = useState(0)
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<CompanyBenefit | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [, startTransition] = useTransition()
+  const [excluir, setExcluir] = useState<CompanyBenefit | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
 
-  const activeBenefits = benefits.filter(b => b.ativo)
+  // Filtros de cada aba
+  const [beneficioFiltro, setBeneficioFiltro] = useState('todos')
+  const [buscaFuncionario, setBuscaFuncionario] = useState('')
+  const [statusFiltro, setStatusFiltro] = useState('todos')
+  const [buscaCatalogo, setBuscaCatalogo] = useState('')
 
-  async function handleDelete(b: CompanyBenefit) {
-    if (!confirm(`Excluir benefício "${b.nome}"? Todos os vínculos com funcionários serão removidos.`)) return
-    setDeletingId(b.id)
-    const result = await deleteBenefitAction(b.id)
-    setDeletingId(null)
-    if ('error' in result) alert(result.error)
-    else startTransition(() => router.refresh())
+  const ativos = benefits.filter((b) => b.ativo)
+  const geral = employees.reduce((t, e) => {
+    const p = totaisDe(e, ativos)
+    return { custo: t.custo + p.custo, descontado: t.descontado + p.descontado }
+  }, { custo: 0, descontado: 0 })
+
+  const qFuncionario = buscaFuncionario.toLowerCase()
+  const funcionariosVisiveis = employees
+    .filter((e) => beneficioFiltro === 'todos' || e.employee_benefits.some((b) => b.benefit_id === beneficioFiltro))
+    .filter((e) => !qFuncionario || e.nome.toLowerCase().includes(qFuncionario) || (e.cargo ?? '').toLowerCase().includes(qFuncionario))
+
+  const qCatalogo = buscaCatalogo.toLowerCase()
+  const catalogoVisivel = benefits
+    .filter((b) => statusFiltro === 'todos' || b.ativo === (statusFiltro === 'ativos'))
+    .filter((b) => !qCatalogo || b.nome.toLowerCase().includes(qCatalogo))
+
+  const abrirNovo = () => { setEditing(null); setModalOpen(true) }
+  const abrirEdicao = (b: CompanyBenefit) => { setEditing(b); setModalOpen(true) }
+
+  async function confirmarExclusao() {
+    const b = excluir
+    if (!b) return
+    setExcluindo(true)
+    const r = await toast.promise(deleteBenefitAction(b.id), {
+      loading: `Excluindo ${b.nome}…`,
+      success: `Benefício ${b.nome} excluído.`,
+      error: 'Não foi possível excluir o benefício.',
+    })
+    setExcluindo(false)
+    setExcluir(null)
+    if (!('error' in r)) router.refresh()
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Benefícios
-            </h1>
-            <Breadcrumb />
-          </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Benefícios</h1>
+        <Breadcrumb />
+      </div>
+
+      <Tabs labels={['Catálogo', 'Por funcionário']} step={aba} onSelect={setAba} />
+
+      {/* Por funcionário */}
+      <div className={aba === 1 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+        <div>
+          <h2 className="text-lg font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+            {moeda(geral.custo)} <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>por mês de custo da empresa</span>
+          </h2>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {moeda(geral.descontado)} descontados dos colaboradores · {plural(employees.length, 'funcionário ativo', 'funcionários ativos')} · benefícios por dia com {DIAS_UTEIS_MES} dias úteis
+          </p>
         </div>
-        {tab === 'catalogo' && (
-          <Button onClick={() => { setEditing(null); setModalOpen(true) }}>Adicionar</Button>
-        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterSelect
+            value={beneficioFiltro}
+            onChange={setBeneficioFiltro}
+            label="Filtrar por benefício"
+            options={[{ value: 'todos', label: 'Todos os benefícios' }, ...ativos.map((b) => ({ value: b.id, label: b.nome }))]}
+          />
+          <SearchField value={buscaFuncionario} onChange={setBuscaFuncionario} placeholder="Pesquisar por nome ou cargo..." />
+          {(beneficioFiltro !== 'todos' || buscaFuncionario) && (
+            <FilterResult total={funcionariosVisiveis.length} onClear={() => { setBeneficioFiltro('todos'); setBuscaFuncionario('') }} />
+          )}
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {ativos.length === 0
+            ? <ListEmpty>Cadastre benefícios na aba Catálogo para vê-los aqui.</ListEmpty>
+            : funcionariosVisiveis.length === 0 && <ListEmpty>{employees.length === 0 ? 'Nenhum funcionário ativo.' : 'Nenhum funcionário encontrado.'}</ListEmpty>}
+          {ativos.length > 0 && funcionariosVisiveis.map((e) => {
+            const nomes = ativos.filter((b) => e.employee_benefits.some((x) => x.benefit_id === b.id)).map((b) => b.nome)
+            const totais = totaisDe(e, ativos)
+            return (
+              <ListItem
+                key={e.id}
+                media={<Avatar src={photoUrls[e.id]} nome={e.nome} />}
+                title={e.nome}
+                subtitle={[e.cargo, nomes.length ? nomes.join(', ') : 'Sem benefícios'].filter(Boolean).join(' · ')}
+                aside={
+                  <span className="flex flex-col items-end">
+                    <span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{moeda(totais.oferecido)}</span>
+                    {totais.descontado > 0 && <span className="text-xs whitespace-nowrap" style={{ color: 'var(--color-text-muted)' }}>desconta {moeda(totais.descontado)}</span>}
+                  </span>
+                }
+                onClick={() => router.push(`/pessoas/funcionarios/${e.id}?aba=beneficios`)}
+                actionsLabel={e.nome}
+                actions={[{ icon: 'eye', label: 'Ver benefícios na ficha', onClick: () => router.push(`/pessoas/funcionarios/${e.id}?aba=beneficios`) }]}
+              />
+            )
+          })}
+        </ul>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b mb-6" style={{ borderColor: 'var(--color-bg-surface)' }}>
-        <button style={TAB_STYLE(tab === 'funcionarios')} onClick={() => setTab('funcionarios')}>
-          Por funcionário
-        </button>
-        <button style={TAB_STYLE(tab === 'catalogo')} onClick={() => setTab('catalogo')}>
-          Catálogo
-        </button>
+      {/* Catálogo */}
+      <div className={aba === 0 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-sidebar-text)' }}>
+            <span className="font-semibold">{plural(ativos.length, 'benefício ativo', 'benefícios ativos')}</span>
+            {benefits.length > ativos.length && <span style={{ color: 'var(--color-text-muted)' }}> · {plural(benefits.length - ativos.length, 'inativo', 'inativos')}</span>}
+          </p>
+          <AddButton onClick={abrirNovo} />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterSelect
+            value={statusFiltro}
+            onChange={setStatusFiltro}
+            label="Filtrar por status"
+            options={[{ value: 'todos', label: 'Todos os status' }, { value: 'ativos', label: 'Ativos' }, { value: 'inativos', label: 'Inativos' }]}
+          />
+          <SearchField value={buscaCatalogo} onChange={setBuscaCatalogo} placeholder="Pesquisar benefício..." />
+          {(statusFiltro !== 'todos' || buscaCatalogo) && (
+            <FilterResult total={catalogoVisivel.length} onClear={() => { setStatusFiltro('todos'); setBuscaCatalogo('') }} />
+          )}
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {catalogoVisivel.length === 0 && <ListEmpty>{benefits.length === 0 ? 'Nenhum benefício cadastrado.' : 'Nenhum benefício encontrado.'}</ListEmpty>}
+          {catalogoVisivel.map((b) => (
+            <div key={b.id} style={{ opacity: b.ativo ? 1 : 0.55 }}>
+              <ListItem
+                icon="wallet"
+                title={b.nome}
+                subtitle={`${moeda(b.valor)}${b.por_dia_trabalhado ? ' por dia' : ' por mês'} · ${descricaoDesconto(b)}`}
+                aside={
+                  <>
+                    <Selo>{b.por_dia_trabalhado ? 'Por dia' : 'Mensal fixo'}</Selo>
+                    <StatusBadge status={b.ativo ? 'active' : 'inactive'} />
+                  </>
+                }
+                onClick={() => abrirEdicao(b)}
+                actionsLabel={b.nome}
+                actions={[
+                  { icon: 'pencil', label: 'Editar', onClick: () => abrirEdicao(b) },
+                  { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir(b) },
+                ]}
+              />
+            </div>
+          ))}
+        </ul>
       </div>
 
-      {/* Aba Catálogo */}
-      {tab === 'catalogo' && (
-        <>
-          {benefits.length === 0 ? (
-            <div className="app-card p-10 text-center">
-              <p className="text-sm mb-3" style={{ color: 'var(--color-text-muted)' }}>
-                Nenhum benefício cadastrado.
-              </p>
-              <Button onClick={() => { setEditing(null); setModalOpen(true) }}>Cadastrar primeiro benefício</Button>
-            </div>
-          ) : (
-            <div className="app-card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Benefício</th>
-                    <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Valor ref.</th>
-                    <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Cálculo</th>
-                    <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Desconta salário</th>
-                    <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-                    <th className="px-4 py-3 w-10" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {benefits.map(b => (
-                    <tr key={b.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                      <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{b.nome}</td>
-                      <td className="px-4 py-3 text-right" style={{ color: 'var(--color-text-secondary)' }}>
-                        {fmtCurrency(b.valor)}
-                        {b.por_dia_trabalhado && <span className="text-xs ml-1" style={{ color: 'var(--color-text-muted)' }}>/dia</span>}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                          style={{ backgroundColor: b.por_dia_trabalhado ? '#EBF5FB' : '#EAFAF1', color: b.por_dia_trabalhado ? '#2471A3' : '#1E8449' }}>
-                          {b.por_dia_trabalhado ? 'Por dia' : 'Mensal fixo'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                          style={{ backgroundColor: b.desconta_salario ? '#FDEDEC' : '#F4ECF7', color: b.desconta_salario ? '#C0392B' : '#8E44AD' }}>
-                          {b.desconta_salario ? 'Desconta' : 'Custo empresa'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                          style={{ backgroundColor: b.ativo ? '#EAFAF1' : '#F4F6F7', color: b.ativo ? '#1E8449' : '#717D7E' }}>
-                          {b.ativo ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex justify-end">
-                          <ThreeDotMenu
-                            onEdit={() => { setEditing(b); setModalOpen(true) }}
-                            onDelete={() => handleDelete(b)}
-                            loading={deletingId === b.id}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
+      <ModalBeneficio open={modalOpen} onClose={() => setModalOpen(false)} companyId={companyId} benefit={editing} />
 
-      {/* Aba Por funcionário */}
-      {tab === 'funcionarios' && (
-        <>
-          {activeBenefits.length === 0 ? (
-            <div className="app-card p-10 text-center">
-              <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                Cadastre benefícios no catálogo primeiro.
-              </p>
-            </div>
-          ) : employees.length === 0 ? (
-            <div className="app-card p-10 text-center">
-              <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Nenhum funcionário ativo.</p>
-            </div>
-          ) : (
-            <div className="app-card overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                      Funcionário
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                      Total de Benefício
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {employees.map(emp => (
-                    <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                      <td className="px-4 py-3">
-                        <div className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{emp.nome}</div>
-                        {emp.cargo && <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{emp.cargo}</div>}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                        {fmtCurrency(calcTotalBeneficios(emp, activeBenefits))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-
-      <ModalBeneficio
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        benefit={editing}
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title="Excluir benefício"
+        message={<p>Excluir <strong>{excluir?.nome}</strong>? Os vínculos com funcionários também são removidos.</p>}
       />
     </>
   )

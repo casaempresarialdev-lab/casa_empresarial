@@ -9,6 +9,8 @@ import { avisarReprovacao } from '@/lib/admissao-email'
 import { isPjOuAutonomo, maskCpf } from '../funcionarios/components/ficha/ficha-config'
 import { encerrarVaga } from '@/lib/vagas-encerrar'
 import { normalizarValor } from '../funcionarios/components/ficha/ficha-config'
+import { semAcesso } from '@/lib/auth/acesso'
+import { buscarCargo } from '@/lib/estrutura'
 
 const BUCKET = 'documentos'
 
@@ -18,19 +20,27 @@ function revalidar(vagaId?: string) {
 }
 
 export async function salvarVagaAction(companyId: string, vagaId: string | null, data: unknown) {
+  const negado = await semAcesso('pessoas.vagas', companyId)
+  if (negado) return negado
+
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
   const { user, admin } = auth
 
   const parsed = vagaSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
-  const { benefit_ids, ...d } = parsed.data
+  const { benefit_ids, position_id, ...d } = parsed.data
+
+  // Cargo e departamento vêm do cadastro da Estrutura, não do que a tela mandou
+  const cargoEscolhido = position_id ? await buscarCargo(admin, companyId, position_id) : null
+  if (position_id && !cargoEscolhido) return { error: 'Escolha um dos cargos cadastrados.' }
 
   const campos = {
     titulo: d.titulo,
     descricao: d.descricao || null,
-    cargo: d.cargo || null,
-    departamento: d.departamento || null,
+    ...(position_id !== undefined && { position_id: position_id || null }),
+    cargo: cargoEscolhido?.nome ?? (d.cargo || null),
+    departamento: cargoEscolhido?.departamento ?? (d.departamento || null),
     local_trabalho: d.local_trabalho || null,
     tipo_contrato: d.tipo_contrato,
     salario: d.salario ? Number(normalizarValor(d.salario)) : null,
@@ -82,6 +92,9 @@ export async function salvarVagaAction(companyId: string, vagaId: string | null,
 
 /** Pausar (o link deixa de aceitar candidaturas) ou reabrir. Vaga encerrada não reabre. */
 export async function alterarStatusVagaAction(vagaId: string, companyId: string, status: 'aberta' | 'pausada') {
+  const negado = await semAcesso('pessoas.vagas', companyId)
+  if (negado) return negado
+
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
 
@@ -102,6 +115,9 @@ export async function alterarStatusVagaAction(vagaId: string, companyId: string,
 
 /** Encerra (desativa) a vaga — ver lib/vagas-encerrar.ts */
 export async function encerrarVagaAction(vagaId: string, companyId: string) {
+  const negado = await semAcesso('pessoas.vagas', companyId)
+  if (negado) return negado
+
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
 
@@ -114,6 +130,9 @@ export async function encerrarVagaAction(vagaId: string, companyId: string) {
 
 /** Reprovar uma candidatura nova, ou devolver uma reprovada para as novas */
 export async function avaliarCandidaturaAction(id: string, companyId: string, status: 'nova' | 'reprovada', motivo?: string) {
+  const negado = await semAcesso('pessoas.vagas', companyId)
+  if (negado) return negado
+
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
 
@@ -167,19 +186,22 @@ export async function avaliarCandidaturaAction(id: string, companyId: string, st
  * candidatura e da vaga, e o card entra no kanban na primeira etapa.
  */
 export async function iniciarAdmissaoAction(id: string, companyId: string) {
+  const negado = await semAcesso('pessoas.vagas', companyId)
+  if (negado) return negado
+
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin } = auth
 
   const { data: cand } = await admin
     .from('job_applications')
-    .select('vaga_id, nome, cpf, email, telefone, status, job_openings(status, cargo, departamento, local_trabalho, tipo_contrato, salario)')
+    .select('vaga_id, nome, cpf, email, telefone, status, job_openings(*)')
     .eq('id', id)
     .eq('company_id', companyId)
     .maybeSingle()
   if (!cand) return { error: 'Candidatura não encontrada.' }
   const vaga = cand.job_openings as unknown as {
-    status: string; cargo: string | null; departamento: string | null; local_trabalho: string | null
+    status: string; position_id?: string | null; cargo: string | null; departamento: string | null; local_trabalho: string | null
     tipo_contrato: string; salario: number | null
   } | null
   if (!vaga || vaga.status === 'encerrada') return { error: 'Esta vaga está encerrada.' }
@@ -219,6 +241,7 @@ export async function iniciarAdmissaoAction(id: string, companyId: string) {
       cpf: cand.cpf,
       email: cand.email,
       telefone: cand.telefone,
+      ...(vaga.position_id && { position_id: vaga.position_id }),
       cargo: vaga.cargo,
       departamento: vaga.departamento,
       local_trabalho: vaga.local_trabalho,
@@ -254,6 +277,9 @@ export async function iniciarAdmissaoAction(id: string, companyId: string) {
 
 /** Exclui a candidatura e o anexo (ex.: pedido do candidato). Quem foi selecionado segue o fluxo de admissão. */
 export async function excluirCandidaturaAction(id: string, companyId: string) {
+  const negado = await semAcesso('pessoas.vagas', companyId)
+  if (negado) return negado
+
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin } = auth
@@ -270,13 +296,16 @@ export async function excluirCandidaturaAction(id: string, companyId: string) {
   const { error } = await admin.from('job_applications').delete().eq('id', id).eq('company_id', companyId)
   if (error) return { error: error.message }
 
-  await admin.storage.from(BUCKET).remove([cand.anexo_path as string])
+  if (cand.anexo_path) await admin.storage.from(BUCKET).remove([cand.anexo_path as string])
   revalidar(cand.vaga_id as string)
   return { success: true as const }
 }
 
 /** Entrevistas e anotações guardadas na candidatura */
 export async function getHistoricoCandidaturaAction(id: string, companyId: string) {
+  const negado = await semAcesso('pessoas.vagas', companyId)
+  if (negado) return negado
+
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
   return { historico: await getHistoricoCandidatura(companyId, id) }
@@ -284,6 +313,9 @@ export async function getHistoricoCandidaturaAction(id: string, companyId: strin
 
 /** Link temporário (1h) do anexo. O caminho vem do banco, nunca do cliente. */
 export async function getAnexoCandidaturaUrlAction(id: string, companyId: string, download = false): Promise<{ url?: string; error?: string }> {
+  const negado = await semAcesso('pessoas.vagas', companyId)
+  if (negado) return negado
+
   const auth = await autorizar(companyId)
   if ('error' in auth) return { error: auth.error }
 
@@ -293,7 +325,7 @@ export async function getAnexoCandidaturaUrlAction(id: string, companyId: string
     .eq('id', id)
     .eq('company_id', companyId)
     .maybeSingle()
-  if (!cand) return { error: 'Candidatura não encontrada.' }
+  if (!cand?.anexo_path) return { error: 'Candidatura sem currículo anexado.' }
 
   const { data, error } = await auth.admin.storage
     .from(BUCKET)

@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getActiveEmployees } from '../queries'
 import { FormNovaRegra } from './components/form-nova-regra'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function NovaRegraEscalaPage() {
+  await exigirAcessoPagina('pessoas.escala-de-trabalho')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

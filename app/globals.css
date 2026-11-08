@@ -290,3 +290,29 @@ h1, h2, h3, h4, h5, h6 {
 input.campo-data::-webkit-calendar-picker-indicator {
   display: none;
 }
+
+/* Bater ponto: ondas em volta da digital e a linha de leitura (app/registrar-ponto) */
+.ponto-onda {
+  animation: ponto-onda 2.4s ease-out infinite;
+}
+.ponto-onda-2 {
+  animation-delay: 1.2s;
+}
+@keyframes ponto-onda {
+  from { transform: scale(1); opacity: 0.28; }
+  to   { transform: scale(1.5); opacity: 0; }
+}
+.ponto-scan {
+  top: 22%;
+  opacity: 0.75;
+  box-shadow: 0 0 12px #fff;
+  animation: ponto-scan 2.6s ease-in-out infinite;
+}
+@keyframes ponto-scan {
+  0%, 100% { top: 22%; }
+  50%      { top: 78%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ponto-onda { animation: none; opacity: 0; }
+  .ponto-scan { animation: none; opacity: 0; }
+}

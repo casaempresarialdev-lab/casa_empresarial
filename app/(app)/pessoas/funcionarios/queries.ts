@@ -11,6 +11,8 @@ export type Employee = {
   email: string | null
   cargo: string | null
   departamento: string | null
+  /** Cargo da Estrutura (migration 20261108000090); cargo e departamento são cópia dele */
+  position_id?: string | null
   local_trabalho: string | null
   salario: number | null
   plano_saude: boolean

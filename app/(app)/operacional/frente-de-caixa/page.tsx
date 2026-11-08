@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getActiveCashSession, getProductsForPDV } from './queries'
 import { PDVClient } from './components/pdv-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function FrenteDeCaixaPage() {
+  await exigirAcessoPagina('operacional.frente-de-caixa')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

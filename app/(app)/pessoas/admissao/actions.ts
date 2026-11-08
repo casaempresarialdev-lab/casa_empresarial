@@ -19,6 +19,8 @@ import {
 } from './etapas'
 import { getConfigAdmissao, getEtapasAdmissao } from './queries'
 import { normalizarValor } from '../funcionarios/components/ficha/ficha-config'
+import { semAcesso } from '@/lib/auth/acesso'
+import { buscarCargo } from '@/lib/estrutura'
 
 const FORA_DO_KANBAN = 'Esta admissão não está mais no kanban.'
 const SAIR_DO_RESULTADO = 'Abra a ficha de admissão e registre o resultado do exame: o card segue sozinho.'
@@ -94,7 +96,11 @@ async function criarCarta(admin: Admin, opcoes: {
   d: CartaInput
   autorId: string
 }) {
-  const { companyId, emp, d, autorId } = opcoes
+  const { companyId, emp, autorId } = opcoes
+  // O nome do cargo vem do cadastro da Estrutura
+  const cargoEscolhido = opcoes.d.position_id ? await buscarCargo(admin, companyId, opcoes.d.position_id) : null
+  if (opcoes.d.position_id && !cargoEscolhido) return { error: 'Escolha um dos cargos cadastrados.' }
+  const d = cargoEscolhido ? { ...opcoes.d, cargo: cargoEscolhido.nome } : opcoes.d
   const config = await getConfigAdmissao(companyId)
   const expiraEm = new Date(Date.now() + config.carta_validade_dias * 86_400_000).toISOString()
   const { data: empresa } = await admin.from('companies').select('nome_fantasia, razao_social').eq('id', companyId).maybeSingle()
@@ -121,6 +127,7 @@ async function criarCarta(admin: Admin, opcoes: {
       application_id: emp.applicationId,
       assunto,
       conteudo: d.conteudo,
+      ...(cargoEscolhido && { position_id: cargoEscolhido.id }),
       cargo: d.cargo || null,
       salario: d.salario ? Number(normalizarValor(d.salario)) : null,
       data_inicio: d.data_inicio,
@@ -140,6 +147,9 @@ async function criarCarta(admin: Admin, opcoes: {
  * marca como aceita; sem eles, usa a carta enviada que está aguardando resposta.
  */
 export async function registrarAceiteAction(companyId: string, employeeId: string, data: unknown | null) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -178,6 +188,9 @@ export async function registrarAceiteAction(companyId: string, employeeId: strin
 
 /** Preenchimento dos dados no painel, por quem acompanha a admissão (mesmo formulário do candidato) */
 export async function preencherDadosAction(companyId: string, employeeId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -197,6 +210,9 @@ export async function preencherDadosAction(companyId: string, employeeId: string
  * Uma carta nova substitui a anterior, cujo link deixa de valer.
  */
 export async function enviarCartaAction(companyId: string, employeeId: string, data: unknown) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -236,6 +252,9 @@ export async function enviarCartaAction(companyId: string, employeeId: string, d
  * o fim é pelo finalizarAdmissaoAction, com o contrato assinado.
  */
 export async function moverEtapaAction(employeeId: string, companyId: string, etapa: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const etapas = await getEtapasAdmissao(companyId)
@@ -280,6 +299,9 @@ export async function moverEtapaAction(employeeId: string, companyId: string, et
  * e o card segue para a próxima etapa ativa.
  */
 export async function avancarEtapaPersonalizadaAction(companyId: string, employeeId: string, anotacao?: string, dataAdmissao?: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -304,6 +326,9 @@ export async function avancarEtapaPersonalizadaAction(companyId: string, employe
 
 /** "Deixar em espera": o card fica na etapa, oculto até pedir para exibir */
 export async function definirEsperaAction(employeeId: string, companyId: string, emEspera: boolean) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -330,6 +355,9 @@ export async function definirEsperaAction(employeeId: string, companyId: string,
 
 /** Marca (ou remarca) a entrevista: grava, cria o evento na agenda do entrevistador e avisa o candidato */
 export async function salvarEntrevistaAction(companyId: string, employeeId: string, entrevistaId: string | null, data: unknown) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -438,6 +466,9 @@ export async function salvarEntrevistaAction(companyId: string, employeeId: stri
 }
 
 export async function cancelarEntrevistaAction(companyId: string, entrevistaId: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -493,6 +524,9 @@ async function baixarGuia(admin: Admin, path: string | null, nome: string | null
  * se a configuração mandar, envia o e-mail com a guia. Não entra na agenda: quem vai ao exame é o candidato.
  */
 export async function encaminharExameAction(companyId: string, employeeId: string, data: unknown) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -598,6 +632,9 @@ export async function encaminharExameAction(companyId: string, employeeId: strin
  * Inapto: novo exame (volta para o encaminhamento) ou reprovação, com o e-mail da reprovação no exame.
  */
 export async function registrarResultadoExameAction(companyId: string, employeeId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -728,6 +765,9 @@ export async function registrarResultadoExameAction(companyId: string, employeeI
 
 /** Abre o ASO de um exame da empresa */
 export async function getAsoUrlAction(companyId: string, exameId: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { data } = await auth.admin.from('admission_exams').select('aso_path').eq('id', exameId).eq('company_id', companyId).maybeSingle()
@@ -738,6 +778,9 @@ export async function getAsoUrlAction(companyId: string, exameId: string) {
 }
 
 export async function adicionarAnotacaoAction(companyId: string, employeeId: string, texto: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -756,6 +799,9 @@ export async function adicionarAnotacaoAction(companyId: string, employeeId: str
 
 /** Aprovado na entrevista: segue para a etapa seguinte */
 export async function aprovarEntrevistaAction(employeeId: string, companyId: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -775,6 +821,9 @@ export async function aprovarEntrevistaAction(employeeId: string, companyId: str
 
 /** Reprovado: a candidatura volta para a vaga e o cadastro em admissão é apagado (ver removerDaAdmissao) */
 export async function reprovarAdmissaoAction(employeeId: string, companyId: string, motivo?: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -819,6 +868,9 @@ export async function reprovarAdmissaoAction(employeeId: string, companyId: stri
 
 /** A ficha foi enviada à contabilidade (por fora do sistema): o card passa a aguardar o retorno */
 export async function registrarEnvioContabilidadeAction(companyId: string, employeeId: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -847,6 +899,9 @@ export async function registrarEnvioContabilidadeAction(companyId: string, emplo
 
 /** A contabilidade respondeu: segue para a assinatura do contrato */
 export async function registrarRetornoContabilidadeAction(companyId: string, employeeId: string) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -870,6 +925,9 @@ export async function registrarRetornoContabilidadeAction(companyId: string, emp
  * a pessoa entra na Equipe (ver lib/admissao-concluir.ts).
  */
 export async function finalizarAdmissaoAction(companyId: string, employeeId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.admissao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth

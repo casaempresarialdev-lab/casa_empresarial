@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -10,6 +11,9 @@ async function getAuthUser() {
 }
 
 export async function createSurveyAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.pesquisas', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -36,6 +40,9 @@ export async function createSurveyAction(companyId: string, formData: FormData) 
 }
 
 export async function updateSurveyAction(surveyId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.pesquisas')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -61,6 +68,9 @@ export async function updateSurveyAction(surveyId: string, formData: FormData) {
 }
 
 export async function deleteSurveyAction(surveyId: string) {
+  const negado = await semAcesso('pessoas.pesquisas')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -76,6 +86,9 @@ export async function toggleSurveyStatusAction(
   surveyId: string,
   status: 'rascunho' | 'ativo' | 'encerrado'
 ) {
+  const negado = await semAcesso('pessoas.pesquisas')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

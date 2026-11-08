@@ -75,6 +75,20 @@ export async function removerDaAdmissao(admin: Admin, opcoes: {
     if (asos.length) await admin.storage.from('documentos').remove(asos)
   }
 
+  // Reprovado não fica com acesso: o convite deixa de valer e, se já criou o usuário, ele é desligado da empresa
+  await admin.from('invitations').update({ status: 'cancelled', token_hash: null }).eq('employee_id', employeeId).eq('company_id', companyId).eq('status', 'pending')
+  if (emp.profile_id) {
+    const { data: membro } = await admin
+      .from('company_members')
+      .update({ status: 'inactive' })
+      .eq('company_id', companyId)
+      .eq('profile_id', emp.profile_id)
+      .neq('role', 'owner')
+      .select('id')
+      .maybeSingle()
+    if (membro) await admin.from('member_access_profiles').delete().eq('member_id', membro.id)
+  }
+
   const { error } = await admin.from('employees').delete().eq('id', employeeId).eq('company_id', companyId)
   if (error) return { error: error.message }
 

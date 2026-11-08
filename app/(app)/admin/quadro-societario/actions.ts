@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -83,6 +84,9 @@ async function participacaoExcedida(admin: Admin, companyId: string, participaca
 }
 
 export async function createSocioAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('admin.quadro-societario', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -106,6 +110,9 @@ export async function createSocioAction(companyId: string, formData: FormData) {
 }
 
 export async function updateSocioAction(socioId: string, formData: FormData) {
+  const negado = await semAcesso('admin.quadro-societario')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -131,6 +138,9 @@ export async function updateSocioAction(socioId: string, formData: FormData) {
 }
 
 export async function deleteSocioAction(socioId: string) {
+  const negado = await semAcesso('admin.quadro-societario')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -172,6 +182,9 @@ async function socioDaEmpresa(admin: Admin, socioId: string, companyId: string) 
 
 // Foto do sócio (modal próprio): envia foto_file ou remove com remove_foto=true
 export async function updateSocioFotoAction(socioId: string, companyId: string, formData: FormData) {
+  const negado = await semAcesso('admin.quadro-societario', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -185,6 +198,9 @@ export async function updateSocioFotoAction(socioId: string, companyId: string, 
 }
 
 export async function listSocioDocumentsAction(socioId: string, companyId: string): Promise<{ documents?: SocioDocument[]; error?: string }> {
+  const negado = await semAcesso('admin.quadro-societario', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
@@ -199,6 +215,9 @@ export async function listSocioDocumentsAction(socioId: string, companyId: strin
 }
 
 export async function uploadSocioDocumentAction(socioId: string, companyId: string, formData: FormData) {
+  const negado = await semAcesso('admin.quadro-societario', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -227,6 +246,9 @@ export async function uploadSocioDocumentAction(socioId: string, companyId: stri
 }
 
 export async function deleteSocioDocumentAction(documentId: string, companyId: string) {
+  const negado = await semAcesso('admin.quadro-societario', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
@@ -240,6 +262,9 @@ export async function deleteSocioDocumentAction(documentId: string, companyId: s
 
 /** Link temporário (1h); download = true força baixar com o nome original */
 export async function getSocioDocumentUrlAction(documentId: string, companyId: string, download = false): Promise<{ url?: string; error?: string }> {
+  const negado = await semAcesso('admin.quadro-societario', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()

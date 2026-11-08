@@ -6,6 +6,8 @@ import { getCandidaturas, getVagaById } from '../queries'
 import { getActiveCompanyBenefits } from '../../beneficios/queries'
 import { getConfigAdmissao } from '../../admissao/queries'
 import { VagaPage } from './components/vaga-page'
+import { getCargosOpcoes } from '../../../empresa/estrutura/queries'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +17,8 @@ interface Props {
 }
 
 export default async function VagaDetalhePage({ params, searchParams }: Props) {
+  await exigirAcessoPagina('pessoas.vagas')
+
   const [{ id }, { aba }] = await Promise.all([params, searchParams])
 
   const supabase = await createClient()
@@ -31,9 +35,10 @@ export default async function VagaDetalhePage({ params, searchParams }: Props) {
   const vaga = await getVagaById(id, companyId)
   if (!vaga) notFound()
 
-  const [candidaturas, companyBenefits, config] = await Promise.all([
+  const [candidaturas, companyBenefits, cargos, config] = await Promise.all([
     getCandidaturas(id, companyId),
     getActiveCompanyBenefits(companyId),
+    getCargosOpcoes(companyId),
     getConfigAdmissao(companyId),
   ])
 
@@ -44,6 +49,7 @@ export default async function VagaDetalhePage({ params, searchParams }: Props) {
         candidaturas={candidaturas}
         companyId={companyId}
         companyBenefits={companyBenefits}
+        cargos={cargos}
         abrirDados={aba === 'dados'}
         avisaReprovacao={config.reprovacao_notificar}
       />

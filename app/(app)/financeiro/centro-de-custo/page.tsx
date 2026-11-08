@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCostCenters } from './queries'
 import { CentroCustoClient } from './components/centro-custo-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function CentroCustoPage() {
+  await exigirAcessoPagina('financeiro.centro-de-custo')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

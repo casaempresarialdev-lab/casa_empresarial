@@ -2,6 +2,7 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { gerarCartaPdf } from '@/lib/admissao-carta-pdf'
 import { fmtDataHora } from '@/lib/validations/admissao'
 import { seguirEtapa } from '@/lib/admissao-concluir'
+import { buscarCargo } from '@/lib/estrutura'
 import { ETAPA_CARTA } from '@/app/(app)/pessoas/admissao/etapas'
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -26,7 +27,8 @@ export async function registrarAceite(admin: Admin, opcoes: {
     .update({ status: 'aceita', respondida_em: agora, resposta_ip: ip, ...(comQuemRegistrou && registradoPor && { aceite_registrado_por: registradoPor.nome }) })
     .eq('id', cartaId)
     .eq('status', 'enviada')
-    .select('company_id, employee_id, conteudo, cargo, salario, data_inicio, local_trabalho')
+    // '*': position_id pode ainda não existir (migration 20261108000090)
+    .select('*')
     .maybeSingle()
 
   let { data: carta, error } = await aceitar(true)
@@ -47,9 +49,11 @@ export async function registrarAceite(admin: Admin, opcoes: {
   const nome = (emp?.nome as string | undefined) ?? 'Candidato'
   const pj = emp?.tipo_contrato === 'pj' || emp?.tipo_contrato === 'autonomo'
 
+  const cargoCarta = carta.position_id ? await buscarCargo(admin, companyId, carta.position_id as string) : null
   const { error: errEmp } = await admin
     .from('employees')
     .update({
+      ...(cargoCarta && { position_id: cargoCarta.id, departamento: cargoCarta.departamento }),
       cargo: carta.cargo,
       local_trabalho: carta.local_trabalho,
       data_admissao: carta.data_inicio,

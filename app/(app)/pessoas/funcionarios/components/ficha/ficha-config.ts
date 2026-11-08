@@ -169,6 +169,7 @@ export type Valores = {
   nascimento: string
   telefone: string
   email: string
+  position_id: string
   cargo: string
   departamento: string
   local_trabalho: string
@@ -210,6 +211,7 @@ export function valoresIniciais(e: Employee | null): Valores {
     nascimento: e?.nascimento ?? '',
     telefone: e?.telefone ?? '',
     email: e?.email ?? '',
+    position_id: e?.position_id ?? '',
     cargo: e?.cargo ?? '',
     departamento: e?.departamento ?? '',
     local_trabalho: e?.local_trabalho ?? '',

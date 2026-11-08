@@ -8,7 +8,10 @@ import { getAccountBalances } from '@/lib/finance/balances'
 import { CalendarioHome } from '../calendario/components/calendario-home'
 import { getEventos, getAgendas } from '../calendario/queries'
 import { Welcome } from '@/components/modules/dashboard/welcome'
+import { Ferramentas } from '@/components/modules/dashboard/ferramentas'
 import { IntroProvider } from '@/components/modules/dashboard/intro'
+import { getPermissoes } from '@/lib/auth/acesso'
+import { pode } from '@/lib/acesso/catalogo'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +23,57 @@ function offsetDate(days: number) {
 
 function formatCurrency(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+/** Números do bloco "Sua casa hoje" */
+async function carregarResumo(admin: ReturnType<typeof createAdminClient>, companyId: string) {
+  // Datas no fuso do Brasil (o servidor roda em UTC)
+  const today     = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const in30d     = offsetDate(30)
+  const [ano, mes] = today.split('-').map(Number)
+  const inicioMes = `${today.slice(0, 7)}-01`
+  const fimMes    = isoDate(new Date(Date.UTC(ano, mes, 0)))
+
+  const [
+    { count: docsVencidosCount },
+    { count: docsVencendoCount },
+    { data: bankAccounts },
+    balances,
+    { count: empAtivosCount },
+    { count: osAbertasCount },
+    { count: vendasAbertasCount },
+    { count: publicacoesMesCount },
+  ] = await Promise.all([
+    admin.from('documents').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).not('vencimento', 'is', null).lt('vencimento', today),
+    admin.from('documents').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).not('vencimento', 'is', null)
+      .gte('vencimento', today).lte('vencimento', in30d),
+    admin.from('bank_accounts').select('id')
+      .eq('company_id', companyId).eq('ativo', true),
+    getAccountBalances(companyId, inicioMes),
+    admin.from('employees').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).eq('status', 'ativo'),
+    admin.from('service_orders').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).eq('status', 'aberta'),
+    admin.from('sale_orders').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelado'),
+    admin.from('editorial_calendar').select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('data_publicacao', inicioMes).lte('data_publicacao', fimMes),
+  ])
+
+  const docsVencidos = docsVencidosCount ?? 0
+  return {
+    docsVencidos,
+    // Administrativo: vencidos + vencendo em 30 dias
+    atencao: docsVencidos + (docsVencendoCount ?? 0),
+    // Financeiro: saldo calculado a partir dos lançamentos quitados (lib/finance/balances.ts)
+    saldoTotal: (bankAccounts ?? []).reduce((s, a) => s + (balances.get(a.id)?.saldo ?? 0), 0),
+    empAtivos: empAtivosCount ?? 0,
+    emAndamento: (osAbertasCount ?? 0) + (vendasAbertasCount ?? 0),
+    publicacoes: publicacoesMesCount ?? 0,
+  }
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ evento?: string; agendas?: string }> }) {
@@ -78,69 +132,38 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const activeCompany = companies.find(c => c.id === cookieCompanyId) ?? companies[0]
   const companyId = activeCompany.id
 
-  // Datas no fuso do Brasil (o servidor roda em UTC)
-  const today     = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
-  const in30d     = offsetDate(30)
-  const [ano, mes] = today.split('-').map(Number)
-  const inicioMes = `${today.slice(0, 7)}-01`
-  const fimMes    = isoDate(new Date(Date.UTC(ano, mes, 0)))
+  // O perfil de acesso escolhe os blocos. Colaborador vê só o Calendário: o resumo traz dados da empresa.
+  const { permissoes } = await getPermissoes(companyId)
+  const colaborador = rows.find(m => m.company_id === companyId)?.role === 'colaborador'
+  const verSuaCasa = !colaborador && pode(permissoes, 'visao-geral.sua-casa')
+  const verCalendario = colaborador || pode(permissoes, 'visao-geral.calendario')
+  const verBaterPonto = colaborador || pode(permissoes, 'visao-geral.bater-ponto')
+  const verAdministrarPonto = !colaborador && pode(permissoes, 'pessoas.registro-de-ponto')
 
-  const [
-    // Administrativo — Documentação
-    { count: docsVencidosCount },
-    { count: docsVencendoCount },
-    // Financeiro
-    { data: bankAccounts },
-    balances,
-    // Pessoas
-    { count: empAtivosCount },
-    // Operacional
-    { count: osAbertasCount },
-    { count: vendasAbertasCount },
-    // Marketing
-    { count: publicacoesMesCount },
-    // Calendário (meus eventos, convites e agendas que acompanho)
-    eventos,
-    agendas,
-  ] = await Promise.all([
-    admin.from('documents').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).not('vencimento', 'is', null).lt('vencimento', today),
-    admin.from('documents').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).not('vencimento', 'is', null)
-      .gte('vencimento', today).lte('vencimento', in30d),
-    admin.from('bank_accounts').select('id')
-      .eq('company_id', companyId).eq('ativo', true),
-    getAccountBalances(companyId, inicioMes),
-    admin.from('employees').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).eq('status', 'ativo'),
-    admin.from('service_orders').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).eq('status', 'aberta'),
-    admin.from('sale_orders').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId).neq('status', 'entregue').neq('status', 'cancelado'),
-    admin.from('editorial_calendar').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId)
-      .gte('data_publicacao', inicioMes).lte('data_publicacao', fimMes),
-    getEventos(user.id),
-    getAgendas(user.id),
+  // Calendário: meus eventos, convites e agendas que acompanho
+  const [resumo, eventos, agendas, ajustesPendentes] = await Promise.all([
+    verSuaCasa ? carregarResumo(admin, companyId) : null,
+    verCalendario ? getEventos(user.id) : [],
+    verCalendario ? getAgendas(user.id) : null,
+    verAdministrarPonto
+      ? admin.from('time_adjustments').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'pendente').then((r) => r.count ?? 0)
+      : 0,
   ])
-
-  // Administrativo: vencidos + vencendo em 30 dias
-  const docsVencidos = docsVencidosCount ?? 0
-  const atencao      = docsVencidos + (docsVencendoCount ?? 0)
-
-  // Financeiro: saldo calculado a partir dos lançamentos quitados (lib/finance/balances.ts)
-  const contasAtivas = bankAccounts ?? []
-  const saldoTotal   = contasAtivas.reduce((s, a) => s + (balances.get(a.id)?.saldo ?? 0), 0)
-
-  const empAtivos    = empAtivosCount ?? 0
-  const emAndamento  = (osAbertasCount ?? 0) + (vendasAbertasCount ?? 0)
-  const publicacoes  = publicacoesMesCount ?? 0
+  const { atencao, docsVencidos, saldoTotal, empAtivos, emAndamento, publicacoes } = resumo ?? {
+    atencao: 0, docsVencidos: 0, saldoTotal: 0, empAtivos: 0, emAndamento: 0, publicacoes: 0,
+  }
 
   return (
     <IntroProvider play={cookieStore.get('play_intro')?.value === '1'}>
       <Welcome firstName={firstName} />
 
-      <section>
+      <Ferramentas
+        baterPonto={verBaterPonto}
+        administrarPonto={verAdministrarPonto}
+        ajustesPendentes={ajustesPendentes}
+      />
+
+      {verSuaCasa && <section>
         <h2
           className="animate-enter flex items-center gap-2 text-lg font-bold mb-4"
           style={{ fontFamily: 'Manrope', color: 'var(--color-brand)', animationDelay: '100ms' }}
@@ -191,14 +214,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             caption={publicacoes === 1 ? 'publicação neste mês' : 'publicações neste mês'}
           />
         </div>
-      </section>
+      </section>}
 
       {/* Calendário (sem título de seção, só o respiro acima) */}
-      <section className="mt-12" aria-label="Calendário">
+      {verCalendario && agendas && <section className={verSuaCasa ? 'mt-12' : undefined} aria-label="Calendário">
         <div className="animate-enter" style={{ animationDelay: '600ms' }}>
           <CalendarioHome eventos={eventos} eventoAbertoId={eventoAbertoId} agendas={agendas} abrirAgendas={abrirAgendas === "1"} />
         </div>
-      </section>
+      </section>}
+
+      {!verSuaCasa && !verCalendario && !verBaterPonto && !verAdministrarPonto && (
+        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Seu perfil de acesso não tem itens na Visão geral.</p>
+      )}
     </IntroProvider>
   )
 }

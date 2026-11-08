@@ -7,11 +7,15 @@ import { getCompany } from '../../../empresa/queries'
 import { getEmployeeById } from '../../funcionarios/queries'
 import { getActiveCompanyBenefits } from '../../beneficios/queries'
 import { FichaAdmissao } from './components/ficha-admissao'
+import { getCargosOpcoes } from '../../../empresa/estrutura/queries'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 // Ficha de admissão: aberta ao clicar no card do kanban
 export default async function FichaAdmissaoPage({ params }: { params: Promise<{ id: string }> }) {
+  await exigirAcessoPagina('pessoas.admissao')
+
   const { id } = await params
 
   const supabase = await createClient()
@@ -29,7 +33,7 @@ export default async function FichaAdmissaoPage({ params }: { params: Promise<{ 
   // Já finalizada, reprovada ou de outra empresa: não há ficha para abrir
   if (!emp) redirect('/pessoas/admissao')
 
-  const [tokens, entrevistadores, config, company, historicos, cartas, clinicas, exames, fichaCompleta, benefits] = await Promise.all([
+  const [tokens, entrevistadores, config, company, historicos, cartas, clinicas, exames, fichaCompleta, benefits, cargos] = await Promise.all([
     getOnboardingTokens(companyId, id),
     getEntrevistadores(companyId),
     getConfigAdmissao(companyId),
@@ -40,6 +44,7 @@ export default async function FichaAdmissaoPage({ params }: { params: Promise<{ 
     getExames(companyId, [id]),
     getEmployeeById(id, companyId),
     getActiveCompanyBenefits(companyId),
+    getCargosOpcoes(companyId),
   ])
 
   let fotoUrl: string | null = null
@@ -64,6 +69,7 @@ export default async function FichaAdmissaoPage({ params }: { params: Promise<{ 
         fichaCompleta={fichaCompleta ?? emp}
         company={company}
         benefits={benefits}
+        cargos={cargos}
         empresa={company?.nome_fantasia || company?.razao_social || ''}
         companyId={companyId}
       />

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -10,6 +11,9 @@ async function getAuthUser() {
 }
 
 export async function createBPLancamentoAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.balanco', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -36,6 +40,9 @@ export async function createBPLancamentoAction(companyId: string, formData: Form
 }
 
 export async function updateBPLancamentoAction(id: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.balanco')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -58,6 +65,9 @@ export async function updateBPLancamentoAction(id: string, formData: FormData) {
 }
 
 export async function deleteBPLancamentoAction(id: string) {
+  const negado = await semAcesso('financeiro.balanco')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

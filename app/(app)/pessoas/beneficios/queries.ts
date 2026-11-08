@@ -7,6 +7,9 @@ export type CompanyBenefit = {
   valor: number
   por_dia_trabalhado: boolean
   desconta_salario: boolean
+  /** Regra do desconto (migration 20261108000089) */
+  desconto_tipo?: string | null
+  desconto_valor?: number | null
   ativo: boolean
   created_at: string
 }
@@ -17,6 +20,7 @@ export type EmployeeWithBenefits = {
   cargo: string | null
   status: string
   salario: number | null
+  foto_path: string | null
   employee_benefits: { benefit_id: string; valor_override: number | null }[]
 }
 
@@ -47,7 +51,7 @@ export async function getEmployeesWithBenefits(companyId: string): Promise<Emplo
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, nome, cargo, status, salario, employee_benefits(benefit_id, valor_override)')
+    .select('id, nome, cargo, status, salario, foto_path, employee_benefits(benefit_id, valor_override)')
     .eq('company_id', companyId)
     .in('status', ['ativo', 'experiencia'])
     .order('nome', { ascending: true })

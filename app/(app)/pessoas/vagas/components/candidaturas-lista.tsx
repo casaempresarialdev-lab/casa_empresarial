@@ -56,7 +56,7 @@ export function CandidaturasLista({ candidaturas, companyId, encerrada = false, 
   const digitos = q.replace(/\D/g, '')
   const linhas = candidaturas
     .filter((c) => filtro.length === 0 || filtro.includes(c.status))
-    .filter((c) => !q || c.nome.toLowerCase().includes(q) || c.email.includes(q) || (!!digitos && (c.cpf.includes(digitos) || c.telefone.replace(/\D/g, '').includes(digitos))))
+    .filter((c) => !q || c.nome.toLowerCase().includes(q) || c.email.includes(q) || (!!digitos && ((c.cpf ?? '').includes(digitos) || c.telefone.replace(/\D/g, '').includes(digitos))))
 
   async function baixar(id: string, nome: string) {
     setBaixando(id)
@@ -168,8 +168,8 @@ export function CandidaturasLista({ candidaturas, companyId, encerrada = false, 
               </span>
             }
             title={c.nome}
-            subtitle={[`CPF ${maskCpf(c.cpf)}`, c.email, maskTelefone(c.telefone), `Recebida em ${fmtDate(c.created_at)}`].join(' · ')}
-            onClick={() => setVer(c)}
+            subtitle={[c.cpf ? `CPF ${maskCpf(c.cpf)}` : null, c.email, maskTelefone(c.telefone), `Recebida em ${fmtDate(c.created_at)}`].filter(Boolean).join(' · ')}
+            onClick={c.anexo_nome ? () => setVer(c) : undefined}
             aside={
               <>
                 {!encerrada && c.status === 'nova' && (
@@ -182,8 +182,10 @@ export function CandidaturasLista({ candidaturas, companyId, encerrada = false, 
             actions={[
               ...(c.status === 'selecionada' ? [{ icon: 'users' as const, label: 'Ver no kanban', onClick: () => router.push('/pessoas/admissao') }] : []),
               ...(c.status !== 'nova' ? [{ icon: 'info' as const, label: 'Ver histórico', onClick: () => abrirHistorico(c) }] : []),
-              { icon: 'eye', label: 'Ver currículo', onClick: () => setVer(c) },
-              { icon: 'download', label: 'Baixar currículo', onClick: () => baixar(c.id, c.anexo_nome), disabled: baixando === c.id },
+              ...(c.anexo_nome ? [
+                { icon: 'eye' as const, label: 'Ver currículo', onClick: () => setVer(c) },
+                { icon: 'download' as const, label: 'Baixar currículo', onClick: () => baixar(c.id, c.anexo_nome ?? ''), disabled: baixando === c.id },
+              ] : []),
               { icon: 'mail', label: 'Enviar e-mail', onClick: () => { window.location.href = `mailto:${c.email}` } },
               ...(!encerrada && c.status === 'nova' ? [{ icon: 'trash' as const, label: 'Reprovar', onClick: () => setReprovar(c) }] : []),
               ...(!encerrada && c.status === 'reprovada' ? [{ icon: 'check' as const, label: 'Voltar para novas', onClick: () => voltarParaNovas(c) }] : []),
@@ -194,7 +196,7 @@ export function CandidaturasLista({ candidaturas, companyId, encerrada = false, 
       </ul>
 
       <FileViewer
-        file={ver && { id: ver.id, titulo: ver.nome, nome: ver.anexo_nome, tipo: ver.anexo_tipo }}
+        file={ver && { id: ver.id, titulo: ver.nome, nome: ver.anexo_nome ?? '', tipo: ver.anexo_tipo }}
         getUrl={(id) => getAnexoCandidaturaUrlAction(id, companyId)}
         onClose={() => setVer(null)}
         onDownload={(f) => baixar(f.id, f.nome)}

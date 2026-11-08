@@ -7,6 +7,9 @@ import { getViewerContext } from '@/lib/auth/viewer'
 import { ETAPA_FINAL, primeiraEtapa } from '../admissao/etapas'
 import { getEtapasAdmissao } from '../admissao/queries'
 import { findUserIdByEmail, adicionarContaExistente, enviarConvite } from '@/lib/invitations'
+import { semAcesso } from '@/lib/auth/acesso'
+import { buscarCargo } from '@/lib/estrutura'
+import { criarAcessoFuncionario } from '@/lib/admissao-acesso'
 
 async function getAppUrl() {
   const hdrs = await headers()
@@ -151,6 +154,38 @@ function parseEmployeeFields(formData: FormData) {
   }
 }
 
+/** Cargo escolhido na ficha: cargo e departamento vêm do cadastro da Estrutura. Devolve o erro, se houver. */
+async function aplicarCargo(admin: ReturnType<typeof createAdminClient>, companyId: string, fields: Record<string, unknown>, formData: FormData) {
+  const positionId = (formData.get('position_id') as string) || ''
+  if (!positionId) return null
+  const cargo = await buscarCargo(admin, companyId, positionId)
+  if (!cargo) return 'Escolha um dos cargos cadastrados.'
+  fields.position_id = cargo.id
+  fields.cargo = cargo.nome
+  fields.departamento = cargo.departamento
+  return null
+}
+
+/** Liga a admissão à vaga pela candidatura: quem já se candidatou com este CPF usa a dele. Devolve o erro, se houver. */
+async function vincularCandidatura(
+  admin: ReturnType<typeof createAdminClient>,
+  opcoes: { companyId: string; vagaId: string; employeeId: string; nome: string; cpf: string | null; email: string | null; telefone: string | null },
+) {
+  const { companyId, vagaId, employeeId, nome, cpf, email, telefone } = opcoes
+  if (cpf) {
+    const { data: existente } = await admin.from('job_applications').select('id, employee_id').eq('vaga_id', vagaId).eq('cpf', cpf).maybeSingle()
+    if (existente?.employee_id) return 'Este CPF já está em admissão por esta vaga.'
+    if (existente) {
+      const { error } = await admin.from('job_applications').update({ status: 'selecionada', employee_id: employeeId }).eq('id', existente.id)
+      return error?.message ?? null
+    }
+  }
+  const { error } = await admin.from('job_applications').insert({
+    company_id: companyId, vaga_id: vagaId, nome, cpf, email: email ?? '', telefone: telefone ?? '', status: 'selecionada', employee_id: employeeId,
+  })
+  return error?.message ?? null
+}
+
 async function syncEmployeeBenefits(
   admin: ReturnType<typeof createAdminClient>,
   companyId: string,
@@ -170,6 +205,9 @@ async function syncEmployeeBenefits(
 }
 
 export async function createEmployeeAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso(['pessoas.funcionarios', 'pessoas.admissao', 'pessoas.rescisao'], companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const viewerC = await getViewerContext(companyId)
@@ -179,14 +217,47 @@ export async function createEmployeeAction(companyId: string, formData: FormData
   if (!fields.nome) return { error: 'Nome é obrigatório.' }
 
   const admin = createAdminClient()
+  const erroCargo = await aplicarCargo(admin, companyId, fields, formData)
+  if (erroCargo) return { error: erroCargo }
+
+  const vagaId = (formData.get('vaga_id') as string) || ''
+  if (vagaId) {
+    const { data: vaga } = await admin.from('job_openings').select('*, job_opening_benefits(benefit_id)').eq('id', vagaId).eq('company_id', companyId).maybeSingle()
+    if (!vaga || vaga.status === 'encerrada') return { error: 'Esta vaga não está mais disponível.' }
+
+    // O que a vaga definiu vale sobre o que veio do formulário
+    const campos = fields as Record<string, unknown>
+    const pj = vaga.tipo_contrato === 'pj' || vaga.tipo_contrato === 'autonomo'
+    campos.tipo_contrato = vaga.tipo_contrato
+    if (vaga.position_id) campos.position_id = vaga.position_id
+    if (vaga.cargo) campos.cargo = vaga.cargo
+    if (vaga.departamento) campos.departamento = vaga.departamento
+    if (vaga.local_trabalho) campos.local_trabalho = vaga.local_trabalho
+    if (vaga.salario != null) campos[pj ? 'valor_servico' : 'salario'] = vaga.salario
+    const beneficios = (vaga.job_opening_benefits as { benefit_id: string }[]).map((b) => b.benefit_id)
+    if (!pj && beneficios.length) formData.set('benefit_ids', JSON.stringify(beneficios))
+  }
+
   const { data, error } = await admin
     .from('employees')
-    // Admissão sem vaga entra no kanban na primeira etapa ativa, pulando a entrevista
-    .insert({ company_id: companyId, ...(fields.status === 'admissao' && { admission_stage: primeiraEtapa(await getEtapasAdmissao(companyId), false) }), ...fields })
+    // Entra no kanban na primeira etapa ativa; sem vaga, pula a entrevista
+    .insert({ company_id: companyId, ...(fields.status === 'admissao' && { admission_stage: primeiraEtapa(await getEtapasAdmissao(companyId), !!vagaId) }), ...fields })
     .select('id')
     .single()
 
   if (error) return { error: error.message }
+
+  if (vagaId) {
+    const erroVaga = await vincularCandidatura(admin, {
+      companyId, vagaId, employeeId: data.id, nome: fields.nome, cpf: fields.cpf, email: fields.email, telefone: fields.telefone,
+    })
+    if (erroVaga) {
+      await admin.from('employees').delete().eq('id', data.id)
+      return { error: erroVaga }
+    }
+    revalidatePath('/pessoas/vagas', 'layout')
+    revalidatePath('/pessoas/admissao')
+  }
 
   await syncEmployeeBenefits(admin, companyId, data.id, formData)
 
@@ -196,12 +267,19 @@ export async function createEmployeeAction(companyId: string, formData: FormData
     await admin.from('employees').update(updates).eq('id', data.id)
   }
 
+  // O colaborador admitido recebe na hora o e-mail para criar o usuário
+  const acesso = await criarAcessoFuncionario(admin, { companyId, employeeId: data.id, email: fields.email, jaTemConta: false, autorId: user.id })
+
   revalidatePath('/pessoas/funcionarios')
   revalidatePath('/pessoas/beneficios')
-  return { success: true as const, employeeId: data.id }
+  revalidatePath('/admin/usuarios')
+  return { success: true as const, employeeId: data.id, acesso }
 }
 
 export async function updateEmployeeAction(employeeId: string, formData: FormData) {
+  const negado = await semAcesso(['pessoas.funcionarios', 'pessoas.admissao', 'pessoas.rescisao'])
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -239,7 +317,12 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
   const { updates: docUpdates, error: docErr } = await uploadEmployeeDocs(admin, current.company_id, employeeId, formData, existingDocs)
   if (docErr) return { error: docErr }
 
-  const { error } = await admin.from('employees').update({ ...fields, ...docUpdates }).eq('id', employeeId)
+  const erroCargo = await aplicarCargo(admin, current.company_id, fields, formData)
+  if (erroCargo) return { error: erroCargo }
+  // Cargo retirado na ficha
+  const semCargo = 'position_id' in current && !(fields as Record<string, unknown>).position_id ? { position_id: null } : {}
+
+  const { error } = await admin.from('employees').update({ ...fields, ...semCargo, ...docUpdates }).eq('id', employeeId)
   if (error) return { error: error.message }
 
   await syncEmployeeBenefits(admin, current.company_id, employeeId, formData)
@@ -253,6 +336,9 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
 export async function generateOnboardingTokenAction(
   employeeId: string,
 ): Promise<{ url?: string; error?: string }> {
+  const negado = await semAcesso(['pessoas.funcionarios', 'pessoas.admissao', 'pessoas.rescisao'])
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -285,6 +371,9 @@ export async function getEmployeeDocUrlAction(
   key: DocKey | (typeof DOC_KEYS_LEITURA)[number],
   downloadName?: string,
 ): Promise<{ url?: string; error?: string }> {
+  const negado = await semAcesso(['pessoas.funcionarios', 'pessoas.admissao', 'pessoas.rescisao'])
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   if (![...DOC_KEYS, ...DOC_KEYS_LEITURA].includes(key)) return { error: 'Documento inválido.' }
@@ -315,6 +404,9 @@ export async function getEmployeeDocUrlAction(
 }
 
 export async function grantSystemAccessAction(employeeId: string, companyId: string) {
+  const negado = await semAcesso(['pessoas.funcionarios', 'pessoas.admissao', 'pessoas.rescisao'], companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const viewerG = await getViewerContext(companyId)
@@ -376,6 +468,9 @@ export async function grantSystemAccessAction(employeeId: string, companyId: str
 // Auto-edição do colaborador — só os campos de dados pessoais/contato.
 // Nunca aceitar aqui campos administrativos (salário, status, contrato, datas, PIN etc.)
 export async function updateOwnEmployeeDataAction(employeeId: string, formData: FormData) {
+  const negado = await semAcesso(['pessoas.funcionarios', 'pessoas.admissao', 'pessoas.rescisao'])
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -405,6 +500,9 @@ export async function updateOwnEmployeeDataAction(employeeId: string, formData: 
 }
 
 export async function deleteEmployeeAction(employeeId: string) {
+  const negado = await semAcesso(['pessoas.funcionarios', 'pessoas.admissao', 'pessoas.rescisao'])
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

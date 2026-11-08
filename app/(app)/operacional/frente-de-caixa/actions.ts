@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getCashSessionSummary, type CashSessionSummary } from './queries'
+import { semAcesso } from '@/lib/auth/acesso'
 
 const PDV_COOKIE = 'pdv_session'
 const PDV_COOKIE_MAX_AGE = 60 * 60 * 8 // 8h
@@ -27,6 +28,9 @@ async function getAuthUser() {
 
 // Reautentica a senha do usuário logado e abre uma sessão de caixa
 export async function openCashSessionAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('operacional.frente-de-caixa', companyId)
+  if (negado) return negado
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.email) return { error: 'Não autenticado' }
@@ -70,6 +74,9 @@ export async function openCashSessionAction(companyId: string, formData: FormDat
 }
 
 export async function fetchCashSessionSummaryAction(): Promise<CashSessionSummary | { error: string }> {
+  const negado = await semAcesso('operacional.frente-de-caixa')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -84,6 +91,9 @@ export async function fetchCashSessionSummaryAction(): Promise<CashSessionSummar
 }
 
 export async function closeCashSessionAction(saldoFechamento: number, observacao: string) {
+  const negado = await semAcesso('operacional.frente-de-caixa')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -119,6 +129,9 @@ export async function closeCashSessionAction(saldoFechamento: number, observacao
 }
 
 export async function createPdvSaleAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('operacional.frente-de-caixa', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

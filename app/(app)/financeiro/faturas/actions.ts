@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -14,6 +15,9 @@ export async function updateInvoiceStatusAction(
   status: 'aberta' | 'fechada' | 'paga',
   dataPagamento?: string,
 ) {
+  const negado = await semAcesso('financeiro.faturas')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -29,6 +33,9 @@ export async function updateInvoiceStatusAction(
 }
 
 export async function syncInvoiceAction(companyId: string, cardId: string, mesAno: string) {
+  const negado = await semAcesso('financeiro.faturas', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -50,6 +51,9 @@ async function folderDaEmpresa(admin: Admin, companyId: string, folderId: string
 
 // parentId null = raiz; dentro de uma pasta (inclusive padrão) também pode criar
 export async function createFolderAction(companyId: string, nome: string, parentId: string | null = null): Promise<{ error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
@@ -70,6 +74,9 @@ export async function createFolderAction(companyId: string, nome: string, parent
 
 // Move a pasta (parentId null = raiz). Pastas padrão não se movem, e uma pasta não pode ir para dentro dela mesma
 export async function moveFolderAction(folderId: string, companyId: string, parentId: string | null): Promise<{ error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
@@ -110,6 +117,9 @@ export async function moveFolderAction(folderId: string, companyId: string, pare
 
 // Renomear/excluir só vale para pastas da empresa — as padrão (sistema) ficam bloqueadas
 export async function renameFolderAction(folderId: string, companyId: string, nome: string): Promise<{ error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
@@ -132,6 +142,9 @@ export async function renameFolderAction(folderId: string, companyId: string, no
 }
 
 export async function deleteFolderAction(folderId: string, companyId: string): Promise<{ error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
@@ -170,6 +183,9 @@ export async function deleteFolderAction(folderId: string, companyId: string): P
 
 // Move o documento para uma pasta (folderId null = raiz)
 export async function moveDocumentAction(documentId: string, companyId: string, folderId: string | null): Promise<{ error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const admin = createAdminClient()
@@ -196,6 +212,9 @@ export async function uploadDocumentAction(
   companyId: string,
   formData: FormData,
 ): Promise<{ error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -249,6 +268,9 @@ export async function updateDocumentAction(
   companyId: string,
   formData: FormData,
 ): Promise<{ error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -279,6 +301,9 @@ export async function deleteDocumentAction(
   id: string,
   companyId: string,
 ): Promise<{ error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -316,6 +341,9 @@ export async function getSignedUrlAction(
   companyId: string,
   download = false,
 ): Promise<{ url?: string; error?: string }> {
+  const negado = await semAcesso('admin.documentacao', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

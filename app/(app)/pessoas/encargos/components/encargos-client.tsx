@@ -7,6 +7,7 @@ import { ModalAliquota } from './modal-aliquota'
 import { deleteAliquotaAction, seedDefaultAliquotasAction } from '../actions'
 import type { EmployeeEncargo, AliquotaRow } from '../queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { custoEmpresaMensal } from '@/lib/beneficios-calculo'
 
 interface Props {
   employees: EmployeeEncargo[]
@@ -23,7 +24,6 @@ const FALLBACK_ALIQUOTAS: AliquotaRow[] = [
   { id: '', company_id: '', nome: 'Férias + 1/3', percentual: 11.11, ativo: true, ordem: 6, created_at: '' },
 ]
 
-const DIAS_UTEIS_MES = 22
 
 function calcFgts(salario: number, aliquotas: AliquotaRow[]): number {
   const fgts = aliquotas.find(a => a.ativo && a.nome.toUpperCase().includes('FGTS'))
@@ -37,12 +37,7 @@ function calcOutrosEncargos(salario: number, aliquotas: AliquotaRow[]): number {
 }
 
 function calcBeneficios(emp: EmployeeEncargo): number {
-  return emp.employee_benefits
-    .filter(eb => !eb.benefit.desconta_salario)
-    .reduce((sum, eb) => {
-      const valor = eb.valor_override ?? eb.benefit.valor
-      return sum + (eb.benefit.por_dia_trabalhado ? valor * DIAS_UTEIS_MES : valor)
-    }, 0)
+  return emp.employee_benefits.reduce((sum, eb) => sum + custoEmpresaMensal(eb.benefit, eb.valor_override, emp.salario), 0)
 }
 
 function fmtCurrency(v: number) {

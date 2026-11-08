@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getBankAccounts, getCreditCards } from './queries'
 import { ContasCartoesClient } from './components/contas-cartoes-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ContasCartoesPage() {
+  await exigirAcessoPagina('financeiro.contas-cartoes')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

@@ -10,8 +10,7 @@ import type { EmployeeForPayroll, PayrollEntryVariable } from '../queries'
 import type { AliquotaRow } from '../../encargos/queries'
 import type { Company } from '../../../empresa/queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
-
-const DIAS_UTEIS = 22
+import { descontoMensal, valorMensal } from '@/lib/beneficios-calculo'
 
 // ── INSS empregado 2024 — tabela progressiva ─────────────────────────────────
 const INSS_FAIXAS = [
@@ -75,16 +74,14 @@ const RE_VT = /transp|\bvt\b|v\.?t\b/i
 const RE_VA = /aliment|refei|\bva\b|\bvr\b|v\.?[ar]\b/i
 
 function benefCost(eb: EmployeeForPayroll['employee_benefits'][number]): number {
-  const v = eb.valor_override ?? eb.benefit.valor
-  return eb.benefit.por_dia_trabalhado ? v * DIAS_UTEIS : v
+  return valorMensal(eb.benefit, eb.valor_override)
 }
 function custoBeneficio(benefits: EmployeeForPayroll['employee_benefits'], re: RegExp): number {
   return benefits.filter(b => re.test(b.benefit.nome)).reduce((s, b) => s + benefCost(b), 0)
 }
-function descontoVA(benefits: EmployeeForPayroll['employee_benefits']): number {
-  return benefits
-    .filter(b => RE_VA.test(b.benefit.nome) && b.benefit.desconta_salario)
-    .reduce((s, b) => s + benefCost(b), 0)
+/** Desconto no salário dos benefícios escolhidos, pela regra de cada um */
+function descontoBeneficios(benefits: EmployeeForPayroll['employee_benefits'], salario: number): number {
+  return Math.round(benefits.reduce((s, b) => s + descontoMensal(b.benefit, b.valor_override, salario), 0) * 100) / 100
 }
 
 function fmtCurrency(v: number) {
@@ -113,15 +110,17 @@ function buildRow(emp: EmployeeForPayroll, aliquotas: AliquotaRow[]) {
 
   const custoVT = Math.round(custoBeneficio(emp.employee_benefits, RE_VT) * 100) / 100
   const custoVA = Math.round(custoBeneficio(emp.employee_benefits, RE_VA) * 100) / 100
-  const desc6VT = Math.round(Math.min(salario * 0.06, custoVT) * 100) / 100
-  const fixoVA  = Math.round(descontoVA(emp.employee_benefits) * 100) / 100
+  const desc6VT = descontoBeneficios(emp.employee_benefits.filter(b => RE_VT.test(b.benefit.nome)), salario)
+  // VA e os demais benefícios com desconto (ex.: plano de saúde)
+  const fixoVA  = descontoBeneficios(emp.employee_benefits.filter(b => !RE_VT.test(b.benefit.nome)), salario)
+  const custoBeneficios = Math.round(emp.employee_benefits.reduce((s, b) => s + benefCost(b), 0) * 100) / 100
 
   const liquido = Math.max(0, bruto - inss - irpf - desc6VT - fixoVA)
 
   const fgtsPct = fgtsPercentual(aliquotas)
   const fgts    = Math.round(bruto * (fgtsPct / 100) * 100) / 100
   const outros  = Math.round(outrosEncargos(bruto, aliquotas) * 100) / 100
-  const custoTotal = bruto + fgts + outros + custoVA + custoVT - desc6VT - fixoVA
+  const custoTotal = bruto + fgts + outros + custoBeneficios - desc6VT - fixoVA
 
   return {
     emp, salario, pericul, bruto, inss, irpf,

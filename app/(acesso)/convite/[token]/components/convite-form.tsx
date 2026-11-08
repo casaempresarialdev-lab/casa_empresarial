@@ -19,12 +19,12 @@ function formatCpf(value: string) {
 }
 
 // Criação da conta pelo convite: e-mail fixo (é o do convite), nome, CPF e senha
-export function ConviteForm({ token, email }: { token: string; email: string }) {
+export function ConviteForm({ token, email, nome = '', cpf = '' }: { token: string; email: string; nome?: string; cpf?: string }) {
   const router = useRouter()
   const [serverError, setServerError] = useState<string | null>(null)
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } =
-    useForm<AceitarConviteData>({ resolver: zodResolver(aceitarConviteSchema) })
+    useForm<AceitarConviteData>({ resolver: zodResolver(aceitarConviteSchema), defaultValues: { name: nome, cpf: formatCpf(cpf) } })
 
   async function onSubmit(data: AceitarConviteData) {
     setServerError(null)

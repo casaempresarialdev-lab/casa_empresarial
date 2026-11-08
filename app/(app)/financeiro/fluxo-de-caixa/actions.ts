@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -97,6 +98,9 @@ function parseBaseFields(formData: FormData) {
 }
 
 export async function createTransactionAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.fluxo-de-caixa', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -187,6 +191,9 @@ export async function createTransactionAction(companyId: string, formData: FormD
 }
 
 export async function updateTransactionAction(transactionId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.fluxo-de-caixa')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -205,6 +212,9 @@ export async function updateTransactionAction(transactionId: string, formData: F
 }
 
 export async function markAsPaidAction(transactionId: string, dataPagamento?: string) {
+  const negado = await semAcesso('financeiro.fluxo-de-caixa')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -222,6 +232,9 @@ export async function markAsPaidAction(transactionId: string, dataPagamento?: st
 }
 
 export async function markAsPendingAction(transactionId: string) {
+  const negado = await semAcesso('financeiro.fluxo-de-caixa')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -239,6 +252,9 @@ export async function markAsPendingAction(transactionId: string) {
 }
 
 export async function deleteTransactionAction(transactionId: string, mode: 'single' | 'following' | 'all') {
+  const negado = await semAcesso('financeiro.fluxo-de-caixa')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

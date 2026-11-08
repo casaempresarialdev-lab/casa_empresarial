@@ -10,7 +10,7 @@ const NON_LINK_SEGMENTS = new Set(['financeiro', 'operacional', 'pessoas', 'mark
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   admin: 'Administrativo',
-  usuarios: 'Usuários',
+  usuarios: 'Acessos',
   'quadro-societario': 'Quadro Societário',
   'cofre-de-senhas': 'Cofre de senhas',
   notificacoes: 'Notificações',
@@ -49,7 +49,8 @@ const ROUTE_LABELS: Record<string, string> = {
   'manual-da-marca': 'Manual da Marca',
   empresa: 'Minha Empresa',
   'meu-plano': 'Meu Plano',
-  perfil: 'Meu Perfil',
+  perfil: 'Minha conta',
+  'meu-ponto': 'Meu ponto',
 }
 
 /**

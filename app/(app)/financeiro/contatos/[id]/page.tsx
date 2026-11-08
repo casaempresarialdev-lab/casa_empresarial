@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getContactById } from '../queries'
 import { ViewContato } from './view-contato'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,8 @@ interface Props {
 }
 
 export default async function ContatoViewPage({ params }: Props) {
+  await exigirAcessoPagina('financeiro.contatos')
+
   const { id } = await params
 
   const supabase = await createClient()

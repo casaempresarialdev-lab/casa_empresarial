@@ -193,6 +193,8 @@ export const configAdmissaoSchema = z.object({
 export type ConfigAdmissaoInput = z.infer<typeof configAdmissaoSchema>
 
 export const cartaSchema = z.object({
+  /** Cargo da Estrutura */
+  position_id: z.string().uuid().or(z.literal('')).optional(),
   cargo: z.string().trim().min(1, 'Informe o cargo').max(120, 'Use até 120 caracteres'),
   salario: z.string().trim()
     .min(1, 'Informe a remuneração')

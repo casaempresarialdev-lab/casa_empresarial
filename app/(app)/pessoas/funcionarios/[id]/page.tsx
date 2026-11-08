@@ -8,6 +8,7 @@ import { getCompany } from '../../../empresa/queries'
 import { isSecaoId } from '../components/ficha/ficha-config'
 import { FuncionarioPage } from './components/funcionario-page'
 import { getRescisaoAtiva } from '../../rescisao/queries'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,8 @@ interface Props {
 
 // Ficha do funcionário (visualizar). A edição (./editar) usa a mesma tela com os campos abertos.
 export default async function FuncionarioViewPage({ params, searchParams }: Props) {
+  await exigirAcessoPagina('pessoas.funcionarios')
+
   const [{ id }, { aba }] = await Promise.all([params, searchParams])
 
   const supabase = await createClient()

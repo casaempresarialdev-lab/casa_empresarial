@@ -33,6 +33,7 @@ import { ResultadoExame } from './resultado-exame'
 import { ContabilidadeAdmissao, ContratoAdmissao } from './contabilidade-admissao'
 import type { Employee } from '../../../funcionarios/queries'
 import type { CompanyBenefit } from '../../../beneficios/queries'
+import type { CargoOpcao } from '../../../../empresa/estrutura/tipos'
 import type { Company } from '../../../../empresa/queries'
 import type { Carta, Clinica, ConfigAdmissao, EmAdmissao, Entrevista, Entrevistador, Exame, Historico, OnboardingTokenInfo } from '../../queries'
 
@@ -113,13 +114,14 @@ interface Props {
   fichaCompleta: Employee
   company: Company | null
   benefits: CompanyBenefit[]
+  cargos: CargoOpcao[]
   empresa: string
   companyId: string
 }
 
 // Ficha de admissão. À esquerda, as etapas em sanfona: só aparecem a atual e as que já têm dados.
 // À direita, as anotações e os eventos do processo em uma linha do tempo.
-export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuarioId, token, carta, config, clinicas, exames, fichaCompleta, company, benefits, empresa, companyId }: Props) {
+export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuarioId, token, carta, config, clinicas, exames, fichaCompleta, company, benefits, cargos, empresa, companyId }: Props) {
   const router = useRouter()
   const [gerando, setGerando] = useState(false)
   const [link, setLink] = useState<string | null>(null)
@@ -399,7 +401,7 @@ export function FichaAdmissao({ emp, fotoUrl, historico, entrevistadores, usuari
           {(naCarta || !!carta) && (
             <Accordion titulo="Carta proposta" resumo={resumoCarta} selo={naCarta && seloAtual} aberto={estaAberta('carta')} onAlternar={() => alternar('carta')}>
               <div className="flex flex-col gap-3">
-                <CartaProposta emp={emp} carta={carta} config={config} empresa={empresa} companyId={companyId} />
+                <CartaProposta emp={emp} carta={carta} config={config} empresa={empresa} companyId={companyId} cargos={cargos} />
               </div>
             </Accordion>
           )}

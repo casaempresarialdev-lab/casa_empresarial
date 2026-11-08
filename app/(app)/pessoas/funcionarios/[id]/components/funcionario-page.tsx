@@ -13,6 +13,7 @@ import { MeusDadosForm } from './meus-dados-form'
 import { IniciarRescisao } from '../../../rescisao/components/iniciar-rescisao'
 import type { Employee } from '../../queries'
 import type { CompanyBenefit } from '../../../beneficios/queries'
+import type { CargoOpcao } from '../../../../empresa/estrutura/tipos'
 import type { Company } from '../../../../empresa/queries'
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
   companyId: string
   company: Company | null
   companyBenefits: CompanyBenefit[]
+  cargos?: CargoOpcao[]
   fotoUrl: string | null
   abaInicial?: SecaoId
   /** Colaborador vendo a própria ficha: edita só os dados de contato (Meus Dados) */
@@ -33,7 +35,7 @@ interface Props {
 const NA_EQUIPE = ['experiencia', 'ativo', 'ferias', 'afastado']
 
 // Ficha do funcionário: visualizar (abas, campos fechados) e editar (mesmas abas, campos abertos)
-export function FuncionarioPage({ modo, employee: emp, companyId, company, companyBenefits, fotoUrl, abaInicial, isColaboradorSelf, rescisaoAtivaId = null }: Props) {
+export function FuncionarioPage({ modo, employee: emp, companyId, company, companyBenefits, cargos, fotoUrl, abaInicial, isColaboradorSelf, rescisaoAtivaId = null }: Props) {
   const router = useRouter()
   const abaRef = useRef<SecaoId>(abaInicial ?? 'identificacao')
   const [gerandoPdf, setGerandoPdf] = useState(false)
@@ -115,6 +117,7 @@ export function FuncionarioPage({ modo, employee: emp, companyId, company, compa
           employee={emp}
           companyId={companyId}
           companyBenefits={companyBenefits}
+          cargos={cargos}
           fotoUrl={fotoUrl}
           abaInicial={abaInicial}
           onAbaChange={(a) => { abaRef.current = a }}

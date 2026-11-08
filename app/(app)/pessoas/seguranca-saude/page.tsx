@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getHealthSafetyRecords, getEmployeesForSS } from './queries'
 import { SegurancaClient } from './components/seguranca-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function SegurancaSaudePage() {
+  await exigirAcessoPagina('pessoas.seguranca-saude')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

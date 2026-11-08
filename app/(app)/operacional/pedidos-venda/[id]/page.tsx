@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getSaleOrderById } from '../queries'
 import { ViewPedidoVenda } from './view-pedido-venda'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,8 @@ interface Props {
 }
 
 export default async function PedidoVendaViewPage({ params }: Props) {
+  await exigirAcessoPagina('operacional.pedidos-venda')
+
   const { id } = await params
 
   const supabase = await createClient()

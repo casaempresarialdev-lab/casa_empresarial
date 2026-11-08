@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import type { FolgaPattern } from '@/lib/escala/generate'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -37,6 +38,9 @@ export type RulePayload = {
 }
 
 export async function createRuleAction(companyId: string, payload: RulePayload) {
+  const negado = await semAcesso('pessoas.escala-de-trabalho', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const guard = await assertCanManage(companyId)
@@ -60,6 +64,9 @@ export async function createRuleAction(companyId: string, payload: RulePayload) 
 }
 
 export async function updateRuleAction(ruleId: string, companyId: string, payload: Partial<RulePayload>) {
+  const negado = await semAcesso('pessoas.escala-de-trabalho', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const guard = await assertCanManage(companyId)
@@ -78,6 +85,9 @@ export async function updateRuleAction(ruleId: string, companyId: string, payloa
 }
 
 export async function deleteRuleAction(ruleId: string, companyId: string) {
+  const negado = await semAcesso('pessoas.escala-de-trabalho', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const guard = await assertCanManage(companyId)
@@ -104,6 +114,9 @@ export async function upsertExceptionAction(
   tipo: 'folga' | 'trabalho',
   observacao: string | null,
 ) {
+  const negado = await semAcesso('pessoas.escala-de-trabalho', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const guard = await assertCanManage(companyId)
@@ -123,6 +136,9 @@ export async function upsertExceptionAction(
 }
 
 export async function deleteExceptionAction(exceptionId: string, companyId: string) {
+  const negado = await semAcesso('pessoas.escala-de-trabalho', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const guard = await assertCanManage(companyId)

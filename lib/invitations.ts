@@ -18,6 +18,24 @@ const ROLE_LABELS: Record<string, string> = {
   colaborador: 'Colaborador',
 }
 
+/** Como a pessoa entra na empresa: o nome do perfil de acesso ou, sem perfil, a função */
+async function papelDoConvite(admin: Admin, role: string, perfilIds?: string[] | null) {
+  if (perfilIds?.length) {
+    const { data } = await admin.from('access_profiles').select('nome').in('id', perfilIds)
+    if (data?.length) return data.map((p) => p.nome as string).sort().join(', ')
+  }
+  return ROLE_LABELS[role] ?? role
+}
+
+/** Substitui os perfis de acesso de um usuário */
+export async function definirPerfisMembro(admin: Admin, companyId: string, memberId: string, perfilIds: string[]) {
+  const { error: errLimpar } = await admin.from('member_access_profiles').delete().eq('member_id', memberId)
+  if (errLimpar) return errLimpar.message
+  if (!perfilIds.length) return null
+  const { error } = await admin.from('member_access_profiles').insert(perfilIds.map((profile_id) => ({ member_id: memberId, profile_id, company_id: companyId })))
+  return error?.message ?? null
+}
+
 export function hashConviteToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
@@ -42,6 +60,7 @@ export type ConviteValido = {
   empresa: string
   avatar_url: string | null
   employee_id: string | null
+  access_profile_ids: string[]
 }
 
 /** Convite do link: só vale se estiver pendente e dentro da validade */
@@ -49,7 +68,8 @@ export async function buscarConvitePorToken(admin: Admin, token: string): Promis
   if (!token || token.length < 20) return null
   const { data: inv } = await admin
     .from('invitations')
-    .select('id, email, role, company_id, avatar_url, employee_id, expires_at')
+    // '*': access_profile_ids pode ainda não existir (migration 20261108000088)
+    .select('*')
     .eq('token_hash', hashConviteToken(token))
     .eq('status', 'pending')
     .maybeSingle()
@@ -58,11 +78,12 @@ export async function buscarConvitePorToken(admin: Admin, token: string): Promis
     id: inv.id,
     email: inv.email,
     role: inv.role,
-    roleLabel: ROLE_LABELS[inv.role] ?? inv.role,
+    roleLabel: await papelDoConvite(admin, inv.role, inv.access_profile_ids),
     company_id: inv.company_id,
     empresa: await nomeEmpresa(admin, inv.company_id),
     avatar_url: inv.avatar_url ?? null,
     employee_id: inv.employee_id ?? null,
+    access_profile_ids: inv.access_profile_ids ?? [],
   }
 }
 
@@ -74,7 +95,7 @@ export async function findUserIdByEmail(admin: Admin, email: string): Promise<st
 }
 
 /** Vincula um usuário à empresa (reativa se já foi membro antes) */
-export async function vincularMembro(admin: Admin, companyId: string, profileId: string, role: string) {
+export async function vincularMembro(admin: Admin, companyId: string, profileId: string, role: string, perfilIds?: string[]) {
   const { data: existing } = await admin
     .from('company_members')
     .select('id, status')
@@ -83,10 +104,14 @@ export async function vincularMembro(admin: Admin, companyId: string, profileId:
     .maybeSingle()
 
   if (existing?.status === 'active') return { error: 'Este usuário já é membro desta empresa.' }
-  const { error } = existing
-    ? await admin.from('company_members').update({ status: 'active', role }).eq('id', existing.id)
-    : await admin.from('company_members').insert({ company_id: companyId, profile_id: profileId, role, status: 'active' })
-  if (error) return { error: error.message }
+  const { data: membro, error } = existing
+    ? await admin.from('company_members').update({ status: 'active', role }).eq('id', existing.id).select('id').single()
+    : await admin.from('company_members').insert({ company_id: companyId, profile_id: profileId, role, status: 'active' }).select('id').single()
+  if (error || !membro) return { error: error?.message ?? 'Não foi possível vincular o usuário.' }
+  if (perfilIds?.length) {
+    const erro = await definirPerfisMembro(admin, companyId, membro.id, perfilIds)
+    if (erro) return { error: erro }
+  }
   return { success: true as const }
 }
 
@@ -97,7 +122,7 @@ export async function vincularMembro(admin: Admin, companyId: string, profileId:
 export async function enviarConvite(admin: Admin, invitationId: string, appUrl: string): Promise<ConviteResult> {
   const { data: inv } = await admin
     .from('invitations')
-    .select('id, email, role, company_id')
+    .select('*')
     .eq('id', invitationId)
     .eq('status', 'pending')
     .single()
@@ -113,7 +138,7 @@ export async function enviarConvite(admin: Admin, invitationId: string, appUrl: 
 
   const branding = await getEmailBranding(inv.company_id)
   const empresa = branding.nome
-  const papel = ROLE_LABELS[inv.role] ?? inv.role
+  const papel = await papelDoConvite(admin, inv.role, inv.access_profile_ids)
   const link = `${appUrl}/convite/${token}`
   const validade = expira.toLocaleDateString('pt-BR')
 
@@ -145,9 +170,9 @@ export async function enviarConvite(admin: Admin, invitationId: string, appUrl: 
 /** Quem já tem conta não recebe convite: entra direto na empresa e é avisado por e-mail */
 export async function adicionarContaExistente(
   admin: Admin,
-  opts: { companyId: string; profileId: string; email: string; role: string; employeeId?: string | null; appUrl: string },
+  opts: { companyId: string; profileId: string; email: string; role: string; employeeId?: string | null; perfilIds?: string[]; appUrl: string },
 ) {
-  const vinculo = await vincularMembro(admin, opts.companyId, opts.profileId, opts.role)
+  const vinculo = await vincularMembro(admin, opts.companyId, opts.profileId, opts.role, opts.perfilIds)
   if ('error' in vinculo) return vinculo
 
   // Convite de colaborador: o cadastro do funcionário passa a ser desta conta
@@ -163,7 +188,7 @@ export async function adicionarContaExistente(
 
   const branding = await getEmailBranding(opts.companyId)
   const empresa = branding.nome
-  const papel = ROLE_LABELS[opts.role] ?? opts.role
+  const papel = await papelDoConvite(admin, opts.role, opts.perfilIds)
   const envio = await sendEmail({
     to: opts.email,
     subject: `Você agora tem acesso a ${empresa}`,

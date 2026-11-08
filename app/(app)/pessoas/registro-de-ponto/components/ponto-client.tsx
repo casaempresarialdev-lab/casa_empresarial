@@ -1,30 +1,39 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ModalPonto } from './modal-ponto'
-import { deleteTimeRecordAction } from '../actions'
-import { generateMonth } from '@/lib/escala/generate'
-import type { TimeRecord } from '../queries'
-import type { ScheduleRule, ScheduleException, DayResult } from '@/lib/escala/generate'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, FilterSelect } from '@/components/ui/filter-select'
+import { Tabs } from '@/components/ui/form-steps'
+import { Icon } from '@/components/ui/icon'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { Modal } from '@/components/ui/modal'
+import { toast } from '@/lib/toast'
+import { generateMonth } from '@/lib/escala/generate'
+import type { ScheduleRule, ScheduleException, DayResult } from '@/lib/escala/generate'
+import { horaDe } from '@/lib/validations/ponto'
+import { deleteTimeRecordAction } from '../actions'
+import type { AjusteEquipe, TimeRecord } from '../queries'
+import { Aprovacoes } from './aprovacoes'
+import { ModalPonto } from './modal-ponto'
 
 interface Props {
   records: TimeRecord[]
   employees: { id: string; nome: string; cargo: string | null }[]
   rules: ScheduleRule[]
   exceptions: ScheduleException[]
+  ajustes: AjusteEquipe[]
   companyId: string
   mes: number
   ano: number
-  readOnly?: boolean
+  abaInicial: number
 }
 
 const MESES       = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const DIAS_SEMANA = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Status =
   | 'ok'
@@ -55,7 +64,31 @@ type DayEntry = {
   isFuture: boolean
 }
 
-// ─── Status ───────────────────────────────────────────────────────────────────
+type ModalState = { record: TimeRecord | null; empId?: string; date?: string; entrada?: string | null; saida?: string | null; tipo?: string }
+
+const FILTRO_SITUACAO: { value: string; label: string }[] = [
+  { value: 'todas', label: 'Todas as situações' },
+  { value: 'ok', label: 'No prazo' },
+  { value: 'atraso', label: 'Atraso' },
+  { value: 'saida_antecipada', label: 'Saída antecipada' },
+  { value: 'incompleto', label: 'Sem saída' },
+  { value: 'ausente', label: 'Ausente' },
+  { value: 'falta', label: 'Falta' },
+  { value: 'folga', label: 'Folga' },
+  { value: 'ferias', label: 'Férias' },
+]
+
+const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'pendente'])
+
+const BOTAO_CAIXA = 'inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-50 shrink-0'
+
+const hora = (ts: string | null | undefined) => horaDe(ts) || '—'
+
+/** Minutos do dia no horário de Brasília */
+function minutosDoDia(ts: string) {
+  const [h, m] = horaDe(ts).split(':').map(Number)
+  return h * 60 + m
+}
 
 function getSituacao(
   record: TimeRecord | null,
@@ -96,15 +129,13 @@ function getSituacao(
 
   if (record.entrada && dayResult.hora_entrada) {
     const [eh, em] = dayResult.hora_entrada.split(':').map(Number)
-    const actual = new Date(record.entrada)
-    lateMin = actual.getHours() * 60 + actual.getMinutes() - (eh * 60 + em)
+    lateMin = minutosDoDia(record.entrada) - (eh * 60 + em)
     if (lateMin > toleranciaMin) isLate = true
   }
 
   if (record.saida && dayResult.hora_saida) {
     const [sh, sm] = dayResult.hora_saida.split(':').map(Number)
-    const actual = new Date(record.saida)
-    if (actual.getHours() * 60 + actual.getMinutes() < sh * 60 + sm) isEarlyOut = true
+    if (minutosDoDia(record.saida) < sh * 60 + sm) isEarlyOut = true
   }
 
   if (isLate)     return { label: `Atraso ${lateMin}min`, color: '#D35400', bg: '#FDEBD0', status: 'atraso'           }
@@ -112,21 +143,14 @@ function getSituacao(
   return { label: 'No prazo', color: '#17A589', bg: '#EAF4F4', status: 'ok' }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatTime(ts: string | null) {
-  if (!ts) return '—'
-  return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
-
 function formatDate(dateStr: string) {
   const [y, m, d] = dateStr.split('-').map(Number)
   return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`
 }
 
-function formatWeekday(dateStr: string) {
+function weekday(dateStr: string) {
   const [y, m, d] = dateStr.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'short' })
+  return DIAS_SEMANA[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]
 }
 
 function formatInterval(interval: string | null) {
@@ -137,8 +161,6 @@ function formatInterval(interval: string | null) {
   return min !== '00' ? `${h}h ${min}min` : `${h}h`
 }
 
-function getDaysInMonth(ano: number, mes: number) { return new Date(ano, mes, 0).getDate() }
-
 function getPrevistoLabel(dayResult: DayResult | null): string {
   if (!dayResult || dayResult.tipo === 'sem_regra') return '—'
   if (dayResult.tipo === 'folga') return 'Folga'
@@ -147,264 +169,73 @@ function getPrevistoLabel(dayResult: DayResult | null): string {
   return `${h}–${s}`
 }
 
-const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'pendente'])
+const almoco = (r: TimeRecord | null) => (r?.saida_almoco ? `${hora(r.saida_almoco)}–${hora(r.retorno_almoco)}` : '—')
 
-// ─── ExportMenu ───────────────────────────────────────────────────────────────
-
-function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos]   = useState({ top: 0, right: 0 })
-  const btnRef  = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handle(e: MouseEvent) {
-      const t = e.target as Node
-      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [open])
-
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const openUp = rect.bottom + 88 > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - 88, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen(v => !v)
-  }
-
+function Situacao({ sit }: { sit: SituacaoInfo }) {
   return (
-    <div style={{ position: 'relative' }}>
-      <button ref={btnRef} onClick={handleOpen}
-        className="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors hover:bg-gray-50"
-        style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)', backgroundColor: 'white' }}>
-        Baixar ▾
-      </button>
-      {open && (
-        <div ref={menuRef} style={{
-          position: 'fixed', top: pos.top, right: pos.right, zIndex: 50, minWidth: 130,
-          backgroundColor: 'white', border: '1px solid var(--color-bg-surface)',
-          borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '4px 0',
-        }}>
-          <button onClick={() => { setOpen(false); onPDF() }}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
-            style={{ color: 'var(--color-text-primary)' }}>
-            PDF
-          </button>
-          <button onClick={() => { setOpen(false); onExcel() }}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
-            style={{ color: 'var(--color-text-primary)' }}>
-            Excel
-          </button>
-        </div>
-      )}
-    </div>
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: sit.bg, color: sit.color }}>
+      {sit.label}
+    </span>
   )
 }
 
-// ─── RowMenu ──────────────────────────────────────────────────────────────────
-
-function RowMenu({ entry, onEdit, onDetail, onDelete, deletingId }: {
-  entry: DayEntry
-  onEdit: () => void
-  onDetail: () => void
-  onDelete: () => void
-  deletingId: string | null
-}) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos]   = useState({ top: 0, right: 0 })
-  const btnRef  = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handle(e: MouseEvent) {
-      const t = e.target as Node
-      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [open])
-
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const menuH = entry.record ? 122 : 44
-      const openUp = rect.bottom + menuH > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - menuH - 4, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen(v => !v)
-  }
-
+function Dia({ date, hoje }: { date: string; hoje: boolean }) {
   return (
-    <div style={{ position: 'relative' }}>
-      <button ref={btnRef} onClick={handleOpen}
-        className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition-colors"
-        style={{ color: 'var(--color-text-secondary)', fontSize: '1.1rem', letterSpacing: 1 }}>
-        ···
-      </button>
-      {open && (
-        <div ref={menuRef} style={{
-          position: 'fixed', top: pos.top, right: pos.right, zIndex: 50, minWidth: 140,
-          backgroundColor: 'white', border: '1px solid var(--color-bg-surface)',
-          borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '4px 0',
-        }}>
-          <button onClick={() => { setOpen(false); onEdit() }}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
-            style={{ color: 'var(--color-text-primary)' }}>
-            Editar
-          </button>
-          {entry.record && (
-            <>
-              <button onClick={() => { setOpen(false); onDetail() }}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
-                style={{ color: 'var(--color-text-primary)' }}>
-                Detalhar
-              </button>
-              <button onClick={() => { setOpen(false); onDelete() }}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
-                style={{ color: '#E74C3C' }}>
-                {deletingId === entry.record?.id ? 'Excluindo…' : 'Excluir'}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+    <span className="w-11 text-center shrink-0">
+      <span className="block text-lg font-extrabold leading-none" style={{ fontFamily: 'Manrope', color: hoje ? 'var(--color-brand)' : 'var(--color-text-primary)' }}>{date.slice(8)}</span>
+      <span className="block text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{weekday(date)}</span>
+    </span>
   )
 }
 
-// ─── ModalDetalhar ────────────────────────────────────────────────────────────
+function Campo({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+      <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>{rotulo}</div>
+      <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{valor}</div>
+    </div>
+  )
+}
 
 function ModalDetalhar({ entry, onClose }: { entry: DayEntry; onClose: () => void }) {
+  const r = entry.record
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, backgroundColor: 'rgba(0,0,0,0.4)' }}
-      className="flex items-center justify-center p-4">
-      <div className="rounded-2xl shadow-xl w-full max-w-md" style={{ backgroundColor: 'white' }}>
-
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b"
-          style={{ borderColor: 'var(--color-bg-surface)' }}>
-          <h2 className="text-base font-semibold"
-            style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-            Detalhes do Registro
-          </h2>
-          <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-sm"
-            style={{ color: 'var(--color-text-muted)' }}>✕</button>
+    <Modal open onClose={onClose} title={entry.empNome} description={`${formatDate(entry.date)} · ${weekday(entry.date)}${entry.empCargo ? ` · ${entry.empCargo}` : ''}`}>
+      <div className="flex flex-col gap-3">
+        <div><Situacao sit={entry.sit} /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <Campo rotulo="Previsto" valor={getPrevistoLabel(entry.dayResult)} />
+          <Campo rotulo="Horas trabalhadas" valor={formatInterval(r?.horas_trabalhadas ?? null)} />
+          <Campo rotulo="Entrada" valor={hora(r?.entrada)} />
+          <Campo rotulo="Saída almoço" valor={hora(r?.saida_almoco)} />
+          <Campo rotulo="Retorno almoço" valor={hora(r?.retorno_almoco)} />
+          <Campo rotulo="Saída" valor={hora(r?.saida)} />
         </div>
-
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Funcionário</div>
-            <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{entry.empNome}</div>
-            {entry.empCargo && (
-              <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{entry.empCargo}</div>
-            )}
-          </div>
-
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Data</div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                {formatDate(entry.date)} · <span className="capitalize">{formatWeekday(entry.date)}</span>
-              </div>
-            </div>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-              style={{ backgroundColor: entry.sit.bg, color: entry.sit.color }}>
-              {entry.sit.label}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Previsto</div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                {getPrevistoLabel(entry.dayResult)}
-              </div>
-            </div>
-            <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Horas trabalhadas</div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                {formatInterval(entry.record?.horas_trabalhadas ?? null)}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Entrada</div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                {formatTime(entry.record?.entrada ?? null)}
-              </div>
-            </div>
-            <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Saída</div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                {formatTime(entry.record?.saida ?? null)}
-              </div>
-            </div>
-          </div>
-
-          {(entry.record?.saida_almoco || entry.record?.retorno_almoco) && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Saída almoço</div>
-                <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                  {formatTime(entry.record?.saida_almoco ?? null)}
-                </div>
-              </div>
-              <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Retorno almoço</div>
-                <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                  {formatTime(entry.record?.retorno_almoco ?? null)}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="px-6 pb-5">
-          <Button onClick={onClose} className="w-full">Fechar</Button>
-        </div>
+        {r?.observacao && <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Observação: {r.observacao}</p>}
       </div>
-    </div>
+    </Modal>
   )
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
-export function PontoClient({ records, employees, rules, exceptions, companyId, mes, ano, readOnly = false }: Props) {
+// Registro de ponto da equipe: lista do mês e aprovação dos ajustes pedidos pelos colaboradores
+export function PontoClient({ records, employees, rules, exceptions, ajustes, companyId, mes, ano, abaInicial }: Props) {
   const router = useRouter()
 
-  const [tolerancia,     setTolerancia]    = useState(10)
-  const [filterEmployee, setFilter]        = useState('')
-  const [modalOpen,      setModalOpen]     = useState(false)
-  const [editingRecord,  setEditingRecord] = useState<TimeRecord | null>(null)
-  const [modalEmpId,     setModalEmpId]    = useState<string | null>(null)
-  const [modalDate,      setModalDate]     = useState<string | null>(null)
-  const [modalEntrada,   setModalEntrada]  = useState<string | null>(null)
-  const [modalSaida,     setModalSaida]    = useState<string | null>(null)
-  const [modalTipo,      setModalTipo]     = useState<string>('normal')
-  const [deletingId,     setDeletingId]    = useState<string | null>(null)
-  const [deleteError,    setDeleteError]   = useState('')
-  const [detailEntry,    setDetailEntry]   = useState<DayEntry | null>(null)
+  const [aba, setAba] = useState(abaInicial)
+  const [tolerancia, setTolerancia] = useState(10)
+  const [filterEmployee, setFilterEmployee] = useState('')
+  const [filterSituacao, setFilterSituacao] = useState('todas')
+  const [modal, setModal] = useState<ModalState | null>(null)
+  const [detalhe, setDetalhe] = useState<DayEntry | null>(null)
+  const [excluir, setExcluir] = useState<DayEntry | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
 
   const scheduleMap = useMemo(() => {
     const map = new Map<string, DayResult>()
     for (const emp of employees) {
-      const days = generateMonth(rules, exceptions, mes, ano, emp.id)
-      for (const d of days) map.set(`${emp.id}|${d.date}`, d)
+      for (const d of generateMonth(rules, exceptions, mes, ano, emp.id)) map.set(`${emp.id}|${d.date}`, d)
     }
     return map
   }, [employees, rules, exceptions, mes, ano])
@@ -416,7 +247,7 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
   }, [records])
 
   const dayEntries = useMemo(() => {
-    const totalDias = getDaysInMonth(ano, mes)
+    const totalDias = new Date(ano, mes, 0).getDate()
     const emps = filterEmployee ? employees.filter(e => e.id === filterEmployee) : employees
     const entries: DayEntry[] = []
 
@@ -429,13 +260,8 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
         const record    = recordsMap.get(`${emp.id}|${dateStr}`) ?? null
         const hasSchedule = dayResult && dayResult.tipo !== 'sem_regra'
 
-        if (filterEmployee) {
-          if (!hasSchedule && !record) continue
-        } else {
-          if (isFuture) continue
-          if (!hasSchedule && !record) continue
-          if (dayResult?.tipo === 'folga' && !record) continue
-        }
+        if (!hasSchedule && !record) continue
+        if (!filterEmployee && (isFuture || (dayResult?.tipo === 'folga' && !record))) continue
 
         const sit = getSituacao(record, dayResult, tolerancia, isToday, isFuture)
         entries.push({ empId: emp.id, empNome: emp.nome, empCargo: emp.cargo, date: dateStr, dayResult, record, sit, isToday, isFuture })
@@ -460,6 +286,9 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     return { expected, present, absent, late, rate }
   }, [dayEntries])
 
+  const visiveis = filterSituacao === 'todas' ? dayEntries : dayEntries.filter(e => e.sit.status === filterSituacao)
+  const pendentes = ajustes.filter(a => a.status === 'pendente').length
+
   function navMes(delta: number) {
     let m = mes + delta, a = ano
     if (m < 1)  { m = 12; a-- }
@@ -467,40 +296,33 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     router.push(`/pessoas/registro-de-ponto?mes=${m}&ano=${a}`)
   }
 
-  function openEdit(r: TimeRecord) {
-    setEditingRecord(r)
-    setModalEmpId(null); setModalDate(null); setModalEntrada(null); setModalSaida(null); setModalTipo('normal')
-    setModalOpen(true)
+  function abrirLancamento(e: DayEntry) {
+    if (e.record) { setModal({ record: e.record }); return }
+    setModal({
+      record: null,
+      empId: e.empId,
+      date: e.date,
+      entrada: e.dayResult?.hora_entrada ?? null,
+      saida: e.dayResult?.hora_saida ?? null,
+      tipo: e.dayResult?.tipo === 'folga' ? 'folga' : 'normal',
+    })
   }
 
-  function openFromCalendar(dateStr: string, empId: string) {
-    const existing  = recordsMap.get(`${empId}|${dateStr}`) ?? null
-    const dayResult = scheduleMap.get(`${empId}|${dateStr}`) ?? null
-    if (existing) {
-      setEditingRecord(existing)
-      setModalEmpId(null); setModalDate(null); setModalEntrada(null); setModalSaida(null); setModalTipo('normal')
-    } else {
-      setEditingRecord(null)
-      setModalEmpId(empId)
-      setModalDate(dateStr)
-      setModalEntrada(dayResult?.hora_entrada ?? null)
-      setModalSaida(dayResult?.hora_saida ?? null)
-      setModalTipo(dayResult?.tipo === 'folga' ? 'folga' : 'normal')
-    }
-    setModalOpen(true)
+  async function confirmarExclusao() {
+    const id = excluir?.record?.id
+    if (!id) return
+    setExcluindo(true)
+    const r = await toast.promise(deleteTimeRecordAction(id), {
+      loading: 'Excluindo o registro…',
+      success: 'Registro de ponto excluído.',
+      error: 'Não foi possível excluir o registro.',
+    })
+    setExcluindo(false)
+    setExcluir(null)
+    if (!('error' in r)) router.refresh()
   }
 
-  async function handleDelete(entry: DayEntry) {
-    if (!entry.record) return
-    if (!confirm('Excluir este registro de ponto?')) return
-    setDeletingId(entry.record.id); setDeleteError('')
-    const result = await deleteTimeRecordAction(entry.record.id)
-    setDeletingId(null)
-    if ('error' in result) setDeleteError(result.error ?? 'Erro ao excluir.')
-    else router.refresh()
-  }
-
-  async function handleExportPDF() {
+  async function exportarPDF() {
     const { jsPDF } = await import('jspdf')
     const doc = new jsPDF({ orientation: 'landscape' })
     doc.setFontSize(14)
@@ -511,15 +333,13 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
       ...(hasFuncCol ? ['Funcionário'] : []),
       'Data', 'Previsto', 'Entrada', 'Almoço', 'Saída', 'Horas', 'Situação',
     ]
-    const rows = dayEntries.map(e => [
+    const rows = visiveis.map(e => [
       ...(hasFuncCol ? [e.empNome] : []),
-      `${formatDate(e.date)} ${formatWeekday(e.date)}`,
+      `${formatDate(e.date)} ${weekday(e.date)}`,
       getPrevistoLabel(e.dayResult),
-      e.record?.entrada ? formatTime(e.record.entrada) : '—',
-      e.record?.saida_almoco
-        ? `${formatTime(e.record.saida_almoco)}–${formatTime(e.record.retorno_almoco)}`
-        : '—',
-      e.record?.saida ? formatTime(e.record.saida) : '—',
+      hora(e.record?.entrada),
+      almoco(e.record),
+      hora(e.record?.saida),
       formatInterval(e.record?.horas_trabalhadas ?? null),
       e.sit.label,
     ])
@@ -545,23 +365,21 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     doc.save(`registro-ponto-${mes}-${ano}.pdf`)
   }
 
-  async function handleExportExcel() {
+  async function exportarExcel() {
     const XLSX = await import('xlsx')
     const hasFuncCol = !filterEmployee
     const headers = [
       ...(hasFuncCol ? ['Funcionário'] : []),
       'Data', 'Dia', 'Previsto', 'Entrada', 'Almoço', 'Saída', 'Horas', 'Situação',
     ]
-    const rows = dayEntries.map(e => [
+    const rows = visiveis.map(e => [
       ...(hasFuncCol ? [e.empNome] : []),
       formatDate(e.date),
-      formatWeekday(e.date),
+      weekday(e.date),
       getPrevistoLabel(e.dayResult),
-      e.record?.entrada ? formatTime(e.record.entrada) : '',
-      e.record?.saida_almoco
-        ? `${formatTime(e.record.saida_almoco)}–${formatTime(e.record.retorno_almoco)}`
-        : '',
-      e.record?.saida ? formatTime(e.record.saida) : '',
+      horaDe(e.record?.entrada),
+      e.record?.saida_almoco ? almoco(e.record) : '',
+      horaDe(e.record?.saida),
       formatInterval(e.record?.horas_trabalhadas ?? null),
       e.sit.label,
     ])
@@ -571,222 +389,133 @@ export function PontoClient({ records, employees, rules, exceptions, companyId, 
     XLSX.writeFile(wb, `registro-ponto-${mes}-${ano}.xlsx`)
   }
 
-  const isSingleEmp = !!filterEmployee
+  const seta = 'w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-gray-100'
+  const estiloBotao = { borderColor: 'var(--color-card-border)', color: 'var(--color-text-secondary)' }
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Registro de Ponto
-            </h1>
-            <Breadcrumb />
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Registro de Ponto</h1>
+        <Breadcrumb />
+      </div>
+
+      <Tabs labels={['Registros', pendentes ? `Aprovações (${pendentes})` : 'Aprovações']} step={aba} onSelect={setAba} />
+
+      {aba === 1 && <Aprovacoes ajustes={ajustes} companyId={companyId} />}
+
+      {aba === 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+          <SummaryCard icon="star" title="Presença" value={`${metrics.rate}%`} caption="dos dias esperados" accent={metrics.rate < 75 ? 'red' : metrics.rate < 90 ? 'yellow' : undefined} />
+          <SummaryCard icon="calendar" title="Dias esperados" value={metrics.expected} caption={`até hoje em ${MESES[mes - 1].toLowerCase()}`} delay={60} />
+          <SummaryCard icon="check" title="Presentes" value={metrics.present} caption="dias com ponto" delay={120} />
+          <SummaryCard icon="info" title="Ausências" value={metrics.absent} caption="faltas e dias sem ponto" accent={metrics.absent > 0 ? 'red' : undefined} delay={180} />
+          <SummaryCard icon="alarm" title="Atrasos" value={metrics.late} caption={`acima de ${tolerancia} min de tolerância`} accent={metrics.late > 0 ? 'yellow' : undefined} delay={240} />
+        </div>
+      )}
+
+      <div className={aba === 0 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1" style={{ color: 'var(--color-sidebar-text)' }}>
+            <button type="button" onClick={() => navMes(-1)} aria-label="Mês anterior" className={seta}><Icon name="chevron-left" size={18} /></button>
+            <span className="w-36 text-center text-sm font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{MESES[mes - 1]} {ano}</span>
+            <button type="button" onClick={() => navMes(1)} aria-label="Próximo mês" className={seta}><Icon name="chevron-right" size={18} /></button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={exportarPDF} className={BOTAO_CAIXA} style={estiloBotao}><Icon name="download" size={16} /> PDF</button>
+            <button type="button" onClick={exportarExcel} className={BOTAO_CAIXA} style={estiloBotao}><Icon name="download" size={16} /> Excel</button>
+            <AddButton onClick={() => setModal({ record: null })} label="Lançar ponto" />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs"
-            style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)', backgroundColor: 'white' }}>
-            <span>Tolerância:</span>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterSelect
+            value={filterEmployee}
+            onChange={setFilterEmployee}
+            label="Filtrar por funcionário"
+            options={[{ value: '', label: 'Todos os funcionários' }, ...employees.map(e => ({ value: e.id, label: e.nome }))]}
+          />
+          <FilterSelect value={filterSituacao} onChange={setFilterSituacao} label="Filtrar por situação" options={FILTRO_SITUACAO} />
+          <label className="flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm" style={estiloBotao}>
+            Tolerância
             <input
               type="number" min="0" max="60" value={tolerancia}
               onChange={e => setTolerancia(parseInt(e.target.value) || 0)}
-              className="w-10 text-center border-0 outline-none text-xs font-semibold bg-transparent"
+              className="w-10 text-center border-0 outline-none font-semibold bg-transparent"
               style={{ color: 'var(--color-text-primary)' }}
             />
-            <span>min</span>
-          </div>
-
-          <ExportMenu onPDF={handleExportPDF} onExcel={handleExportExcel} />
-
-          <Button onClick={() => window.open('https://casa-empresarial.vercel.app/registrar-ponto', '_blank')}>
-            Registro de Ponto
-          </Button>
+            min
+          </label>
+          {(filterEmployee || filterSituacao !== 'todas') && (
+            <FilterResult total={visiveis.length} onClear={() => { setFilterEmployee(''); setFilterSituacao('todas') }} />
+          )}
         </div>
-      </div>
 
-      {/* Navegação de mês */}
-      <div className="flex items-center justify-between mb-4 p-3 app-card">
-        <button onClick={() => navMes(-1)} className="px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-          style={{ color: 'var(--color-text-secondary)' }}>← Anterior</button>
-        <span className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
-          {MESES[mes - 1]} {ano}
-        </span>
-        <button onClick={() => navMes(1)} className="px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-          style={{ color: 'var(--color-text-secondary)' }}>Próximo →</button>
-      </div>
-
-      {/* Métricas */}
-      <div className="grid grid-cols-5 gap-3 mb-4">
-        {[
-          { label: 'Dias esperados', value: String(metrics.expected), color: 'var(--color-primary-darker)' },
-          { label: 'Presentes',      value: String(metrics.present),  color: '#1E8449' },
-          { label: 'Ausências',      value: String(metrics.absent),   color: '#C0392B' },
-          { label: 'Atrasos',        value: String(metrics.late),     color: '#D35400' },
-          {
-            label: '% Presença',
-            value: `${metrics.rate}%`,
-            color: metrics.rate >= 90 ? '#1E8449' : metrics.rate >= 75 ? '#D35400' : '#C0392B',
-          },
-        ].map(m => (
-          <div key={m.label} className="p-3 app-card text-center">
-            <div className="text-xl font-bold" style={{ color: m.color }}>{m.value}</div>
-            <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{m.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtro */}
-      {!readOnly && (
-        <div className="mb-4">
-          <select value={filterEmployee} onChange={e => setFilter(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border text-sm"
-            style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}>
-            <option value="">Todos os funcionários</option>
-            {employees.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-          </select>
-        </div>
-      )}
-
-      {deleteError && (
-        <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{deleteError}</p>
-      )}
-
-      {/* ── Lista ── */}
-      <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              {!filterEmployee && (
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
-              )}
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Data</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Previsto</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Entrada</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Almoço</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Saída</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Horas</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Situação</th>
-              {!readOnly && <th className="w-10 px-2 py-3" />}
-            </tr>
-          </thead>
-          <tbody>
-            {dayEntries.length === 0 && (
-              <tr>
-                <td colSpan={isSingleEmp ? 8 : 9} className="text-center py-10"
-                  style={{ color: 'var(--color-text-muted)' }}>
-                  Nenhum dado para {MESES[mes - 1]} {ano}.
-                </td>
-              </tr>
-            )}
-
-            {dayEntries.map((entry, idx) => {
-              const { record, dayResult, sit, isToday, isFuture } = entry
-              const previsto  = getPrevistoLabel(dayResult)
-              const isAbsent  = sit.status === 'ausente' || sit.status === 'falta'
-              const rowBg = isToday
-                ? '#FEFCE8'
-                : isFuture
-                ? '#FAFBFF'
-                : idx % 2 === 0 ? 'white' : '#FAFAFA'
-
-              const isPending = sit.status === 'pendente'
-              const entradaColor = isPending ? 'var(--color-text-muted)' : sit.status === 'atraso' ? '#D35400' : 'var(--color-text-primary)'
-              const saidaColor   = isPending ? 'var(--color-text-muted)' : sit.status === 'saida_antecipada' ? '#D35400' : 'var(--color-text-primary)'
-              const secColor     = isPending ? 'var(--color-text-muted)' : 'var(--color-text-secondary)'
-
-              return (
-                <tr key={`${entry.empId}|${entry.date}`} className="border-t"
-                  style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
-
-                  {!filterEmployee && (
-                    <td className="px-4 py-2.5 text-xs" style={{ color: isPending ? 'var(--color-text-muted)' : 'var(--color-text-primary)' }}>
-                      <div className="font-medium">{entry.empNome}</div>
-                      {entry.empCargo && (
-                        <div style={{ color: 'var(--color-text-muted)' }}>{entry.empCargo}</div>
-                      )}
-                    </td>
-                  )}
-
-                  <td className="px-4 py-2.5 text-xs" style={{ color: secColor }}>
-                    <div className="font-medium">{formatDate(entry.date)}</div>
-                    <div className="capitalize" style={{ color: 'var(--color-text-muted)' }}>{formatWeekday(entry.date)}</div>
-                  </td>
-
-                  <td className="px-4 py-2.5 text-xs font-medium" style={{ color: secColor }}>
-                    {previsto}
-                  </td>
-
-                  <td className="px-4 py-2.5 text-xs font-semibold"
-                    style={{ color: isAbsent ? '#C0392B' : entradaColor }}>
-                    {record?.entrada ? formatTime(record.entrada) : (isAbsent ? 'Ausente' : '—')}
-                  </td>
-
-                  <td className="px-4 py-2.5 text-xs" style={{ color: secColor }}>
-                    {record?.saida_almoco
-                      ? `${formatTime(record.saida_almoco)}–${formatTime(record.retorno_almoco)}`
-                      : '—'}
-                  </td>
-
-                  <td className="px-4 py-2.5 text-xs font-semibold"
-                    style={{ color: isAbsent ? '#C0392B' : saidaColor }}>
-                    {record?.saida ? formatTime(record.saida) : '—'}
-                  </td>
-
-                  <td className="px-4 py-2.5 text-xs" style={{ color: secColor }}>
-                    {formatInterval(record?.horas_trabalhadas ?? null)}
-                  </td>
-
-                  <td className="px-4 py-2.5">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: sit.bg, color: sit.color }}>
-                      {sit.label}
+        <ul className="flex flex-col gap-3">
+          {visiveis.length === 0 && <ListEmpty>Nenhum registro em {MESES[mes - 1]} de {ano}.</ListEmpty>}
+          {visiveis.map(e => {
+            const r = e.record
+            const horarios = `Entrada ${hora(r?.entrada)} · Almoço ${almoco(r)} · Saída ${hora(r?.saida)}`
+            const previsto = `Previsto ${getPrevistoLabel(e.dayResult)} · ${formatInterval(r?.horas_trabalhadas ?? null)} trabalhadas`
+            return (
+              <ListItem
+                key={`${e.empId}|${e.date}`}
+                media={<Dia date={e.date} hoje={e.isToday} />}
+                title={e.empNome}
+                subtitle={<><span className="lg:hidden">{horarios}</span><span className="hidden lg:inline">{previsto}</span></>}
+                aside={
+                  <>
+                    <span className="hidden lg:grid grid-cols-4 gap-4 w-80">
+                      {([['Entrada', r?.entrada], ['Almoço', r?.saida_almoco], ['Retorno', r?.retorno_almoco], ['Saída', r?.saida]] as const).map(([rotulo, ts]) => (
+                        <span key={rotulo}>
+                          <span className="block text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{rotulo}</span>
+                          <span className="block text-sm font-semibold tabular-nums" style={{ color: ts ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{horaDe(ts) || '--:--'}</span>
+                        </span>
+                      ))}
                     </span>
-                  </td>
-
-                  {!readOnly && (
-                    <td className="px-2 py-2.5">
-                      <RowMenu
-                        entry={entry}
-                        onEdit={() => {
-                          if (entry.record) openEdit(entry.record)
-                          else openFromCalendar(entry.date, entry.empId)
-                        }}
-                        onDetail={() => setDetailEntry(entry)}
-                        onDelete={() => handleDelete(entry)}
-                        deletingId={deletingId}
-                      />
-                    </td>
-                  )}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                    <span className="lg:w-32 flex justify-end"><Situacao sit={e.sit} /></span>
+                  </>
+                }
+                onClick={() => abrirLancamento(e)}
+                actionsLabel={`${e.empNome} em ${formatDate(e.date)}`}
+                actions={[
+                  ...(r ? [{ icon: 'eye' as const, label: 'Detalhar', onClick: () => setDetalhe(e) }] : []),
+                  { icon: 'pencil' as const, label: r ? 'Editar' : 'Lançar ponto', onClick: () => abrirLancamento(e) },
+                  ...(r ? [{ icon: 'trash' as const, label: 'Excluir', tone: 'danger' as const, onClick: () => setExcluir(e) }] : []),
+                ]}
+              />
+            )
+          })}
+        </ul>
       </div>
 
       <ModalPonto
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        open={!!modal}
+        onClose={() => setModal(null)}
         companyId={companyId}
-        record={editingRecord}
+        record={modal?.record ?? null}
         employees={employees}
         rules={rules}
         exceptions={exceptions}
         defaultMes={mes}
         defaultAno={ano}
-        defaultEmployeeId={modalEmpId}
-        defaultDate={modalDate}
-        defaultEntrada={modalEntrada}
-        defaultSaida={modalSaida}
-        defaultTipo={modalTipo}
+        defaultEmployeeId={modal?.empId ?? null}
+        defaultDate={modal?.date ?? null}
+        defaultEntrada={modal?.entrada ?? null}
+        defaultSaida={modal?.saida ?? null}
+        defaultTipo={modal?.tipo ?? 'normal'}
       />
 
-      {detailEntry && (
-        <ModalDetalhar entry={detailEntry} onClose={() => setDetailEntry(null)} />
-      )}
+      {detalhe && <ModalDetalhar entry={detalhe} onClose={() => setDetalhe(null)} />}
+
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title="Excluir registro de ponto"
+        confirmLabel="Excluir"
+        message={<p>Excluir o ponto de <strong>{excluir?.empNome}</strong> em {excluir ? formatDate(excluir.date) : ''}?</p>}
+      />
     </>
   )
 }

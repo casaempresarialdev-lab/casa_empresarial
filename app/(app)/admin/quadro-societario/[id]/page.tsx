@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getSocioById, getSocios } from '../queries'
 import { SocioPage } from './components/socio-page'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,8 @@ interface Props {
 }
 
 export default async function SocioEditPage({ params, searchParams }: Props) {
+  await exigirAcessoPagina('admin.quadro-societario')
+
   const [{ id }, { aba }] = await Promise.all([params, searchParams])
 
   const supabase = await createClient()

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -10,6 +11,9 @@ async function getAuthUser() {
 }
 
 export async function createCostCenterAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.centro-de-custo', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -30,6 +34,9 @@ export async function createCostCenterAction(companyId: string, formData: FormDa
 }
 
 export async function updateCostCenterAction(costCenterId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.centro-de-custo')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -49,6 +56,9 @@ export async function updateCostCenterAction(costCenterId: string, formData: For
 }
 
 export async function deleteCostCenterAction(costCenterId: string) {
+  const negado = await semAcesso('financeiro.centro-de-custo')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

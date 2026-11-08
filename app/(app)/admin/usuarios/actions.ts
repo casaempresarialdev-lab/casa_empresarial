@@ -3,12 +3,28 @@
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { findUserIdByEmail, adicionarContaExistente, enviarConvite } from '@/lib/invitations'
+import { findUserIdByEmail, adicionarContaExistente, definirPerfisMembro, enviarConvite } from '@/lib/invitations'
+import { TODAS_AS_CHAVES } from '@/lib/acesso/catalogo'
+import { perfilAcessoSchema } from '@/lib/validations/acesso'
+import { semAcesso } from '@/lib/auth/acesso'
+import { buscarCargo } from '@/lib/estrutura'
 
 async function getAuthUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   return user
+}
+
+/** Ao menos um perfil, e todos desta empresa */
+async function perfisDaEmpresa(admin: ReturnType<typeof createAdminClient>, companyId: string, perfilIds: string[]) {
+  if (!perfilIds.length) return false
+  const { count } = await admin.from('access_profiles').select('id', { count: 'exact', head: true }).eq('company_id', companyId).in('id', perfilIds)
+  return count === new Set(perfilIds).size
+}
+
+async function ehPadrao(admin: ReturnType<typeof createAdminClient>, companyId: string, perfilId: string) {
+  const { data } = await admin.from('access_profiles').select('padrao').eq('id', perfilId).eq('company_id', companyId).maybeSingle()
+  return !!data?.padrao
 }
 
 async function getAppUrl() {
@@ -21,20 +37,27 @@ async function getAppUrl() {
 export async function inviteUserAction(
   companyId: string,
   email: string,
-  role: string,
+  perfilIds: string[],
 ) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
   const normalizedEmail = email.trim().toLowerCase()
   const admin = createAdminClient()
 
+  if (!await perfisDaEmpresa(admin, companyId, perfilIds)) return { error: 'Escolha ao menos um perfil de acesso.' }
+  // A função fica como "membro": o que vale são os perfis
+  const role = 'member'
+
   const appUrl = await getAppUrl()
 
   // Já tem conta: entra direto na empresa (não há senha a criar)
   const existingUserId = await findUserIdByEmail(admin, normalizedEmail)
   if (existingUserId) {
-    const r = await adicionarContaExistente(admin, { companyId, profileId: existingUserId, email: normalizedEmail, role, appUrl })
+    const r = await adicionarContaExistente(admin, { companyId, profileId: existingUserId, email: normalizedEmail, role, perfilIds, appUrl })
     revalidatePath('/admin/usuarios')
     return r
   }
@@ -55,6 +78,7 @@ export async function inviteUserAction(
     company_id: companyId,
     email: normalizedEmail,
     role,
+    access_profile_ids: perfilIds,
     invited_by: user.id,
     status: 'pending',
   }).select('id').single()
@@ -68,6 +92,9 @@ export async function inviteUserAction(
 }
 
 export async function resendInvitationAction(invitationId: string, companyId: string) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -75,7 +102,7 @@ export async function resendInvitationAction(invitationId: string, companyId: st
 
   const { data: inv } = await admin
     .from('invitations')
-    .select('id, email, role, employee_id')
+    .select('*')
     .eq('id', invitationId)
     .eq('company_id', companyId)
     .eq('status', 'pending')
@@ -89,7 +116,7 @@ export async function resendInvitationAction(invitationId: string, companyId: st
   const existingUserId = await findUserIdByEmail(admin, inv.email)
   if (existingUserId) {
     const r = await adicionarContaExistente(admin, {
-      companyId, profileId: existingUserId, email: inv.email, role: inv.role, employeeId: inv.employee_id, appUrl,
+      companyId, profileId: existingUserId, email: inv.email, role: inv.role, employeeId: inv.employee_id, perfilIds: inv.access_profile_ids, appUrl,
     })
     revalidatePath('/admin/usuarios')
     return r
@@ -104,6 +131,9 @@ export async function resendInvitationAction(invitationId: string, companyId: st
 }
 
 export async function cancelInvitationAction(invitationId: string, companyId: string) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -119,17 +149,99 @@ export async function cancelInvitationAction(invitationId: string, companyId: st
   return { success: true }
 }
 
-export async function updateMemberRoleAction(memberId: string, role: string) {
-  const user = await getAuthUser()
-  if (!user) return { error: 'Não autenticado' }
+/** Define os perfis de um usuário. Proprietário e colaborador têm acesso definido à parte, sem perfil. */
+export async function atualizarPerfisMembroAction(companyId: string, memberId: string, perfilIds: string[]) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
 
   const admin = createAdminClient()
-  const { error } = await admin
-    .from('company_members')
-    .update({ role })
-    .eq('id', memberId)
+  if (!await perfisDaEmpresa(admin, companyId, perfilIds)) return { error: 'Escolha ao menos um perfil de acesso.' }
 
+  const { data: membro } = await admin.from('company_members').select('role').eq('id', memberId).eq('company_id', companyId).maybeSingle()
+  if (!membro) return { error: 'Usuário não encontrado.' }
+  if (membro.role === 'owner' || membro.role === 'colaborador') return { error: 'Este usuário não usa perfil de acesso.' }
+
+  const erro = await definirPerfisMembro(admin, companyId, memberId, perfilIds)
+  if (erro) return { error: erro }
+  revalidatePath('/admin/usuarios')
+  return { success: true }
+}
+
+/** Liga o usuário a um cargo da Estrutura: na ficha, se ele tiver uma ativa na Equipe; senão, no vínculo com a empresa */
+export async function atualizarCargoMembroAction(companyId: string, memberId: string, positionId: string) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
+
+  const admin = createAdminClient()
+  const { data: membro } = await admin.from('company_members').select('profile_id').eq('id', memberId).eq('company_id', companyId).maybeSingle()
+  if (!membro) return { error: 'Usuário não encontrado.' }
+
+  const cargo = positionId ? await buscarCargo(admin, companyId, positionId) : null
+  if (positionId && !cargo) return { error: 'Escolha um dos cargos cadastrados.' }
+
+  const { data: ficha } = await admin
+    .from('employees')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('profile_id', membro.profile_id)
+    .not('status', 'in', '(inativo,demitido)')
+    .limit(1)
+    .maybeSingle()
+
+  const { error } = ficha
+    ? await admin.from('employees').update({ position_id: cargo?.id ?? null, cargo: cargo?.nome ?? null, departamento: cargo?.departamento ?? null }).eq('id', ficha.id)
+    : await admin.from('company_members').update({ position_id: cargo?.id ?? null }).eq('id', memberId).eq('company_id', companyId)
   if (error) return { error: error.message }
+
+  revalidatePath('/admin/usuarios')
+  revalidatePath('/empresa')
+  revalidatePath('/pessoas/funcionarios')
+  return { success: true }
+}
+
+/** Cria ou edita um perfil de acesso: um nome e os itens liberados */
+export async function salvarPerfilAcessoAction(companyId: string, perfilId: string | null, data: unknown) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
+
+  const parsed = perfilAcessoSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  const campos = {
+    nome: parsed.data.nome,
+    // Só o que existe no catálogo, sem repetir
+    permissoes: TODAS_AS_CHAVES.filter((k) => parsed.data.permissoes.includes(k)),
+    updated_at: new Date().toISOString(),
+  }
+
+  const admin = createAdminClient()
+  if (perfilId && await ehPadrao(admin, companyId, perfilId)) return { error: 'Os perfis padrão não podem ser alterados.' }
+  const { error } = perfilId
+    ? await admin.from('access_profiles').update(campos).eq('id', perfilId).eq('company_id', companyId)
+    : await admin.from('access_profiles').insert({ ...campos, company_id: companyId })
+  if (error) return { error: error.code === '23505' ? 'Já existe um perfil com esse nome.' : error.message }
+
+  revalidatePath('/admin/usuarios')
+  revalidatePath('/', 'layout')
+  return { success: true }
+}
+
+/** Perfil em uso não pode ser excluído: quem está nele ficaria sem acesso */
+export async function excluirPerfilAcessoAction(companyId: string, perfilId: string) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
+
+  const admin = createAdminClient()
+  if (await ehPadrao(admin, companyId, perfilId)) return { error: 'Os perfis padrão não podem ser excluídos.' }
+  const [{ count: usuarios }, { count: convites }] = await Promise.all([
+    admin.from('member_access_profiles').select('member_id', { count: 'exact', head: true }).eq('company_id', companyId).eq('profile_id', perfilId),
+    admin.from('invitations').select('id', { count: 'exact', head: true }).eq('company_id', companyId).contains('access_profile_ids', [perfilId]).eq('status', 'pending'),
+  ])
+  if (usuarios) return { error: `Este perfil está em uso por ${usuarios} ${usuarios === 1 ? 'usuário' : 'usuários'}. Tire o perfil deles antes de excluir.` }
+  if (convites) return { error: `Este perfil está em ${convites} ${convites === 1 ? 'convite pendente' : 'convites pendentes'}. Cancele antes de excluir.` }
+
+  const { error } = await admin.from('access_profiles').delete().eq('id', perfilId).eq('company_id', companyId)
+  if (error) return { error: error.message }
+
   revalidatePath('/admin/usuarios')
   return { success: true }
 }
@@ -149,6 +261,9 @@ export async function updateMemberProfileAction(
     complemento?: string
   }
 ) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -217,6 +332,9 @@ export async function changePasswordAction(newPassword: string) {
 }
 
 export async function removeMemberAction(memberId: string, companyId: string) {
+  const negado = await semAcesso('sistema.acesso', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -226,6 +344,7 @@ export async function removeMemberAction(memberId: string, companyId: string) {
     .from('company_members')
     .select('role, profile_id')
     .eq('id', memberId)
+    .eq('company_id', companyId)
     .single()
 
   if (member?.role === 'owner') {
@@ -243,8 +362,11 @@ export async function removeMemberAction(memberId: string, companyId: string) {
     .from('company_members')
     .update({ status: 'inactive' })
     .eq('id', memberId)
+    .eq('company_id', companyId)
 
   if (error) return { error: error.message }
+  // Quem sai da empresa não prende os perfis; ao voltar, recebe os perfis do novo convite
+  await admin.from('member_access_profiles').delete().eq('member_id', memberId)
   revalidatePath('/admin/usuarios')
   return { success: true }
 }

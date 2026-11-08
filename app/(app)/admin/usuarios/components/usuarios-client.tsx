@@ -9,22 +9,26 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Icon } from '@/components/ui/icon'
 import { ModalUsuario } from './modal-usuario'
 import { removeMemberAction, cancelInvitationAction, resendInvitationAction } from '../actions'
-import type { MemberWithProfile, Invitation } from '../queries'
+import type { MemberWithProfile, Invitation, PerfilAcesso } from '../queries'
+import type { CargoOpcao } from '../../../empresa/estrutura/tipos'
 import { formatDate } from '@/lib/utils'
 import { toast } from '@/lib/toast'
 import { ModalPainelUsuario } from './modal-painel-usuario'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Proprietário',
-  admin: 'Administrador',
-  member: 'Membro',
-  accountant: 'Contador',
+// Nome do perfil de acesso, em selo
+function SeloPerfil({ nome }: { nome: string }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+      {nome}
+    </span>
+  )
 }
 
 interface Props {
   members: MemberWithProfile[]
   invitations: Invitation[]
+  perfis: PerfilAcesso[]
+  cargos: CargoOpcao[]
   companyId: string
   currentProfileId: string
   currentUserRole: string
@@ -52,8 +56,13 @@ function Avatar({ src, alt, children }: { src?: string | null; alt: string; chil
   )
 }
 
-export function UsuariosClient({ members, invitations, companyId, currentProfileId, currentUserRole, currentUserEmail }: Props) {
+export function UsuariosClient({ members, invitations, perfis, cargos, companyId, currentProfileId, currentUserRole, currentUserEmail }: Props) {
   const router = useRouter()
+  // Um selo por perfil; os perfis são acumulativos
+  const selosPerfis = (ids?: string[] | null) => {
+    const nomes = perfis.filter((p) => ids?.includes(p.id)).map((p) => p.nome)
+    return (nomes.length ? nomes : ['Sem perfil']).map((nome) => <SeloPerfil key={nome} nome={nome} />)
+  }
   const [modalOpen, setModalOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<MemberWithProfile | null>(null)
   const [painelOpen, setPainelOpen] = useState(false)
@@ -117,16 +126,6 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
 
   return (
     <>
-      <div className="mb-6">
-        {/* Título e breadcrumb na mesma linha */}
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-            Usuários
-          </h1>
-          <Breadcrumb />
-        </div>
-      </div>
-
       <div className="app-card p-5 flex flex-col gap-4">
         {/* Barra do box: resumo + adicionar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -158,10 +157,12 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
                       {isSelf && <span className="ml-2 text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>(você)</span>}
                     </>
                   }
-                  subtitle={[cpf ? `CPF ${cpf}` : null, `Desde ${formatDate(m.created_at)}`].filter(Boolean).join(' · ')}
+                  subtitle={[cargos.find((c) => c.id === m.cargo_id)?.nome ?? 'Sem cargo', cpf ? `CPF ${cpf}` : null, `Desde ${formatDate(m.created_at)}`].filter(Boolean).join(' · ')}
                   aside={
                     <>
-                      <span className="hidden sm:inline-flex"><RoleBadge role={m.role} /></span>
+                      <span className="hidden sm:inline-flex flex-wrap justify-end gap-1">
+                        {m.role === 'owner' || m.role === 'colaborador' ? <RoleBadge role={m.role} /> : selosPerfis(m.access_profile_ids)}
+                      </span>
                       <StatusBadge status={m.status} />
                     </>
                   }
@@ -200,11 +201,8 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
                 title={inv.email}
                 subtitle={`Enviado em ${formatDate(inv.created_at)} · Expira em ${formatDate(inv.expires_at)}`}
                 aside={
-                  <span
-                    className="hidden sm:inline-flex text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
-                    style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}
-                  >
-                    {ROLE_LABELS[inv.role] ?? inv.role}
+                  <span className="hidden sm:inline-flex flex-wrap justify-end gap-1">
+                    {inv.role === 'colaborador' ? <RoleBadge role={inv.role} /> : selosPerfis(inv.access_profile_ids)}
                   </span>
                 }
                 actionsLabel={`convite de ${inv.email}`}
@@ -224,6 +222,8 @@ export function UsuariosClient({ members, invitations, companyId, currentProfile
         companyId={companyId}
         member={editingMember}
         currentUserRole={currentUserRole}
+        perfis={perfis}
+        cargos={cargos}
       />
 
       <ModalPainelUsuario

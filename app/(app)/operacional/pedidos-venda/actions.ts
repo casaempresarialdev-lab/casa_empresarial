@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { PedidoVendaItem } from './queries'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -33,6 +34,9 @@ function parsePedidoFields(formData: FormData) {
 }
 
 export async function createSaleOrderAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('operacional.pedidos-venda', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -48,6 +52,9 @@ export async function createSaleOrderAction(companyId: string, formData: FormDat
 }
 
 export async function updateSaleOrderAction(orderId: string, formData: FormData) {
+  const negado = await semAcesso('operacional.pedidos-venda')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -61,6 +68,9 @@ export async function updateSaleOrderAction(orderId: string, formData: FormData)
 }
 
 export async function updateSaleOrderStatusAction(orderId: string, status: string) {
+  const negado = await semAcesso('operacional.pedidos-venda')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -130,6 +140,9 @@ export async function updateSaleOrderStatusAction(orderId: string, status: strin
 }
 
 export async function deleteSaleOrderAction(orderId: string) {
+  const negado = await semAcesso('operacional.pedidos-venda')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

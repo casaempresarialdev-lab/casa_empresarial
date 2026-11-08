@@ -5,6 +5,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { companySchema, companyBankSchema } from '@/lib/validations/company'
 import { encrypt } from '@/lib/crypto'
 import { z } from 'zod'
+import { semAcesso } from '@/lib/auth/acesso'
 
 // Bancos chegam como JSON no campo "bancos" (lista inteira da aba Dados bancários)
 function parseBancos(formData: FormData) {
@@ -136,6 +137,9 @@ export async function createCompanyAction(formData: FormData) {
 }
 
 export async function updateCompanyAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('sistema.empresa', companyId)
+  if (negado) return negado
+
   const supabase = await createClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return { error: 'Sessão inválida. Faça login novamente.' }

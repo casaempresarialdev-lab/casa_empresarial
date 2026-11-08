@@ -7,6 +7,7 @@ import { useAppStore } from '@/store'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Icon } from '@/components/ui/icon'
+import { pode, type Permissoes } from '@/lib/acesso/catalogo'
 
 // Papel do usuário na empresa (mesmos nomes da tela Usuários)
 const ROLE_LABELS: Record<string, string> = {
@@ -25,9 +26,12 @@ interface UserMenuProps {
   /** Sidebar retraída no desktop: mostra só o avatar */
   compact?: boolean
   onNavigate?: () => void
+  /** Perfil de acesso na empresa ativa: nome e itens liberados (null = tudo) */
+  perfilNome?: string | null
+  permissoes?: Permissoes
 }
 
-export function UserMenu({ userName, userEmail, userAvatar, companies = [], compact, onNavigate }: UserMenuProps) {
+export function UserMenu({ userName, userEmail, userAvatar, companies = [], compact, onNavigate, perfilNome = null, permissoes = null }: UserMenuProps) {
   const router = useRouter()
   const activeCompanyId = useAppStore((s) => s.activeCompanyId)
   const setActiveCompany = useAppStore((s) => s.setActiveCompany)
@@ -37,7 +41,7 @@ export function UserMenu({ userName, userEmail, userAvatar, companies = [], comp
 
   const activeCompany = companies.find((c) => c.id === activeCompanyId) ?? companies[0]
   const companyName = activeCompany?.razao_social
-  const roleLabel = activeCompany?.role ? ROLE_LABELS[activeCompany.role] ?? activeCompany.role : null
+  const roleLabel = perfilNome ?? (activeCompany?.role ? ROLE_LABELS[activeCompany.role] ?? activeCompany.role : null)
 
   // Ao fechar o menu, a lista de empresas também fecha
   useEffect(() => { if (!menuOpen) setCompaniesOpen(false) }, [menuOpen])
@@ -200,16 +204,16 @@ export function UserMenu({ userName, userEmail, userAvatar, companies = [], comp
               className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
               style={{ color: 'var(--color-sidebar-text)' }}
             >
-              <Icon name="user" size={16} /> Meu Perfil
+              <Icon name="user" size={16} /> Minha conta
             </Link>
-            <Link
+            {pode(permissoes, 'sistema.empresa') && <Link
               href="/empresa"
               onClick={closeAll}
               className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
               style={{ color: 'var(--color-sidebar-text)' }}
             >
               <Icon name="briefcase" size={16} /> Minha Empresa
-            </Link>
+            </Link>}
             {/* Cofre pessoal do usuário (vale em qualquer empresa) */}
             <Link
               href="/cofre-de-senhas"
@@ -219,30 +223,30 @@ export function UserMenu({ userName, userEmail, userAvatar, companies = [], comp
             >
               <Icon name="lock" size={16} /> Cofre de senhas
             </Link>
-            <Link
+            {pode(permissoes, 'sistema.acesso') && <Link
               href="/admin/usuarios"
               onClick={closeAll}
               className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
               style={{ color: 'var(--color-sidebar-text)' }}
             >
-              <Icon name="users" size={16} /> Usuários
-            </Link>
-            <Link
+              <Icon name="users" size={16} /> Acessos
+            </Link>}
+            {pode(permissoes, 'sistema.meu-plano') && <Link
               href="/meu-plano"
               onClick={closeAll}
               className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
               style={{ color: 'var(--color-sidebar-text)' }}
             >
               <Icon name="star" size={16} /> Meu Plano
-            </Link>
-            <Link
+            </Link>}
+            {pode(permissoes, 'sistema.configuracoes') && <Link
               href="/configuracoes"
               onClick={closeAll}
               className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
               style={{ color: 'var(--color-sidebar-text)' }}
             >
               <Icon name="settings" size={16} /> Configurações
-            </Link>
+            </Link>}
           </nav>
 
           <div className="border-t py-2" style={{ borderColor: 'var(--color-bg-surface)' }}>

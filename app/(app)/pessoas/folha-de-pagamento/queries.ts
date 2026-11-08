@@ -75,6 +75,8 @@ export type BenefitForPayroll = {
     valor: number
     por_dia_trabalhado: boolean
     desconta_salario: boolean
+    desconto_tipo?: string | null
+    desconto_valor?: number | null
   }
 }
 
@@ -110,7 +112,7 @@ export async function getActiveEmployeesForPayroll(companyId: string): Promise<E
       vale_transporte_valor, dias_trabalhados_vt,
       employee_benefits(
         benefit_id, valor_override,
-        benefit:benefit_id(nome, valor, por_dia_trabalhado, desconta_salario)
+        benefit:benefit_id(*)
       )
     `)
     .eq('company_id', companyId)

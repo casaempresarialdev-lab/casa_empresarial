@@ -16,6 +16,8 @@ import {
 } from '../../actions'
 import type { Employee } from '../../queries'
 import type { CompanyBenefit } from '../../../beneficios/queries'
+import { CampoCargo } from '../../../../empresa/estrutura/components/campo-cargo'
+import type { CargoOpcao } from '../../../../empresa/estrutura/tipos'
 import {
   ARQUIVOS, CONTRATO_OPTIONS, GRAU_OPTIONS, STATUS_OPTIONS, STATUS_OPTIONS_PJ, TIPO_OPTIONS,
   addDays, fmtDate, fmtMoney, isPjOuAutonomo, labelDe, maskCnpj, maskCpf, maskMoeda, maskTelefone, secoesVisiveis,
@@ -26,7 +28,7 @@ import {
 export type ModoFicha = 'cadastro' | 'ver' | 'editar'
 
 /** Resultado do cadastro (tela de sucesso da admissão) */
-export type CadastroConcluido = { employeeId: string; nome: string; telefone: string; link: string | null; acessoMsg: string | null; pediuAcesso: boolean }
+export type CadastroConcluido = { employeeId: string; nome: string; telefone: string; link: string | null; acesso: string | null }
 
 // ── Peças do layout (fora do componente para não perder o foco ao digitar) ──
 
@@ -79,20 +81,28 @@ function Bloco({ titulo, descricao, children }: { titulo: string; descricao?: st
 
 function Toggle({ value, onChange, label, disabled }: { value: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
-    <label className={`flex items-center gap-3 select-none ${disabled ? 'opacity-70' : 'cursor-pointer'}`}>
+    // Sem <label> em volta: o clique no botão contaria duas vezes e o estado não mudaria
+    <div className={`flex items-center gap-3 select-none ${disabled ? 'opacity-70' : ''}`}>
       <button
         type="button"
         role="switch"
         aria-checked={value}
+        aria-label={label}
         disabled={disabled}
         onClick={() => onChange(!value)}
-        className="relative w-10 h-6 rounded-full transition-colors shrink-0"
+        className={`relative inline-block w-10 h-6 p-0 rounded-full transition-colors shrink-0 ${disabled ? '' : 'cursor-pointer'}`}
         style={{ backgroundColor: value ? 'var(--color-brand)' : '#D1D5DB' }}
       >
-        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-1'}`} />
+        <span className={`absolute left-0 top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-1'}`} />
       </button>
-      <span className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
-    </label>
+      <span
+        onClick={disabled ? undefined : () => onChange(!value)}
+        className={`text-sm font-medium ${disabled ? '' : 'cursor-pointer'}`}
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
+        {label}
+      </span>
+    </div>
   )
 }
 
@@ -112,6 +122,14 @@ interface Props {
   employee: Employee | null
   companyId: string
   companyBenefits: CompanyBenefit[]
+  /** Cargos da Estrutura (cadastro e edição) */
+  cargos?: CargoOpcao[]
+  /** Cadastro: campos que já vêm preenchidos (ex.: da vaga escolhida) */
+  iniciais?: Partial<Valores>
+  /** Cadastro: campos definidos pela vaga, que não podem ser alterados */
+  travados?: (keyof Valores)[]
+  /** Cadastro: vaga a que a admissão pertence */
+  vagaId?: string
   /** Link da foto salva (ficha/edição) */
   fotoUrl?: string | null
   abaInicial?: SecaoId
@@ -129,14 +147,15 @@ interface Props {
 // Ficha do funcionário: etapas no cadastro (admissão), abas na visualização e na edição.
 // Visualização e edição têm a mesma apresentação; na edição os campos ficam abertos.
 export function FuncionarioFicha({
-  modo, employee, companyId, companyBenefits, fotoUrl = null, abaInicial, onAbaChange, podeGerenciar = true,
+  modo, employee, companyId, companyBenefits, cargos = [], iniciais, travados = [], vagaId, fotoUrl = null, abaInicial, onAbaChange, podeGerenciar = true,
   acoes, onCancel, onSaved, onCreated,
 }: Props) {
   const router = useRouter()
   const cadastro = modo === 'cadastro'
   const leitura = modo === 'ver'
+  const travado = (k: keyof Valores) => cadastro && travados.includes(k)
 
-  const [v, setV] = useState<Valores>(() => valoresIniciais(employee))
+  const [v, setV] = useState<Valores>(() => ({ ...valoresIniciais(employee), ...iniciais }))
   const set = <K extends keyof Valores>(k: K) => (val: Valores[K]) => {
     setV((prev) => ({ ...prev, [k]: val }))
     setInvalid((prev) => { if (!prev.has(k)) return prev; const n = new Set(prev); n.delete(k); return n })
@@ -154,8 +173,7 @@ export function FuncionarioFicha({
   const [viewTarget, setViewTarget] = useState<ViewerFile | null>(null)
   const [baixando, setBaixando] = useState<string | null>(null)
 
-  // Acesso ao sistema: no cadastro é uma opção; depois, uma ação na hora
-  const [pedirAcesso, setPedirAcesso] = useState(false)
+  // Convite de acesso pela ficha, para quem ainda não tem (na admissão, sai ao finalizar)
   const [concedendo, setConcedendo] = useState(false)
 
   // Seções conforme a forma de contratação
@@ -195,9 +213,6 @@ export function FuncionarioFicha({
     if (secao === 'cargo' && ehPj) {
       const cnpj = v.cnpj.replace(/\D/g, '')
       if (cnpj && cnpj.length !== 14) return { aba: secao, campos: ['cnpj'], mensagem: 'O CNPJ precisa ter 14 dígitos.' }
-    }
-    if (secao === 'beneficios' && !pj && v.pin_ativo && !/^\d{4}$/.test(v.pin)) {
-      return { aba: secao, campos: ['pin'], mensagem: 'O PIN do ponto precisa ter 4 dígitos.' }
     }
     return null
   }
@@ -244,24 +259,18 @@ export function FuncionarioFicha({
     for (const [k, rem] of Object.entries(removidos)) if (rem) fd.set(`remove_${k}`, 'true')
 
     if (cadastro) {
+      if (vagaId) fd.set('vaga_id', vagaId)
       const r = await toast.promise(createEmployeeAction(companyId, fd), {
         loading: 'Cadastrando funcionário…',
         success: `${v.nome.toUpperCase()} foi cadastrado.`,
         error: 'Não foi possível cadastrar o funcionário.',
       })
       if ('error' in r) { setLoading(false); return }
-      // Link de auto-cadastro e, se pedido, convite de acesso ao sistema
+      // Link de auto-cadastro. O e-mail para criar o usuário já saiu no servidor.
       const token = await generateOnboardingTokenAction(r.employeeId)
-      let acessoMsg: string | null = null
-      if (pedirAcesso) {
-        const a = await grantSystemAccessAction(r.employeeId, companyId)
-        if ('error' in a) acessoMsg = a.error ?? null
-        else if ('warning' in a) acessoMsg = (a.warning as string) ?? null
-        else if ('notice' in a) acessoMsg = (a.notice as string) ?? null
-      }
       setLoading(false)
       router.refresh()
-      onCreated?.({ employeeId: r.employeeId, nome: v.nome.toUpperCase(), telefone: v.telefone, link: token.url ?? null, acessoMsg, pediuAcesso: pedirAcesso })
+      onCreated?.({ employeeId: r.employeeId, nome: v.nome.toUpperCase(), telefone: v.telefone, link: token.url ?? null, acesso: r.acesso })
       return
     }
 
@@ -339,7 +348,7 @@ export function FuncionarioFicha({
           </Campo>
           <Campo label="Forma de contratação *" valor={labelDe(TIPO_OPTIONS, v.tipo_contrato)}>
             <Select label="Forma de contratação *" options={TIPO_OPTIONS} placeholder="Selecionar..." value={v.tipo_contrato}
-              onChange={txt('tipo_contrato')} invalid={cls('tipo_contrato')} />
+              onChange={txt('tipo_contrato')} invalid={cls('tipo_contrato')} disabled={travado('tipo_contrato')} />
           </Campo>
           <Campo label="CPF" valor={v.cpf}>
             <Input label="CPF" value={v.cpf} onChange={(e) => set('cpf')(maskCpf(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" invalid={cls('cpf')} />
@@ -375,7 +384,7 @@ export function FuncionarioFicha({
             <Input label="Serviço prestado" value={v.servico} onChange={txt('servico')} placeholder="Ex.: Consultoria de TI, limpeza…" />
           </Campo>
           <Campo label="Valor do contrato (R$)" valor={fmtMoney(v.valor_servico)}>
-            <Input label="Valor do contrato (R$)" value={v.valor_servico} onChange={(e) => set('valor_servico')(maskMoeda(e.target.value))} placeholder="0,00" inputMode="numeric" />
+            <Input label="Valor do contrato (R$)" value={v.valor_servico} onChange={(e) => set('valor_servico')(maskMoeda(e.target.value))} placeholder="0,00" inputMode="numeric" disabled={travado('valor_servico')} />
           </Campo>
           <Campo label="Data de início" valor={fmtDate(v.data_admissao)}>
             <Input label="Data de início" type="date" value={v.data_admissao} onChange={txt('data_admissao')} />
@@ -392,13 +401,15 @@ export function FuncionarioFicha({
         <Bloco titulo="Cargo">
           <Grade>
             <Campo label="Cargo" valor={v.cargo}>
-              <Input label="Cargo" value={v.cargo} onChange={txt('cargo')} placeholder="Ex.: Recepcionista" />
+              {travado('cargo')
+                ? <Input label="Cargo" value={v.cargo} disabled readOnly />
+                : <CampoCargo cargos={cargos} value={v.position_id} onChange={(c) => setV((prev) => ({ ...prev, position_id: c?.id ?? '', cargo: c?.nome ?? '', departamento: c?.departamento ?? '' }))} />}
             </Campo>
             <Campo label="Departamento" valor={v.departamento}>
-              <Input label="Departamento" value={v.departamento} onChange={txt('departamento')} placeholder="Ex.: Operacional" />
+              <Input label="Departamento" value={v.departamento} disabled readOnly hint="Vem do cargo." />
             </Campo>
             <Campo label="Local de trabalho" valor={v.local_trabalho}>
-              <Input label="Local de trabalho" value={v.local_trabalho} onChange={txt('local_trabalho')} placeholder="Ex.: Matriz" />
+              <Input label="Local de trabalho" value={v.local_trabalho} onChange={txt('local_trabalho')} placeholder="Ex.: Matriz" disabled={travado('local_trabalho')} />
             </Campo>
             <Campo label="Status" valor={labelDe(STATUS_OPTIONS, v.status)}>
               <Select label="Status" options={STATUS_OPTIONS} value={v.status} onChange={txt('status')} />
@@ -411,7 +422,7 @@ export function FuncionarioFicha({
         <Bloco titulo="Remuneração" descricao="Vale-alimentação e vale-transporte são vinculados na aba Benefícios e acessos.">
           <Grade>
             <Campo label="Salário bruto (R$)" valor={fmtMoney(v.salario)}>
-              <Input label="Salário bruto (R$)" value={v.salario} onChange={(e) => set('salario')(maskMoeda(e.target.value))} placeholder="0,00" inputMode="numeric" />
+              <Input label="Salário bruto (R$)" value={v.salario} onChange={(e) => set('salario')(maskMoeda(e.target.value))} placeholder="0,00" inputMode="numeric" disabled={travado('salario')} />
             </Campo>
             <Campo label="Plano de saúde" valor={v.plano_saude ? 'Sim' : 'Não'}>
               <div className="flex flex-col gap-1">
@@ -540,11 +551,12 @@ export function FuncionarioFicha({
                 {companyBenefits.map((b) => {
                   const marcado = v.benefit_ids.includes(b.id)
                   return (
-                    <label key={b.id} className="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors"
-                      style={{ borderColor: marcado ? 'var(--color-brand)' : 'var(--color-card-border)', backgroundColor: marcado ? 'var(--color-brand-light)' : '#fff' }}>
+                    <label key={b.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${travado('benefit_ids') ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                      style={{ borderColor: marcado ? 'var(--color-brand)' : 'var(--color-card-border)', backgroundColor: marcado ? 'var(--color-brand-light)' : '#fff', opacity: travado('benefit_ids') && !marcado ? 0.5 : 1 }}>
                       <input
                         type="checkbox"
                         checked={marcado}
+                        disabled={travado('benefit_ids')}
                         onChange={(e) => set('benefit_ids')(e.target.checked ? [...v.benefit_ids, b.id] : v.benefit_ids.filter((id) => id !== b.id))}
                         className="mt-0.5 w-4 h-4"
                         style={{ accentColor: 'var(--color-brand)' }}
@@ -561,36 +573,18 @@ export function FuncionarioFicha({
           </Bloco>
         )}
 
-        {!pj && (
-          <Bloco titulo="Registro de ponto" descricao="O funcionário registra o ponto com um PIN de 4 dígitos.">
-            {leitura ? (
-              <Grade>
-                <Campo label="Registro pelo funcionário" valor={v.pin_ativo ? 'Permitido' : 'Não permitido'}>{null}</Campo>
-                <Campo label="PIN" valor={v.pin ? '••••' : ''}>{null}</Campo>
-              </Grade>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <Toggle value={v.pin_ativo} onChange={set('pin_ativo')} label="Permitir registro de ponto pelo funcionário" />
-                {v.pin_ativo && (
-                  <div className="flex items-end gap-2">
-                    <div className="w-32">
-                      <Input label="PIN" value={v.pin} onChange={(e) => set('pin')(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        placeholder="0000" inputMode="numeric" maxLength={4} className="text-center tracking-[0.4em] font-mono" invalid={cls('pin')} />
-                    </div>
-                    <Button type="button" variant="secondary" onClick={() => set('pin')(String(Math.floor(1000 + Math.random() * 9000)))}>
-                      Gerar PIN
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+        {!pj && (cadastro ? (
+          <Toggle value={v.pin_ativo} onChange={set('pin_ativo')} label="Registra ponto" />
+        ) : (
+          <Bloco titulo="Registro de ponto" descricao="O funcionário bate o ponto no sistema, confirmando com o PIN de segurança da conta dele.">
+            {leitura
+              ? <Grade><Campo label="Registra ponto" valor={v.pin_ativo ? 'Sim' : 'Não'}>{null}</Campo></Grade>
+              : <Toggle value={v.pin_ativo} onChange={set('pin_ativo')} label="Registra ponto" />}
           </Bloco>
-        )}
+        ))}
 
-        <Bloco titulo="Acesso ao sistema" descricao="Com acesso, o funcionário entra no sistema como colaborador e vê os próprios dados.">
-          {cadastro ? (
-            <Toggle value={pedirAcesso} onChange={setPedirAcesso} label="Enviar convite de acesso ao sistema por e-mail" />
-          ) : temAcesso ? (
+        {!cadastro && <Bloco titulo="Acesso ao sistema" descricao="Com acesso, o funcionário entra no sistema como colaborador e vê os próprios dados.">
+          {temAcesso ? (
             <p className="text-sm flex items-center gap-2" style={{ color: '#15803D' }}><Icon name="check" size={16} /> Tem acesso ao sistema.</p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
@@ -603,7 +597,7 @@ export function FuncionarioFicha({
               )}
             </div>
           )}
-        </Bloco>
+        </Bloco>}
       </div>
     )
   }

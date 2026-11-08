@@ -6,6 +6,8 @@ export const TIPOS_CONTRATO = ['clt', 'estagio', 'menor_aprendiz', 'pj', 'autono
 export const vagaSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o título da vaga').max(120, 'Use até 120 caracteres'),
   descricao: z.string().trim().max(5000, 'Use até 5.000 caracteres'),
+  /** Cargo da Estrutura: cargo e departamento são copiados dele no servidor */
+  position_id: z.string().uuid().or(z.literal('')).optional(),
   cargo: z.string().trim().max(120, 'Use até 120 caracteres'),
   departamento: z.string().trim().max(120, 'Use até 120 caracteres'),
   local_trabalho: z.string().trim().max(160, 'Use até 160 caracteres'),

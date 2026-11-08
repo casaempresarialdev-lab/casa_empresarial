@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { encrypt, decrypt } from '@/lib/crypto'
 import { verifySecurityPin } from '@/lib/security-pin'
+import { semAcesso } from '@/lib/auth/acesso'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -51,6 +52,9 @@ async function uploadCertFile(admin: Admin, companyId: string, file: File): Prom
 }
 
 export async function createCertificateAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('admin.certificado-digital', companyId)
+  if (negado) return negado
+
   const auth = await authorize(companyId)
   if ('error' in auth) return auth
   const { admin } = auth
@@ -81,6 +85,9 @@ export async function createCertificateAction(companyId: string, formData: FormD
 
 // Edição: identificação; arquivo e senha só mudam se vierem preenchidos
 export async function updateCertificateAction(certificateId: string, companyId: string, formData: FormData, pin: string) {
+  const negado = await semAcesso('admin.certificado-digital', companyId)
+  if (negado) return negado
+
   const auth = await authorize(companyId, pin)
   if ('error' in auth) return auth
   const { admin } = auth
@@ -123,6 +130,9 @@ export async function updateCertificateAction(certificateId: string, companyId: 
 }
 
 export async function deleteCertificateAction(certificateId: string, companyId: string, pin: string) {
+  const negado = await semAcesso('admin.certificado-digital', companyId)
+  if (negado) return negado
+
   const auth = await authorize(companyId, pin)
   if ('error' in auth) return auth
   const { admin } = auth
@@ -148,6 +158,9 @@ export async function deleteCertificateAction(certificateId: string, companyId: 
 }
 
 export async function revealCertificatePasswordAction(certificateId: string, companyId: string): Promise<{ password?: string; error?: string }> {
+  const negado = await semAcesso('admin.certificado-digital', companyId)
+  if (negado) return negado
+
   const auth = await authorize(companyId)
   if ('error' in auth) return auth
   const { data } = await auth.admin
@@ -167,6 +180,9 @@ export async function revealCertificatePasswordAction(certificateId: string, com
 
 // Link temporário para baixar o arquivo com o nome original
 export async function getCertificateDownloadUrlAction(certificateId: string, companyId: string, pin: string): Promise<{ url?: string; error?: string }> {
+  const negado = await semAcesso('admin.certificado-digital', companyId)
+  if (negado) return negado
+
   const auth = await authorize(companyId, pin)
   if ('error' in auth) return auth
   const { data } = await auth.admin

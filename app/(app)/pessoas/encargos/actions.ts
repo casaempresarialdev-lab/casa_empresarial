@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -19,6 +20,9 @@ const DEFAULT_ALIQUOTAS = [
 ]
 
 export async function seedDefaultAliquotasAction(companyId: string) {
+  const negado = await semAcesso('pessoas.encargos', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -33,6 +37,9 @@ export async function seedDefaultAliquotasAction(companyId: string) {
 }
 
 export async function createAliquotaAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.encargos', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -68,6 +75,9 @@ export async function createAliquotaAction(companyId: string, formData: FormData
 }
 
 export async function updateAliquotaAction(id: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.encargos')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -90,6 +100,9 @@ export async function updateAliquotaAction(id: string, formData: FormData) {
 }
 
 export async function deleteAliquotaAction(id: string) {
+  const negado = await semAcesso('pessoas.encargos')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

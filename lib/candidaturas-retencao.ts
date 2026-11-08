@@ -14,8 +14,12 @@ export async function expurgarCandidaturas(admin: ReturnType<typeof createAdminC
   // Tabela ainda não criada ou falha momentânea: tenta de novo na próxima rotina
   if (error || !data?.length) return { apagadas: 0 }
 
-  const { error: errRemove } = await admin.storage.from('documentos').remove(data.map((c) => c.anexo_path as string))
-  if (errRemove) return { apagadas: 0 }
+  // Candidatura aberta pela admissão não tem arquivo
+  const anexos = data.map((c) => c.anexo_path as string | null).filter((p): p is string => !!p)
+  if (anexos.length) {
+    const { error: errRemove } = await admin.storage.from('documentos').remove(anexos)
+    if (errRemove) return { apagadas: 0 }
+  }
 
   const { error: errDelete } = await admin.from('job_applications').delete().in('id', data.map((c) => c.id as string))
   return { apagadas: errDelete ? 0 : data.length }

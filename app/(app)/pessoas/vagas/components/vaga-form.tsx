@@ -12,6 +12,8 @@ import { vagaSchema, type VagaInput } from '@/lib/validations/vaga'
 import { salvarVagaAction } from '../actions'
 import type { Vaga } from '../queries'
 import type { CompanyBenefit } from '../../beneficios/queries'
+import { CampoCargo } from '../../../empresa/estrutura/components/campo-cargo'
+import { faixaSalarial, type CargoOpcao } from '../../../empresa/estrutura/tipos'
 import { TIPO_OPTIONS, fmtMoney, isPjOuAutonomo, maskMoeda } from '../../funcionarios/components/ficha/ficha-config'
 
 // Etapas no cadastro, abas na edição
@@ -25,6 +27,7 @@ interface Props {
   companyId: string
   vaga: Vaga | null
   companyBenefits: CompanyBenefit[]
+  cargos: CargoOpcao[]
   /** Abas antes das do formulário, na edição (ex.: Candidaturas, que salvam na hora) */
   abasExtras?: { label: string; content: React.ReactNode }[]
   /** Abre direto nas abas do formulário */
@@ -39,6 +42,7 @@ function valoresIniciais(v: Vaga | null): VagaInput {
   return {
     titulo: v?.titulo ?? '',
     descricao: v?.descricao ?? '',
+    position_id: v?.position_id ?? '',
     cargo: v?.cargo ?? '',
     departamento: v?.departamento ?? '',
     local_trabalho: v?.local_trabalho ?? '',
@@ -52,7 +56,7 @@ function valoresIniciais(v: Vaga | null): VagaInput {
 }
 
 // Vaga: etapas no cadastro (nova/), abas na edição ([id]/)
-export function VagaForm({ companyId, vaga, companyBenefits, abasExtras = [], abrirDados, acoes, onCancel, onSaved }: Props) {
+export function VagaForm({ companyId, vaga, companyBenefits, cargos, abasExtras = [], abrirDados, acoes, onCancel, onSaved }: Props) {
   const editando = !!vaga
   const qtdExtras = editando ? abasExtras.length : 0
   // Índice geral: abas extras primeiro, depois as do formulário
@@ -61,7 +65,7 @@ export function VagaForm({ companyId, vaga, companyBenefits, abasExtras = [], ab
   const naAbaExtra = etapa < 0
   const ultima = etapa === ETAPAS.length - 1
 
-  const { register, handleSubmit, trigger, watch, setValue, formState: { errors, isSubmitting } } = useForm<VagaInput>({
+  const { register, handleSubmit, trigger, watch, setValue, getValues, formState: { errors, isSubmitting } } = useForm<VagaInput>({
     resolver: zodResolver(vagaSchema),
     defaultValues: valoresIniciais(vaga),
   })
@@ -71,6 +75,18 @@ export function VagaForm({ companyId, vaga, companyBenefits, abasExtras = [], ab
   const tipo = watch('tipo_contrato')
   const benefitIds = watch('benefit_ids')
   const pj = isPjOuAutonomo(tipo)
+  const cargoAtual = cargos.find((c) => c.id === watch('position_id'))
+  const faixa = cargoAtual ? faixaSalarial(cargoAtual) : null
+
+  // Escolher o cargo preenche o departamento e sugere o salário mínimo da faixa
+  function escolherCargo(c: CargoOpcao | null) {
+    setValue('position_id', c?.id ?? '', { shouldDirty: true })
+    setValue('cargo', c?.nome ?? '', { shouldDirty: true })
+    setValue('departamento', c?.departamento ?? '', { shouldDirty: true })
+    if (c?.salario_min != null && !getValues('salario')) {
+      setValue('salario', c.salario_min.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { shouldDirty: true })
+    }
+  }
 
   async function avancar() {
     if (!(await trigger(ETAPAS[etapa].campos, { shouldFocus: true }))) {
@@ -82,7 +98,7 @@ export function VagaForm({ companyId, vaga, companyBenefits, abasExtras = [], ab
 
   async function salvar(dados: VagaInput) {
     // PJ/autônomo não têm benefícios: não grava o que ficou marcado antes de trocar o tipo
-    const envio = { ...dados, benefit_ids: pj ? [] : dados.benefit_ids }
+    const envio = { ...dados, benefit_ids: pj ? [] : dados.benefit_ids, position_id: cargos.length ? dados.position_id : undefined }
     const r = await toast.promise(salvarVagaAction(companyId, vaga?.id ?? null, envio), {
       loading: editando ? 'Salvando a vaga…' : 'Criando a vaga…',
       success: editando ? 'Vaga atualizada.' : 'Vaga criada. O link de candidatura já está disponível.',
@@ -133,8 +149,8 @@ export function VagaForm({ companyId, vaga, companyBenefits, abasExtras = [], ab
             {errors.descricao && <p className="text-xs" style={{ color: 'var(--color-error)' }}>{errors.descricao.message}</p>}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input label="Cargo" placeholder="Ex.: Auxiliar administrativo" error={errors.cargo?.message} {...register('cargo')} />
-            <Input label="Departamento" placeholder="Ex.: Operacional" error={errors.departamento?.message} {...register('departamento')} />
+            <CampoCargo cargos={cargos} value={watch('position_id') ?? ''} onChange={escolherCargo} error={errors.cargo?.message} />
+            <Input label="Departamento" value={watch('departamento')} disabled hint="Vem do cargo." readOnly />
             <Input label="Local de trabalho" placeholder="Ex.: Matriz" error={errors.local_trabalho?.message} {...register('local_trabalho')} />
           </div>
         </div>
@@ -143,7 +159,7 @@ export function VagaForm({ companyId, vaga, companyBenefits, abasExtras = [], ab
         <div className={etapa === 1 ? 'flex flex-col gap-4' : 'hidden'}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="Forma de contratação *" options={TIPO_OPTIONS} placeholder="Selecionar..." error={errors.tipo_contrato?.message} {...register('tipo_contrato')} />
-            <Input label={pj ? 'Valor do contrato (R$)' : 'Salário (R$)'} placeholder="0,00" inputMode="numeric" hint="Usado na carta proposta." error={errors.salario?.message} {...salarioCampo} onChange={(e) => { e.target.value = maskMoeda(e.target.value); void salarioCampo.onChange(e) }} />
+            <Input label={pj ? 'Valor do contrato (R$)' : 'Salário (R$)'} placeholder="0,00" inputMode="numeric" hint={faixa ? `Faixa do cargo: ${faixa}` : 'Usado na carta proposta.'} error={errors.salario?.message} {...salarioCampo} onChange={(e) => { e.target.value = maskMoeda(e.target.value); void salarioCampo.onChange(e) }} />
           </div>
           <label className="flex items-center gap-2.5 text-sm cursor-pointer self-start" style={{ color: 'var(--color-text-secondary)' }}>
             <input type="checkbox" className="w-4 h-4" style={{ accentColor: 'var(--color-brand)' }} {...register('exibir_salario')} />

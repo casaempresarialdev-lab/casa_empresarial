@@ -4,10 +4,13 @@ import { createClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { getVagas } from './queries'
 import { VagasClient } from './components/vagas-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function VagasPage() {
+  await exigirAcessoPagina('pessoas.vagas')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

@@ -80,7 +80,7 @@ export function ModalPainelUsuario({ open, onClose, member, email }: Props) {
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="Meu perfil">
+    <Modal open={open} onClose={handleClose} title="Minha conta">
       <div className="flex flex-col gap-5">
 
         {/* ── Avatar + info básica ── */}

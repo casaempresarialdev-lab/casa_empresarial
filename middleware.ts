@@ -9,7 +9,7 @@ const ONBOARDING_ROUTES = ['/cadastro/passo-2', '/cadastro/termos']
 
 // Acessível para todos (autenticado ou não)
 // /api/cron: rotinas agendadas da Vercel (protegidas pelo CRON_SECRET na própria rota)
-const PUBLIC_ROUTES = ['/cadastro/passo-1', '/auth/callback', '/registrar-ponto', '/auto-cadastro', '/pesquisa', '/convite', '/vaga', '/carta', '/api/cron']
+const PUBLIC_ROUTES = ['/cadastro/passo-1', '/auth/callback', '/auto-cadastro', '/pesquisa', '/convite', '/vaga', '/carta', '/api/cron']
 
 // Segunda etapa do login para contas com autenticação em 2 fatores
 const MFA_ROUTE = '/verificar-2fa'
@@ -21,6 +21,9 @@ const PDV_ROUTES = ['/operacional/frente-de-caixa']
 // não inclui '/pessoas/funcionarios' pois esse é o grid com todos os funcionários;
 // a checagem abaixo libera apenas '/pessoas/funcionarios/[o-proprio-id]'
 const COLABORADOR_ROUTES = [
+  '/dashboard',
+  '/registrar-ponto',
+  '/meu-ponto',
   '/pessoas/registro-de-ponto',
   '/pessoas/escala-de-trabalho',
   '/pessoas/folha-de-pagamento',

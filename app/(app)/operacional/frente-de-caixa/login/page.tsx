@@ -2,10 +2,13 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { LoginCaixaForm } from './components/login-caixa-form'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function FrenteDeCaixaLoginPage() {
+  await exigirAcessoPagina('operacional.frente-de-caixa')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

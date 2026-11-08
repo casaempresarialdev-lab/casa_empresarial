@@ -5,10 +5,13 @@ import { getViewerContext } from '@/lib/auth/viewer'
 import { getActiveEmployees } from '../funcionarios/queries'
 import { getEtapasRescisao, getExamesRescisao, getRescisoes } from './queries'
 import { RescisaoClient } from './components/rescisao-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function RescisaoPage() {
+  await exigirAcessoPagina('pessoas.rescisao')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

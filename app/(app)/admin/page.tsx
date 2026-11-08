@@ -7,6 +7,7 @@ import { Icon, type IconName } from '@/components/ui/icon'
 import { DASHBOARD_CARD_CLASS, DASHBOARD_CARD_TITLE_CLASS, DASHBOARD_CARD_TITLE_STYLE } from '@/components/modules/dashboard/summary-card'
 import { ListCard, type BadgeTone } from '@/components/modules/dashboard/list-card'
 import { daysBetween, formatDate } from '@/components/modules/dashboard/format'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +46,8 @@ function statusValidade(venc: string, hoje: string): { label: string; tone: Badg
 
 // Dashboard do Administrativo: indicadores de Documentação, Quadro Societário e Certificado digital
 export default async function AdminDashboardPage() {
+  await exigirAcessoPagina('admin.dashboard')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

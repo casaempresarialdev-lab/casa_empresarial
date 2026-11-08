@@ -4,10 +4,13 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { getAdmissaoEmployees, getCartas, getEtapasAdmissao, getExames, getHistoricos, getOnboardingTokens, type OnboardingTokenInfo } from './queries'
 import { AdmissaoClient } from './components/admissao-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdmissaoPage() {
+  await exigirAcessoPagina('pessoas.admissao')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

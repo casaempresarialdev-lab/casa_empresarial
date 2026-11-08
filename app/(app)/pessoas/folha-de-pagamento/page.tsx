@@ -6,6 +6,7 @@ import { getActiveEmployeesForPayroll, getPayrollEntriesVariable } from './queri
 import { getEncargosAliquotas } from '../encargos/queries'
 import { getCompany } from '../../empresa/queries'
 import { FolhaClient } from './components/folha-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,8 @@ export default async function FolhaPagamentoPage({
 }: {
   searchParams: Promise<{ mes?: string; ano?: string }>
 }) {
+  await exigirAcessoPagina('pessoas.folha-de-pagamento')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

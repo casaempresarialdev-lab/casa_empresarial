@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { toast } from '@/lib/toast'
 import { VagaForm } from '../../components/vaga-form'
+import type { CargoOpcao } from '../../../../empresa/estrutura/tipos'
 import { CandidaturasLista } from '../../components/candidaturas-lista'
 import { Selo, VAGA_STATUS, linkPublico } from '../../components/vaga-config'
 import type { Candidatura, Vaga } from '../../queries'
@@ -16,12 +17,13 @@ interface Props {
   candidaturas: Candidatura[]
   companyId: string
   companyBenefits: CompanyBenefit[]
+  cargos: CargoOpcao[]
   abrirDados: boolean
   avisaReprovacao: boolean
 }
 
 // Vaga: candidaturas recebidas + abas com os dados da vaga
-export function VagaPage({ vaga, candidaturas, companyId, companyBenefits, abrirDados, avisaReprovacao }: Props) {
+export function VagaPage({ vaga, candidaturas, companyId, companyBenefits, cargos, abrirDados, avisaReprovacao }: Props) {
   const router = useRouter()
   const encerrada = vaga.status === 'encerrada'
 
@@ -64,6 +66,7 @@ export function VagaPage({ vaga, candidaturas, companyId, companyBenefits, abrir
             companyId={companyId}
             vaga={vaga}
             companyBenefits={companyBenefits}
+            cargos={cargos}
             abasExtras={[{
               label: `Candidaturas (${candidaturas.length})`,
               content: <CandidaturasLista candidaturas={candidaturas} companyId={companyId} avisaReprovacao={avisaReprovacao} />,

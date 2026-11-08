@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -17,6 +18,9 @@ function parseMoney(v: string | null) {
 // ── Contas Bancárias ──────────────────────────────────────────
 
 export async function createBankAccountAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.contas-cartoes', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -44,6 +48,9 @@ export async function createBankAccountAction(companyId: string, formData: FormD
 }
 
 export async function updateBankAccountAction(accountId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.contas-cartoes')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -67,6 +74,9 @@ export async function updateBankAccountAction(accountId: string, formData: FormD
 }
 
 export async function deleteBankAccountAction(accountId: string) {
+  const negado = await semAcesso('financeiro.contas-cartoes')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -81,6 +91,9 @@ export async function deleteBankAccountAction(accountId: string) {
 // ── Cartões de Crédito ────────────────────────────────────────
 
 export async function createCreditCardAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.contas-cartoes', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -104,6 +117,9 @@ export async function createCreditCardAction(companyId: string, formData: FormDa
 }
 
 export async function updateCreditCardAction(cardId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.contas-cartoes')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -126,6 +142,9 @@ export async function updateCreditCardAction(cardId: string, formData: FormData)
 }
 
 export async function deleteCreditCardAction(cardId: string) {
+  const negado = await semAcesso('financeiro.contas-cartoes')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -10,6 +11,9 @@ async function getAuthUser() {
 }
 
 export async function createCategoryAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.categorias', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -40,6 +44,9 @@ export async function createCategoryAction(companyId: string, formData: FormData
 }
 
 export async function updateCategoryAction(categoryId: string, formData: FormData) {
+  const negado = await semAcesso('financeiro.categorias')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -65,6 +72,9 @@ export async function updateCategoryAction(categoryId: string, formData: FormDat
 }
 
 export async function deleteCategoryAction(categoryId: string) {
+  const negado = await semAcesso('financeiro.categorias')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

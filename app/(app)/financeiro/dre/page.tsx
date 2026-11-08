@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getDREData } from './queries'
 import { DREClient } from './components/dre-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,8 @@ export default async function DREPage({
 }: {
   searchParams: Promise<{ mes?: string; ano?: string }>
 }) {
+  await exigirAcessoPagina('financeiro.dre')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

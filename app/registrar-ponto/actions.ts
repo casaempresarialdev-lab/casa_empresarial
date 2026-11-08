@@ -1,139 +1,95 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { createAdminClient } from '@/lib/supabase/server'
-
-export type PontoSession = {
-  employeeId: string
-  companyId: string
-  employeeName: string
-  companyName: string
-  companyCnpj: string
-}
+import { revalidatePath } from 'next/cache'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
+import { verifySecurityPin } from '@/lib/security-pin'
+import { minutosDeEspera } from '@/lib/ponto'
 
 export type TipoBatida = 'entrada' | 'saida_almoco' | 'retorno_almoco' | 'saida'
 
-// Valida CNPJ + PIN e cria cookie de sessão do colaborador
-export async function validarPinAction(formData: FormData): Promise<
-  { success: true; session: PontoSession } | { error: string }
-> {
-  const cnpjRaw = (formData.get('cnpj') as string ?? '').replace(/\D/g, '')
-  const pin     = (formData.get('pin')  as string ?? '').trim()
+const TIPOS: TipoBatida[] = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida']
 
-  if (cnpjRaw.length !== 14) return { error: 'CNPJ inválido.' }
-  if (!pin || pin.length < 4) return { error: 'PIN inválido.' }
+// Id do recibo: o id do registro do dia (único) + a batida, que só acontece uma vez em cada registro
+const SUFIXO_RECIBO: Record<TipoBatida, string> = { entrada: 'ENT', saida_almoco: 'ALM', retorno_almoco: 'RET', saida: 'SAI' }
+
+/** Dia de hoje no Brasil (o servidor roda em UTC) */
+const hojeBrasil = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d)
+
+/**
+ * Bate o ponto do usuário logado, confirmado com o PIN de segurança da conta dele.
+ * Quem é o funcionário vem da sessão, nunca da tela.
+ */
+export async function baterPontoAction(
+  pin: string,
+  dados: { tipo: TipoBatida; lat: number | null; lng: number | null; endereco: string | null },
+): Promise<{ success: true; tipo: TipoBatida; em: string; id: string } | { error: string }> {
+  const negado = await semAcesso('visao-geral.bater-ponto')
+  if (negado) return negado
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sessão inválida. Faça login novamente.' }
+  if (!TIPOS.includes(dados.tipo)) return { error: 'Ação inválida.' }
+
+  const check = await verifySecurityPin(user.id, pin)
+  if (!check.ok) return { error: check.error }
+
+  const companyId = (await cookies()).get('active_company_id')?.value
+  if (!companyId) return { error: 'Selecione uma empresa.' }
 
   const admin = createAdminClient()
-
-  const { data: company } = await admin
-    .from('companies')
-    .select('id, razao_social, nome_fantasia, cnpj')
-    .eq('cnpj', cnpjRaw)
-    .single()
-
-  if (!company) return { error: 'Empresa não encontrada. Verifique o CNPJ.' }
-
-  const { data: employee } = await admin
+  const { data: funcionario } = await admin
     .from('employees')
-    .select('id, nome')
-    .eq('company_id', company.id)
-    .eq('pin', pin)
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('profile_id', user.id)
     .eq('pin_ativo', true)
-    .single()
+    .not('status', 'in', '(inativo,demitido)')
+    .limit(1)
+    .maybeSingle()
+  if (!funcionario) return { error: 'Seu cadastro não está liberado para registrar ponto.' }
 
-  if (!employee) return { error: 'PIN inválido ou acesso desativado.' }
-
-  const session: PontoSession = {
-    employeeId:   employee.id,
-    companyId:    company.id,
-    employeeName: employee.nome,
-    companyName:  company.nome_fantasia ?? company.razao_social,
-    companyCnpj:  cnpjRaw,
-  }
-
-  const cookieStore = await cookies()
-  cookieStore.set('ponto_session', JSON.stringify(session), {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/registrar-ponto',
-    maxAge: 60 * 60 * 8,
-  })
-
-  return { success: true, session }
-}
-
-export async function sairPontoAction() {
-  const cookieStore = await cookies()
-  cookieStore.set('ponto_session', '', {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/registrar-ponto',
-    maxAge: 0,
-  })
-}
-
-export async function registrarPontoAction(
-  employeeId: string,
-  companyId: string,
-  lat: number | null,
-  lng: number | null,
-  enderecoAprox: string | null,
-  tipoBatida: TipoBatida,
-): Promise<{ success: true; tipo: TipoBatida } | { error: string }> {
-  const admin = createAdminClient()
   const agora = new Date()
-  const hoje  = agora.toISOString().slice(0, 10)
-  const ts    = agora.toISOString()
+  const hoje = hojeBrasil(agora)
+  const ts = agora.toISOString()
+  const { tipo } = dados
+  const localizacao = dados.lat && dados.lng ? { lat: dados.lat, lng: dados.lng, endereco: dados.endereco } : null
 
-  const localizacao = lat && lng ? { lat, lng, endereco: enderecoAprox } : null
-
-  // Busca o registro de hoje
   const { data: registro } = await admin
     .from('time_records')
     .select('id, entrada, saida_almoco, retorno_almoco, saida')
     .eq('company_id', companyId)
-    .eq('employee_id', employeeId)
+    .eq('employee_id', funcionario.id)
     .eq('data', hoje)
     .maybeSingle()
 
-  if (tipoBatida === 'entrada') {
+  // Evita registros repetidos
+  const espera = minutosDeEspera([registro?.entrada, registro?.saida_almoco, registro?.retorno_almoco, registro?.saida], agora)
+  if (espera > 0) return { error: `Aguarde ${espera} ${espera === 1 ? 'minuto' : 'minutos'} para registrar de novo.` }
+
+  let registroId: string
+  if (tipo === 'entrada') {
     if (registro?.entrada) return { error: 'Entrada já registrada hoje.' }
-    const { error } = await admin.from('time_records').insert({
-      company_id: companyId, employee_id: employeeId,
-      data: hoje, entrada: ts, tipo: 'normal', localizacao,
-    })
+    const { data: novo, error } = await admin.from('time_records').insert({
+      company_id: companyId, employee_id: funcionario.id, data: hoje, entrada: ts, tipo: 'normal', localizacao,
+    }).select('id').single()
+    if (error || !novo) return { error: error?.message ?? 'Não foi possível registrar o ponto.' }
+    registroId = novo.id as string
+  } else {
+    if (!registro?.entrada) return { error: 'Registre a entrada primeiro.' }
+    if (tipo === 'saida_almoco' && registro.saida_almoco) return { error: 'Saída do almoço já registrada.' }
+    if (tipo === 'retorno_almoco' && !registro.saida_almoco) return { error: 'Registre a saída do almoço primeiro.' }
+    if (tipo === 'retorno_almoco' && registro.retorno_almoco) return { error: 'Retorno do almoço já registrado.' }
+    if (tipo === 'saida' && registro.saida) return { error: 'Saída já registrada hoje.' }
+
+    const { error } = await admin.from('time_records').update({ [tipo]: ts, localizacao }).eq('id', registro.id)
     if (error) return { error: error.message }
-    return { success: true, tipo: 'entrada' }
+    registroId = registro.id as string
   }
 
-  if (!registro) return { error: 'Registre a entrada primeiro.' }
-
-  if (tipoBatida === 'saida_almoco') {
-    if (!registro.entrada)     return { error: 'Registre a entrada primeiro.' }
-    if (registro.saida_almoco) return { error: 'Saída do almoço já registrada.' }
-    const { error } = await admin.from('time_records')
-      .update({ saida_almoco: ts, localizacao }).eq('id', registro.id)
-    if (error) return { error: error.message }
-    return { success: true, tipo: 'saida_almoco' }
-  }
-
-  if (tipoBatida === 'retorno_almoco') {
-    if (!registro.saida_almoco)   return { error: 'Registre a saída do almoço primeiro.' }
-    if (registro.retorno_almoco)  return { error: 'Retorno do almoço já registrado.' }
-    const { error } = await admin.from('time_records')
-      .update({ retorno_almoco: ts, localizacao }).eq('id', registro.id)
-    if (error) return { error: error.message }
-    return { success: true, tipo: 'retorno_almoco' }
-  }
-
-  if (tipoBatida === 'saida') {
-    if (!registro.entrada) return { error: 'Registre a entrada primeiro.' }
-    if (registro.saida)    return { error: 'Saída já registrada hoje.' }
-    const { error } = await admin.from('time_records')
-      .update({ saida: ts, localizacao }).eq('id', registro.id)
-    if (error) return { error: error.message }
-    return { success: true, tipo: 'saida' }
-  }
-
-  return { error: 'Ação inválida.' }
+  revalidatePath('/registrar-ponto')
+  revalidatePath('/pessoas/registro-de-ponto')
+  return { success: true, tipo, em: ts, id: `${registroId}-${SUFIXO_RECIBO[tipo]}`.toUpperCase() }
 }

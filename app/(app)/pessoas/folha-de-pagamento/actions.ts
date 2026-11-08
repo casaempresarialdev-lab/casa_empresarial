@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
+import { semAcesso } from '@/lib/auth/acesso'
+import { custoEmpresaMensal, descontoMensal, type BeneficioCalculo } from '@/lib/beneficios-calculo'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -60,7 +62,7 @@ async function syncPayrollTransactions(
 
   const { data: emp } = await admin
     .from('employees')
-    .select('nome')
+    .select('nome, salario')
     .eq('id', employeeId)
     .single()
 
@@ -81,20 +83,16 @@ async function syncPayrollTransactions(
 
   type EmpBenefit = {
     valor_override: number | null
-    benefit: { valor: number; por_dia_trabalhado: boolean; desconta_salario: boolean }
+    benefit: BeneficioCalculo
   }
   const { data: benefits } = await admin
     .from('employee_benefits')
-    .select('valor_override, benefit:benefit_id(valor, por_dia_trabalhado, desconta_salario)')
+    .select('valor_override, benefit:benefit_id(*)')
     .eq('employee_id', employeeId)
 
-  const DIAS_UTEIS = 22
+  // Só a parte da empresa: o que foi descontado do colaborador não é custo dela
   const totalBenefPatronal = ((benefits ?? []) as unknown as EmpBenefit[])
-    .filter(eb => !eb.benefit.desconta_salario)
-    .reduce((s, eb) => {
-      const v = eb.valor_override ?? eb.benefit.valor
-      return s + (eb.benefit.por_dia_trabalhado ? v * DIAS_UTEIS : v)
-    }, 0)
+    .reduce((s, eb) => s + custoEmpresaMensal(eb.benefit, eb.valor_override, emp?.salario), 0)
 
   if (totalBenefPatronal > 0) {
     await admin.from('transactions').insert({
@@ -114,6 +112,9 @@ async function syncPayrollTransactions(
 }
 
 export async function createPayrollEntryAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.folha-de-pagamento', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -158,6 +159,9 @@ export async function createPayrollEntryAction(companyId: string, formData: Form
 }
 
 export async function updatePayrollEntryAction(entryId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.folha-de-pagamento')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -210,6 +214,9 @@ export async function updatePayrollEntryAction(entryId: string, formData: FormDa
 }
 
 export async function generatePayrollForMonthAction(companyId: string, mesAno: string) {
+  const negado = await semAcesso('pessoas.folha-de-pagamento', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -217,7 +224,7 @@ export async function generatePayrollForMonthAction(companyId: string, mesAno: s
 
   type EmpBenefit = {
     valor_override: number | null
-    benefit: { valor: number; por_dia_trabalhado: boolean; desconta_salario: boolean }
+    benefit: BeneficioCalculo
   }
 
   const [{ data: employees }, { data: existing }] = await Promise.all([
@@ -227,7 +234,7 @@ export async function generatePayrollForMonthAction(companyId: string, mesAno: s
         id, salario, tem_periculosidade,
         employee_benefits(
           valor_override,
-          benefit:benefit_id(valor, por_dia_trabalhado, desconta_salario)
+          benefit:benefit_id(*)
         )
       `)
       .eq('company_id', companyId)
@@ -248,7 +255,6 @@ export async function generatePayrollForMonthAction(companyId: string, mesAno: s
     return { success: true, created: 0, skipped: existingIds.size }
   }
 
-  const DIAS_UTEIS = 22
   const INSS_FAIXAS = [
     { limite: 1412.00, aliq: 0.075 },
     { limite: 2666.68, aliq: 0.09 },
@@ -274,12 +280,7 @@ export async function generatePayrollForMonthAction(companyId: string, mesAno: s
     const pericul = emp.tem_periculosidade ? Math.round(sal * 0.30 * 100) / 100 : 0
     const bruto = sal + pericul
     const descontoOutros = Math.round(
-      (emp.employee_benefits ?? [])
-        .filter(eb => eb.benefit.desconta_salario)
-        .reduce((s, eb) => {
-          const v = eb.valor_override ?? eb.benefit.valor
-          return s + (eb.benefit.por_dia_trabalhado ? v * DIAS_UTEIS : v)
-        }, 0) * 100
+      (emp.employee_benefits ?? []).reduce((s, eb) => s + descontoMensal(eb.benefit, eb.valor_override, sal), 0) * 100
     ) / 100
     const inss = calcInss(bruto)
     const liquido = Math.max(0, bruto - inss - descontoOutros)
@@ -330,6 +331,9 @@ export async function upsertPayrollVariableAction(
     observacao: string | null
   }
 ) {
+  const negado = await semAcesso('pessoas.folha-de-pagamento', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
   const viewer = await getViewerContext(companyId)
@@ -375,6 +379,9 @@ export async function upsertPayrollVariableAction(
 }
 
 export async function deletePayrollEntryAction(entryId: string) {
+  const negado = await semAcesso('pessoas.folha-de-pagamento')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

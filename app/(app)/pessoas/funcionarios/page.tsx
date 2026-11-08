@@ -4,10 +4,13 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getEmployees } from './queries'
 import { FuncionariosClient } from './components/funcionarios-client'
 import { getRescisoes } from '../rescisao/queries'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function FuncionariosPage() {
+  await exigirAcessoPagina('pessoas.funcionarios')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

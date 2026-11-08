@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { normalizeDocs, type ProviderDoc } from './queries'
+import { semAcesso } from '@/lib/auth/acesso'
 
 const BUCKET = 'documentos'
 const MAX_SIZE = 20 * 1024 * 1024 // 20 MB por arquivo
@@ -86,6 +87,9 @@ async function resolveDocuments(
 }
 
 export async function createProviderAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.funcionarios', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -113,6 +117,9 @@ export async function createProviderAction(companyId: string, formData: FormData
 }
 
 export async function updateProviderAction(providerId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.funcionarios')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -143,6 +150,9 @@ export async function updateProviderAction(providerId: string, formData: FormDat
 }
 
 export async function deleteProviderAction(providerId: string) {
+  const negado = await semAcesso('pessoas.funcionarios')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -168,6 +178,9 @@ export async function getProviderDocUrlAction(
   providerId: string,
   storagePath: string,
 ): Promise<{ url?: string; error?: string }> {
+  const negado = await semAcesso('pessoas.funcionarios')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 

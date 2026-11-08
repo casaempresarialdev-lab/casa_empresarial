@@ -14,6 +14,7 @@ import {
   indiceEtapa, isPersonalizada, labelEtapa, modalidadeAvisoLabel, primeiraEtapaRescisao, tipoDesligamentoLabel,
 } from './etapas'
 import { getConfigRescisao, getEtapasRescisao } from './queries'
+import { semAcesso } from '@/lib/auth/acesso'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -57,6 +58,9 @@ async function seguir(admin: Admin, companyId: string, r: NonNullable<Awaited<Re
 
 /** "Iniciar rescisão" na ficha do funcionário: a pessoa segue na Equipe até finalizar */
 export async function iniciarRescisaoAction(companyId: string, employeeId: string, data: unknown) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -97,6 +101,9 @@ export async function iniciarRescisaoAction(companyId: string, employeeId: strin
 
 /** Desistência (ex.: pedido de demissão reconsiderado): o processo fica guardado como cancelado */
 export async function cancelarRescisaoAction(companyId: string, id: string, motivo?: string) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -117,6 +124,9 @@ export async function cancelarRescisaoAction(companyId: string, id: string, moti
 
 /** Arrastando no kanban, só para trás: para frente, cada etapa avança pela ação dela na ficha */
 export async function moverEtapaRescisaoAction(companyId: string, id: string, etapa: string) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -138,6 +148,9 @@ export async function moverEtapaRescisaoAction(companyId: string, id: string, et
 }
 
 export async function adicionarAnotacaoRescisaoAction(companyId: string, id: string, texto: string) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const limpo = texto.trim().slice(0, 5000)
@@ -153,6 +166,9 @@ export async function adicionarAnotacaoRescisaoAction(companyId: string, id: str
 // ── Aviso prévio ─────────────────────────────────────────────────────────────
 
 export async function registrarAvisoPrevioAction(companyId: string, id: string, data: unknown) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -189,6 +205,9 @@ async function baixarGuia(admin: Admin, path: string | null, nome: string | null
 
 /** Encaminha para o exame demissional (clínicas da admissão); encaminhado, segue para o retorno */
 export async function encaminharExameRescisaoAction(companyId: string, id: string, data: unknown) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -276,6 +295,9 @@ export async function encaminharExameRescisaoAction(companyId: string, id: strin
 
 /** Retorno do exame demissional: o ASO vira o "Exame Demissional" do funcionário e a rescisão segue */
 export async function registrarRetornoExameRescisaoAction(companyId: string, id: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -331,6 +353,9 @@ export async function registrarRetornoExameRescisaoAction(companyId: string, id:
 }
 
 export async function getAsoRescisaoUrlAction(companyId: string, exameId: string) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { data } = await auth.admin.from('termination_exams').select('aso_path').eq('id', exameId).eq('company_id', companyId).maybeSingle()
@@ -343,6 +368,9 @@ export async function getAsoRescisaoUrlAction(companyId: string, exameId: string
 // ── Contabilidade ────────────────────────────────────────────────────────────
 
 export async function registrarEnvioContabilidadeRescisaoAction(companyId: string, id: string) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -363,6 +391,9 @@ export async function registrarEnvioContabilidadeRescisaoAction(companyId: strin
 }
 
 export async function registrarRetornoContabilidadeRescisaoAction(companyId: string, id: string) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -380,6 +411,9 @@ export async function registrarRetornoContabilidadeRescisaoAction(companyId: str
 
 /** TRCT assinado anexado, com a data do desligamento: vira o "TRCT assinado" do funcionário */
 export async function assinarTrctAction(companyId: string, id: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth
@@ -417,6 +451,9 @@ export async function assinarTrctAction(companyId: string, id: string, formData:
 // ── Etapa personalizada ──────────────────────────────────────────────────────
 
 export async function avancarEtapaPersonalizadaRescisaoAction(companyId: string, id: string, anotacao?: string, dataDesligamento?: string) {
+  const negado = await semAcesso('pessoas.rescisao', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin, user } = auth

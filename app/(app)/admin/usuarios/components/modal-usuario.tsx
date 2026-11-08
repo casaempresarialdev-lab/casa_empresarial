@@ -4,18 +4,18 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
-import { updateMemberRoleAction, inviteUserAction, updateMemberProfileAction } from '../actions'
-import type { MemberWithProfile } from '../queries'
+import { atualizarCargoMembroAction, atualizarPerfisMembroAction, inviteUserAction, updateMemberProfileAction } from '../actions'
+import type { MemberWithProfile, PerfilAcesso } from '../queries'
 import { toast } from '@/lib/toast'
+import { CampoCargo } from '../../../empresa/estrutura/components/campo-cargo'
+import type { CargoOpcao } from '../../../empresa/estrutura/tipos'
 
-const ROLE_OPTIONS = [
-  { value: 'admin',      label: 'Administrador' },
-  { value: 'member',     label: 'Membro' },
-  { value: 'accountant', label: 'Contador' },
-]
+const FUNCAO_FIXA: Record<string, string> = {
+  owner: 'Proprietário: acesso total à empresa, sem depender de perfil.',
+  colaborador: 'Colaborador: acesso somente aos próprios dados, sem depender de perfil.',
+}
 
 function formatCpf(value: string) {
   const d = value.replace(/\D/g, '').slice(0, 11)
@@ -31,19 +31,25 @@ interface Props {
   companyId: string
   member: MemberWithProfile | null
   currentUserRole: string
+  perfis: PerfilAcesso[]
+  cargos: CargoOpcao[]
 }
 
-export function ModalUsuario({ open, onClose, companyId, member, currentUserRole }: Props) {
+export function ModalUsuario({ open, onClose, companyId, member, currentUserRole, perfis, cargos }: Props) {
   const router = useRouter()
   const isEditing = !!member
   const isOwner = currentUserRole === 'owner'
+  // Proprietário e colaborador têm acesso definido à parte, sem perfil
+  const funcaoFixa = member ? FUNCAO_FIXA[member.role] : undefined
+  const temPerfil = !funcaoFixa
 
   // ── Modo adição: só e-mail e perfil de acesso; depois do envio, tela de confirmação ──
   const [email, setEmail] = useState('')
   const [enviado, setEnviado] = useState<{ titulo: string; texto: string } | null>(null)
 
   // ── Modo edição ──
-  const [role, setRole] = useState('member')
+  const [perfilIds, setPerfilIds] = useState<string[]>([])
+  const [cargoId, setCargoId] = useState('')
   const [name, setName] = useState('')
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -64,7 +70,9 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
     if (open) {
       setEmail('')
       setEnviado(null)
-      setRole(member?.role ?? 'member')
+      // Convite novo já vem com o perfil Funcionário marcado
+      setPerfilIds(member ? member.access_profile_ids : perfis.filter((p) => p.padrao === 'funcionario').map((p) => p.id))
+      setCargoId(member?.cargo_id ?? '')
       setName(member?.profiles?.name ?? '')
       setAvatarPreview(member?.profiles?.avatar_url ?? null)
       setAvatarFile(null)
@@ -91,22 +99,28 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
     e.preventDefault()
     setError('')
     setSuccessMsg('')
+    if (temPerfil && perfilIds.length === 0) { setError('Escolha ao menos um perfil de acesso.'); return }
     setLoading(true)
 
     let result: { error?: string; success?: boolean; warning?: string; notice?: string; emailEnviado?: boolean; contaExistente?: boolean; avatar_url?: string }
 
     if (isEditing) {
+      result = { success: true }
       if (isOwner) {
         result = await updateMemberProfileAction(member!.profile_id, companyId, {
           name,
           avatarFile,
           cep, uf, cidade, logradouro, bairro, numero, complemento,
         })
-      } else {
-        result = await updateMemberRoleAction(member!.id, role)
+      }
+      if (!result.error && temPerfil && [...perfilIds].sort().join() !== [...member!.access_profile_ids].sort().join()) {
+        result = await atualizarPerfisMembroAction(companyId, member!.id, perfilIds)
+      }
+      if (!result.error && cargos.length > 0 && cargoId !== (member!.cargo_id ?? '')) {
+        result = await atualizarCargoMembroAction(companyId, member!.id, cargoId)
       }
     } else {
-      result = await inviteUserAction(companyId, email, role)
+      result = await inviteUserAction(companyId, email, perfilIds)
     }
 
     setLoading(false)
@@ -139,11 +153,28 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
     router.refresh()
   }
 
-  const roleOptions = isEditing && member?.role === 'owner'
-    ? [{ value: 'owner', label: 'Proprietário' }, ...ROLE_OPTIONS]
-    : ROLE_OPTIONS
-
-  const disabled = isEditing && !isOwner && member?.role === 'owner'
+  // Perfis acumulativos: o acesso é a soma dos marcados
+  const escolhaPerfis = (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Perfis de acesso *</span>
+      <div className="flex flex-col gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--color-bg-surface)' }}>
+        {perfis.length === 0 && <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Nenhum perfil cadastrado.</p>}
+        {perfis.map((p) => (
+          <label key={p.id} className="flex items-center gap-2.5 text-sm cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+            <input
+              type="checkbox"
+              className="w-4 h-4 shrink-0"
+              style={{ accentColor: 'var(--color-brand)' }}
+              checked={perfilIds.includes(p.id)}
+              onChange={(e) => setPerfilIds((ids) => (e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id)))}
+            />
+            {p.nome}
+          </label>
+        ))}
+      </div>
+      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Com mais de um perfil, o acesso é a soma de todos.</p>
+    </div>
+  )
 
   return (
     <Modal
@@ -257,18 +288,20 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
             {/* Seção: Função */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--color-text-muted)' }}>
-                Função na empresa
+                Cargo e acesso na empresa
               </p>
-              <Select
-                label="Função"
-                options={roleOptions}
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                disabled={disabled || (!isOwner && member?.role === 'owner')}
-              />
+              <div className="mb-4 flex flex-col gap-1">
+                <CampoCargo cargos={cargos} value={cargoId} onChange={(c) => setCargoId(c?.id ?? '')} />
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  {member?.tem_ficha ? 'É o mesmo cargo da ficha desta pessoa na Equipe.' : 'Coloca a pessoa no organograma.'}
+                </p>
+              </div>
+              {funcaoFixa ? (
+                <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{funcaoFixa}</p>
+              ) : escolhaPerfis}
               {!isOwner && (
                 <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                  Apenas proprietários podem editar perfis e alterar funções.
+                  Apenas proprietários podem editar nome, foto e endereço.
                 </p>
               )}
             </div>
@@ -300,14 +333,7 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
         )}
 
         {/* ── Perfil de acesso no modo adição ── */}
-        {!isEditing && (
-          <Select
-            label="Perfil de acesso"
-            options={roleOptions}
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          />
-        )}
+        {!isEditing && escolhaPerfis}
 
         {error && (
           <p className="text-sm p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>
@@ -322,7 +348,7 @@ export function ModalUsuario({ open, onClose, companyId, member, currentUserRole
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button type="submit" loading={loading} disabled={isEditing && !isOwner && member?.role !== 'owner'}>
+          <Button type="submit" loading={loading}>
             {isEditing ? 'Salvar' : 'Enviar convite'}
           </Button>
         </div>

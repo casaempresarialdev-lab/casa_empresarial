@@ -4,10 +4,13 @@ import { createClient } from '@/lib/supabase/server'
 import { getCertificates } from './queries'
 import { temPinCadastrado } from '@/lib/security-pin'
 import { CertificadosClient } from './components/certificados-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function CertificadoDigitalPage() {
+  await exigirAcessoPagina('admin.certificado-digital')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

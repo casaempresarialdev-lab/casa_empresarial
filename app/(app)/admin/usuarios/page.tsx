@@ -1,12 +1,16 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { getCompanyMembers, getPendingInvitations } from './queries'
-import { UsuariosClient } from './components/usuarios-client'
+import { getCompanyMembers, getPendingInvitations, getPerfisAcesso } from './queries'
+import { AcessoClient } from './components/acesso-client'
+import { getCargosOpcoes } from '../../empresa/estrutura/queries'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
-export default async function UsuariosPage() {
+export default async function AcessoPage({ searchParams }: { searchParams: Promise<{ aba?: string }> }) {
+  await exigirAcessoPagina('sistema.acesso')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -24,14 +28,20 @@ export default async function UsuariosPage() {
     .eq('status', 'active')
     .single()
 
-  const [members, invitations] = await Promise.all([
+  const [members, invitations, perfis, cargos, { aba }] = await Promise.all([
     getCompanyMembers(companyId),
     getPendingInvitations(companyId),
+    getPerfisAcesso(companyId),
+    getCargosOpcoes(companyId),
+    searchParams,
   ])
 
   return (
     <div className="w-full">
-      <UsuariosClient
+      <AcessoClient
+        abaInicial={aba === 'usuarios' ? 1 : 0}
+        perfis={perfis}
+        cargos={cargos}
         members={members}
         invitations={invitations}
         companyId={companyId}

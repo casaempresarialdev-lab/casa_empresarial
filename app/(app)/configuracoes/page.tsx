@@ -10,10 +10,13 @@ import { ConfigAbas } from './components/config-abas'
 import { ConfigAdmissao } from './components/config-admissao'
 import { ConfigRescisao } from './components/config-rescisao'
 import { getConfigRescisao } from '../pessoas/rescisao/queries'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ConfiguracoesPage() {
+  await exigirAcessoPagina('sistema.configuracoes')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

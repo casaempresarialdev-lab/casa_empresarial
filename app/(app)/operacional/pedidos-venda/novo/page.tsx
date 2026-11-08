@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getContacts, getActiveProducts } from '../queries'
 import { FormNovoPedidoVenda } from './components/form-novo-pedido-venda'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function NovoPedidoVendaPage() {
+  await exigirAcessoPagina('operacional.pedidos-venda')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

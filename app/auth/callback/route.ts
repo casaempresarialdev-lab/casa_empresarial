@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/server'
+import { definirPerfisMembro } from '@/lib/invitations'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -42,14 +43,14 @@ export async function GET(request: NextRequest) {
 
     const { data: pendingInvites } = await admin
       .from('invitations')
-      .select('id, company_id, role, avatar_url, employee_id')
+      .select('*')
       .eq('email', userEmail.toLowerCase())
       .eq('status', 'pending')
 
     if (pendingInvites && pendingInvites.length > 0) {
       for (const inv of pendingInvites) {
         // Adiciona à empresa (upsert para evitar duplicata)
-        await admin.from('company_members').upsert(
+        const { data: membro } = await admin.from('company_members').upsert(
           {
             company_id: inv.company_id,
             profile_id: session.user.id,
@@ -57,7 +58,9 @@ export async function GET(request: NextRequest) {
             status: 'active',
           },
           { onConflict: 'company_id,profile_id' },
-        )
+        ).select('id').single()
+
+        if (membro && inv.access_profile_ids?.length) await definirPerfisMembro(admin, inv.company_id, membro.id, inv.access_profile_ids)
 
         // Aplica avatar pré-definido no convite (se houver)
         if (inv.avatar_url) {

@@ -7,10 +7,13 @@ import { getContacts } from '../../contatos/queries'
 import { getBankAccounts, getCreditCards } from '../../contas-cartoes/queries'
 import { getCostCenters } from '../../centro-de-custo/queries'
 import { LancamentosClient } from '../components/lancamentos-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function RecebimentosPage() {
+  await exigirAcessoPagina('financeiro.fluxo-de-caixa')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

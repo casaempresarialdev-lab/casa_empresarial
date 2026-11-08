@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { getScheduleRules, getScheduleExceptions, getActiveEmployees } from './queries'
 import { EscalaClient } from './components/escala-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,8 @@ export default async function EscalaDeTrabalhoPage({
 }: {
   searchParams: Promise<{ mes?: string; ano?: string }>
 }) {
+  await exigirAcessoPagina('pessoas.escala-de-trabalho')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

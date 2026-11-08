@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { UserMenu } from './user-menu'
 import { SidebarClock } from './sidebar-clock'
 import { Icon, type IconName } from '@/components/ui/icon'
+import { VISAO_GERAL, modulosDoMenu, type Permissoes } from '@/lib/acesso/catalogo'
 
 
 type NavLeaf  = { label: string; href: string; icon: IconName; dashboard?: never; children?: never }
@@ -15,79 +16,21 @@ type NavLeaf  = { label: string; href: string; icon: IconName; dashboard?: never
 type NavGroup = { label: string; href?: never; icon: IconName; dashboard?: string; children: { label: string; href: string }[] }
 type NavItem  = NavLeaf | NavGroup
 
-const NAV_ITEMS: NavItem[] = [
-  {
-    label: 'Visão geral',
-    href: '/dashboard',
-    icon: 'grid',
-  },
-  {
-    label: 'Administrativo',
-    icon: 'file',
-    dashboard: '/admin',
-    children: [
-      { label: 'Quadro Societário', href: '/admin/quadro-societario' },
-      { label: 'Documentação', href: '/admin/documentacao' },
-      { label: 'Certificado digital', href: '/admin/certificado-digital' },
-    ],
-  },
-  {
-    label: 'Financeiro',
-    icon: 'dollar',
-    children: [
-      { label: 'Contatos', href: '/financeiro/contatos' },
-      { label: 'Centro de Custo', href: '/financeiro/centro-de-custo' },
-      { label: 'Categorias', href: '/financeiro/categorias' },
-      { label: 'Contas e Cartões', href: '/financeiro/contas-cartoes' },
-      { label: 'Fluxo de Caixa', href: '/financeiro/fluxo-de-caixa' },
-      { label: 'DRE', href: '/financeiro/dre' },
-      { label: 'Balanço', href: '/financeiro/balanco' },
-      { label: 'Faturas', href: '/financeiro/faturas' },
-    ],
-  },
-  {
-    label: 'Pessoas',
-    icon: 'users',
-    children: [
-      { label: 'Equipe', href: '/pessoas/funcionarios' },
-      { label: 'Vagas', href: '/pessoas/vagas' },
-      { label: 'Admissão', href: '/pessoas/admissao' },
-      { label: 'Rescisão', href: '/pessoas/rescisao' },
-      { label: 'Registro de Ponto', href: '/pessoas/registro-de-ponto' },
-      { label: 'Escala de Trabalho', href: '/pessoas/escala-de-trabalho' },
-      { label: 'Folha de Pagamento', href: '/pessoas/folha-de-pagamento' },
-      { label: 'Benefícios', href: '/pessoas/beneficios' },
-      { label: 'Encargos', href: '/pessoas/encargos' },
-      { label: 'Reuniões', href: '/pessoas/reunioes' },
-      { label: 'Pesquisas', href: '/pessoas/pesquisas' },
-      { label: 'Segurança e Saúde', href: '/pessoas/seguranca-saude' },
-    ],
-  },
-  {
-    label: 'Operacional',
-    icon: 'briefcase',
-    children: [
-      { label: 'Produtos e Serviços', href: '/operacional/produtos' },
-      { label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
-      { label: 'Pedidos de Venda', href: '/operacional/pedidos-venda' },
-      { label: 'Ordens de Serviço', href: '/operacional/ordens-de-servico' },
-      { label: 'Frente de Caixa', href: '/operacional/frente-de-caixa' },
-    ],
-  },
-  {
-    label: 'Marketing',
-    icon: 'megaphone',
-    children: [
-      { label: 'Calendário', href: '/marketing/calendario' },
-      { label: 'Depoimentos', href: '/marketing/depoimentos' },
-      { label: 'Fotos e Vídeos', href: '/marketing/fotos-videos' },
-      { label: 'Material Gráfico', href: '/marketing/material-grafico' },
-      { label: 'Manual da Marca', href: '/marketing/manual-da-marca' },
-    ],
-  },
-]
+// Menu a partir do catálogo de permissões: só o que o perfil de acesso libera
+function montarNav(permissoes: Permissoes): NavItem[] {
+  return modulosDoMenu(permissoes).map((m): NavItem => {
+    if (m.key === 'visao-geral') return { label: m.label, href: VISAO_GERAL, icon: m.icon }
+    return {
+      label: m.label,
+      icon: m.icon,
+      dashboard: m.itens.find((i) => i.dashboard)?.href,
+      children: m.itens.filter((i) => !i.dashboard).map(({ label, href }) => ({ label, href })),
+    }
+  })
+}
 
 const COLABORADOR_NAV_ITEMS: NavItem[] = [
+  { label: 'Visão geral', href: VISAO_GERAL, icon: 'grid' },
   {
     label: 'Pessoas',
     icon: 'users',
@@ -114,9 +57,12 @@ interface SidebarProps {
   userEmail?: string | null
   userAvatar?: string | null
   companies?: { id: string; razao_social: string; role?: string }[]
+  /** Perfil de acesso na empresa ativa: nome e itens liberados (null = tudo) */
+  perfilNome?: string | null
+  permissoes?: Permissoes
 }
 
-export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName, userEmail, userAvatar, companies }: SidebarProps) {
+export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName, userEmail, userAvatar, companies, perfilNome = null, permissoes = null }: SidebarProps) {
   const expanded = useAppStore((s) => s.sidebarExpanded)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const setSidebarExpanded = useAppStore((s) => s.setSidebarExpanded)
@@ -131,7 +77,7 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
         ...COLABORADOR_NAV_ITEMS,
         ...(myEmployeeId ? [{ label: 'Meus Dados', href: `/pessoas/funcionarios/${myEmployeeId}`, icon: 'user' } as NavLeaf] : []),
       ]
-    : NAV_ITEMS
+    : montarNav(permissoes)
   const areaCount = navItems.filter((i) => i.children).length
 
   // Grupos abertos — o grupo da rota atual abre automaticamente
@@ -503,6 +449,8 @@ export function Sidebar({ logoUrl, logoReduzidaUrl, role, myEmployeeId, userName
             companies={companies}
             compact={!expanded}
             onNavigate={closeMobile}
+            perfilNome={perfilNome}
+            permissoes={permissoes}
           />
         </div>
       </aside>

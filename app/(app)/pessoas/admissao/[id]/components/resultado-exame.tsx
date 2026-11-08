@@ -94,7 +94,7 @@ export function ResultadoExame({ exame, config, temEmail, temVaga, companyId, em
       loading: 'Registrando o resultado…',
       success: (res) => {
         if (!('resultado' in res)) return 'Resultado registrado.'
-        if (res.resultado === 'apto') return 'finalizado' in res && res.finalizado ? 'Apto. Admissão concluída: a pessoa entrou na Equipe.' : `Apto. O card seguiu para "${'proxima' in res ? res.proxima : ''}".`
+        if (res.resultado === 'apto') return 'finalizado' in res && res.finalizado ? `Apto. Admissão concluída: a pessoa entrou na Equipe.${res.acesso ? ` ${res.acesso}` : ''}` : `Apto. O card seguiu para "${'proxima' in res ? res.proxima : ''}".`
         if (res.resultado === 'novo_exame') return 'Inapto. O card voltou para "Encaminhar para exame".'
         return temVaga ? 'Candidato reprovado. A candidatura voltou para a vaga.' : 'Candidato reprovado e retirado do processo.'
       },

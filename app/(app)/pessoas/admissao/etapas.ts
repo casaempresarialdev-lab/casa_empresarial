@@ -50,7 +50,7 @@ export const DEF_ADMISSAO: DefProcesso = {
     [ETAPA_CONTABILIDADE]: 'Ficha em PDF para a contabilidade. Ativa e inativa junto com "Aguardando contabilidade".',
     [ETAPA_AGUARDAR_CONTABILIDADE]: 'Retorno da contabilidade. Ativa e inativa junto com "Enviar para contabilidade".',
     [ETAPA_CONTRATO]: 'Contrato assinado anexado e data de admissão.',
-    [ETAPA_FINAL]: 'A pessoa entra na Equipe.',
+    [ETAPA_FINAL]: 'A pessoa entra na Equipe, com acesso ao sistema.',
   },
 }
 

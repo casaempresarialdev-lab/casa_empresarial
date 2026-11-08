@@ -37,6 +37,8 @@ export type EmployeeEncargo = {
       valor: number
       por_dia_trabalhado: boolean
       desconta_salario: boolean
+      desconto_tipo?: string | null
+      desconto_valor?: number | null
     }
   }[]
 }
@@ -49,7 +51,7 @@ export async function getEncargosEmployees(companyId: string): Promise<EmployeeE
       id, nome, cargo, tipo_contrato, salario,
       employee_benefits(
         benefit_id, valor_override,
-        benefit:benefit_id(nome, valor, por_dia_trabalhado, desconta_salario)
+        benefit:benefit_id(*)
       )
     `)
     .eq('company_id', companyId)

@@ -106,7 +106,7 @@ export function ModalLancamentoFolha({ open, onClose, onSaved, companyId, employ
       observacao:           obs.trim() || null,
     })
     setLoading(false)
-    if (result.error) { setError(result.error); return }
+    if ('error' in result) { setError(result.error); return }
     onSaved()
     onClose()
   }

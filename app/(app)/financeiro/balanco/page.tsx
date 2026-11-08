@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getBPData } from './queries'
 import { BalancoClient } from './components/balanco-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,8 @@ export default async function BalancoPage({
 }: {
   searchParams: Promise<{ mes?: string; ano?: string }>
 }) {
+  await exigirAcessoPagina('financeiro.balanco')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

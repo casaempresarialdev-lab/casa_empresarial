@@ -7,6 +7,8 @@ import { getActiveCompanyBenefits } from '../../../beneficios/queries'
 import { getCompany } from '../../../../empresa/queries'
 import { isSecaoId } from '../../components/ficha/ficha-config'
 import { FuncionarioPage } from '../components/funcionario-page'
+import { getCargosOpcoes } from '../../../../empresa/estrutura/queries'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +19,8 @@ interface Props {
 
 // Edição da ficha: mesma tela da visualização, com os campos abertos
 export default async function FuncionarioEditPage({ params, searchParams }: Props) {
+  await exigirAcessoPagina('pessoas.funcionarios')
+
   const [{ id }, { aba }] = await Promise.all([params, searchParams])
 
   const supabase = await createClient()
@@ -31,10 +35,11 @@ export default async function FuncionarioEditPage({ params, searchParams }: Prop
   const viewer = await getViewerContext(companyId)
   if (viewer?.isColaborador) notFound()
 
-  const [employee, companyBenefits, company] = await Promise.all([
+  const [employee, companyBenefits, company, cargos] = await Promise.all([
     getEmployeeById(id, companyId),
     getActiveCompanyBenefits(companyId),
     getCompany(companyId),
+    getCargosOpcoes(companyId),
   ])
   if (!employee) notFound()
 
@@ -52,6 +57,7 @@ export default async function FuncionarioEditPage({ params, searchParams }: Prop
         companyId={companyId}
         company={company}
         companyBenefits={companyBenefits}
+        cargos={cargos}
         fotoUrl={fotoUrl}
         abaInicial={isSecaoId(aba) ? aba : undefined}
         isColaboradorSelf={false}

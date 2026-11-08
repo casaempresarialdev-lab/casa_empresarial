@@ -1,14 +1,17 @@
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { getCompanyBenefits, getEmployeesWithBenefits } from './queries'
 import { BeneficiosClient } from './components/beneficios-client'
 import { MeusBeneficios } from './components/meus-beneficios'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function BeneficiosPage() {
+  await exigirAcessoPagina('pessoas.beneficios')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -34,9 +37,17 @@ export default async function BeneficiosPage() {
     )
   }
 
+  // Fotos em bucket privado: links temporários (1h)
+  const admin = createAdminClient()
+  const photoUrls: Record<string, string> = {}
+  await Promise.all(employees.filter((e) => e.foto_path).map(async (e) => {
+    const { data } = await admin.storage.from('documentos').createSignedUrl(e.foto_path!, 3600)
+    if (data?.signedUrl) photoUrls[e.id] = data.signedUrl
+  }))
+
   return (
     <div className="w-full">
-      <BeneficiosClient companyId={companyId} benefits={benefits} employees={employees} />
+      <BeneficiosClient companyId={companyId} benefits={benefits} employees={employees} photoUrls={photoUrls} />
     </div>
   )
 }

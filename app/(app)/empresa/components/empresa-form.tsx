@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/toast'
 import type { Company, CompanyBank } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { Icon } from '@/components/ui/icon'
 import type { EmpresaPdfData } from './empresa-pdf'
 
@@ -253,16 +252,6 @@ export function EmpresaForm({ company, banks }: Props) {
 
   return (
     <div className="w-full">
-      <div className="mb-6">
-        {/* Título e breadcrumb na mesma linha */}
-        <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-            Minha Empresa
-          </h1>
-          <Breadcrumb />
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-4">
         <div className="app-card p-6 flex flex-col gap-6">
 

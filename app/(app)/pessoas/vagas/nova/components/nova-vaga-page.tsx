@@ -3,14 +3,16 @@
 import { useRouter } from 'next/navigation'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { VagaForm } from '../../components/vaga-form'
+import type { CargoOpcao } from '../../../../empresa/estrutura/tipos'
 import type { CompanyBenefit } from '../../../beneficios/queries'
 
 interface Props {
   companyId: string
   companyBenefits: CompanyBenefit[]
+  cargos: CargoOpcao[]
 }
 
-export function NovaVagaPage({ companyId, companyBenefits }: Props) {
+export function NovaVagaPage({ companyId, companyBenefits, cargos }: Props) {
   const router = useRouter()
 
   return (
@@ -36,6 +38,7 @@ export function NovaVagaPage({ companyId, companyBenefits }: Props) {
           companyId={companyId}
           vaga={null}
           companyBenefits={companyBenefits}
+          cargos={cargos}
           onCancel={() => router.push('/pessoas/vagas')}
           onSaved={(id) => { router.refresh(); router.push(`/pessoas/vagas/${id}`) }}
         />

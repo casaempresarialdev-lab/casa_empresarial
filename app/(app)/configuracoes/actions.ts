@@ -12,11 +12,15 @@ import { DEF_ADMISSAO } from '../pessoas/admissao/etapas'
 import { getEtapasAdmissao } from '../pessoas/admissao/queries'
 import { DEF_RESCISAO } from '../pessoas/rescisao/etapas'
 import { getEtapasRescisao } from '../pessoas/rescisao/queries'
+import { semAcesso } from '@/lib/auth/acesso'
 
 type Admin = ReturnType<typeof createAdminClient>
 
 /** Configurações de admissão da empresa */
 export async function salvarConfigAdmissaoAction(companyId: string, data: unknown) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
 
@@ -106,6 +110,9 @@ async function salvarEtapas(companyId: string, data: unknown, p: {
 }
 
 export async function salvarEtapasAdmissaoAction(companyId: string, data: unknown) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   return salvarEtapas(companyId, data, {
     def: DEF_ADMISSAO,
     anteriores: getEtapasAdmissao,
@@ -119,6 +126,9 @@ export async function salvarEtapasAdmissaoAction(companyId: string, data: unknow
 }
 
 export async function salvarEtapasRescisaoAction(companyId: string, data: unknown) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   return salvarEtapas(companyId, data, {
     def: DEF_RESCISAO,
     anteriores: getEtapasRescisao,
@@ -133,6 +143,9 @@ export async function salvarEtapasRescisaoAction(companyId: string, data: unknow
 
 /** E-mail do exame demissional (as clínicas e a guia geral são as da admissão) */
 export async function salvarConfigRescisaoAction(companyId: string, data: unknown) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
 
@@ -171,6 +184,9 @@ async function apagarArquivo(admin: Admin, path: string | null | undefined) {
 
 /** Cria ou edita uma clínica. A guia é opcional: sem ela, vale a guia geral. */
 export async function salvarClinicaAction(companyId: string, clinicaId: string | null, formData: FormData) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin } = auth
@@ -226,6 +242,9 @@ export async function salvarClinicaAction(companyId: string, clinicaId: string |
 
 /** Some da lista; os encaminhamentos já feitos guardam uma cópia dos dados da clínica */
 export async function excluirClinicaAction(companyId: string, clinicaId: string) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin } = auth
@@ -243,6 +262,9 @@ export async function excluirClinicaAction(companyId: string, clinicaId: string)
 
 /** Guia geral da empresa: enviada (com o arquivo) ou removida (sem ele) */
 export async function salvarGuiaGeralAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   const { admin } = auth
@@ -273,6 +295,9 @@ export async function salvarGuiaGeralAction(companyId: string, formData: FormDat
 
 /** Abre uma guia (da empresa ou de uma clínica dela) */
 export async function getGuiaUrlAction(companyId: string, path: string) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   const auth = await requireGestor(companyId)
   if ('error' in auth) return { error: auth.error }
   if (!path.startsWith(`${companyId}/admissao/guias/`)) return { error: 'Arquivo não encontrado.' }
@@ -309,6 +334,9 @@ function isPngWithAlpha(bytes: Uint8Array) {
 }
 
 export async function updateIdentidadeVisualAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('sistema.configuracoes', companyId)
+  if (negado) return negado
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }

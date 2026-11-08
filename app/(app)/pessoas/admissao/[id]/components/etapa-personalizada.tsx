@@ -18,7 +18,7 @@ export function EtapaPersonalizada({ companyId, employeeId, proxima, ultima, dat
   ultima: boolean
   dataSugerida: string | null
   /** Outro processo (ex.: rescisão): como avançar e os textos da conclusão */
-  acao?: (anotacao: string, data?: string) => Promise<{ error?: string } | { finalizado: boolean; proxima: string; vagaEncerrada?: string | null }>
+  acao?: (anotacao: string, data?: string) => Promise<{ error?: string } | { finalizado: boolean; proxima: string; vagaEncerrada?: string | null; acesso?: string | null }>
   rotuloData?: string
   rotuloConcluir?: string
   dicaUltima?: string
@@ -36,7 +36,7 @@ export function EtapaPersonalizada({ companyId, employeeId, proxima, ultima, dat
     const r = await toast.promise(acao ? acao(anotacao, dataFinal) : avancarEtapaPersonalizadaAction(companyId, employeeId, anotacao, dataFinal), {
       loading: ultima ? 'Concluindo…' : 'Avançando…',
       success: (res) => !('finalizado' in res) ? 'Etapa concluída.'
-        : res.finalizado ? `${concluida}${'vagaEncerrada' in res && res.vagaEncerrada ? ` Vaga "${res.vagaEncerrada}" encerrada.` : ''}`
+        : res.finalizado ? `${concluida}${'vagaEncerrada' in res && res.vagaEncerrada ? ` Vaga "${res.vagaEncerrada}" encerrada.` : ''}${res.acesso ? ` ${res.acesso}` : ''}`
         : `Seguiu para "${res.proxima}".`,
       error: 'Não foi possível avançar.',
     })

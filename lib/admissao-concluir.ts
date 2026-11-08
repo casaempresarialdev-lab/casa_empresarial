@@ -3,6 +3,7 @@ import { ETAPA_FINAL, proximaEtapa } from '@/app/(app)/pessoas/admissao/etapas'
 import { getEtapasAdmissao } from '@/app/(app)/pessoas/admissao/queries'
 import { addDays } from '@/app/(app)/pessoas/funcionarios/components/ficha/ficha-config'
 import { encerrarVagaSePreenchida } from '@/lib/vagas-encerrar'
+import { criarAcessoFuncionario } from '@/lib/admissao-acesso'
 
 type Admin = ReturnType<typeof createAdminClient>
 type Autor = { id: string | null; nome: string }
@@ -63,7 +64,13 @@ export async function concluirAdmissao(admin: Admin, opcoes: { companyId: string
   const vagaEncerrada = vagaId ? await encerrarVagaSePreenchida(admin, companyId, vagaId) : null
   if (vagaEncerrada) await anotar(admin, companyId, employeeId, applicationId, autor, `Vaga "${vagaEncerrada}" encerrada: todas as posições foram preenchidas.`)
 
-  return { success: true as const, status, vagaEncerrada }
+  // A pessoa entra na Equipe já com o acesso de Funcionário e o e-mail para cadastrar a senha
+  const acesso = await criarAcessoFuncionario(admin, {
+    companyId, employeeId, email: emp.email as string | null, jaTemConta: !!emp.profile_id, autorId: autor.id,
+  })
+  if (acesso) await anotar(admin, companyId, employeeId, applicationId, autor, acesso)
+
+  return { success: true as const, status, vagaEncerrada, acesso }
 }
 
 /**
@@ -77,7 +84,7 @@ export async function seguirEtapa(admin: Admin, opcoes: {
   autor: Autor
   campos?: Record<string, unknown>
   dataAdmissao?: string | null
-}): Promise<{ error: string } | { success: true; finalizado: boolean; proxima: string; vagaEncerrada: string | null }> {
+}): Promise<{ error: string } | { success: true; finalizado: boolean; proxima: string; vagaEncerrada: string | null; acesso: string | null }> {
   const { companyId, employeeId, de, autor, campos = {} } = opcoes
   const proxima = proximaEtapa(await getEtapasAdmissao(companyId), de)
   const finalizar = proxima === ETAPA_FINAL
@@ -95,8 +102,8 @@ export async function seguirEtapa(admin: Admin, opcoes: {
   if (error) return { error: error.message }
   if (!movido) return { error: 'O card já mudou de etapa. Atualize a página.' }
 
-  if (!finalizar) return { success: true, finalizado: false, proxima, vagaEncerrada: null }
+  if (!finalizar) return { success: true, finalizado: false, proxima, vagaEncerrada: null, acesso: null }
   const r = await concluirAdmissao(admin, { companyId, employeeId, autor, dataAdmissao: opcoes.dataAdmissao })
   if ('error' in r) return { error: r.error! }
-  return { success: true, finalizado: true, proxima, vagaEncerrada: r.vagaEncerrada ?? null }
+  return { success: true, finalizado: true, proxima, vagaEncerrada: r.vagaEncerrada ?? null, acesso: r.acesso ?? null }
 }

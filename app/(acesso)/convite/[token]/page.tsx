@@ -19,6 +19,11 @@ export default async function ConvitePage({ params }: Props) {
   const convite = await buscarConvitePorToken(admin, token)
   const temConta = convite ? !!(await findUserIdByEmail(admin, convite.email)) : false
 
+  // Convite de colaborador admitido: nome e CPF já vêm do cadastro dele
+  const { data: colaborador } = convite?.employee_id
+    ? await admin.from('employees').select('nome, cpf').eq('id', convite.employee_id).eq('company_id', convite.company_id).maybeSingle()
+    : { data: null }
+
   return (
     <AcessoShell>
       {!convite ? (
@@ -46,7 +51,7 @@ export default async function ConvitePage({ params }: Props) {
           </p>
           {temConta
             ? <ConviteContaExistente token={token} email={convite.email} />
-            : <ConviteForm token={token} email={convite.email} />}
+            : <ConviteForm token={token} email={convite.email} nome={colaborador?.nome ?? ''} cpf={colaborador?.cpf ?? ''} />}
         </>
       )}
     </AcessoShell>

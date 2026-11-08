@@ -3,10 +3,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getPurchaseOrders, getContacts, getActiveProducts } from './queries'
 import { PedidosCompraClient } from './components/pedidos-compra-client'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PedidosCompraPage() {
+  await exigirAcessoPagina('operacional.pedidos-compra')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

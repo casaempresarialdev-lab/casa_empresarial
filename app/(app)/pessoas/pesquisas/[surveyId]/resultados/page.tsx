@@ -3,12 +3,15 @@ import Link from 'next/link'
 import { getSurveyByIdPublic, getSurveyResponses } from '../../queries'
 import { ResultadosClient } from './components/resultados-client'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 interface Props {
   params: Promise<{ surveyId: string }>
 }
 
 export default async function ResultadosPage({ params }: Props) {
+  await exigirAcessoPagina('pessoas.pesquisas')
+
   const { surveyId } = await params
 
   const [survey, responses] = await Promise.all([

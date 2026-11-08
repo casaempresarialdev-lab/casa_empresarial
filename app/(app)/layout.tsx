@@ -11,6 +11,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { ThemeSync } from '@/components/layout/theme-sync'
 import { themeCssVars } from '@/lib/theme'
 import { getCompanyBranding } from '@/lib/company-branding'
+import { getPermissoes } from '@/lib/auth/acesso'
 
 // Favicon: ícone da empresa ativa, quando configurado (sobrescreve o icons do layout raiz)
 export async function generateMetadata(): Promise<Metadata> {
@@ -64,7 +65,10 @@ export default async function AppLayout({
   const activeRole     = activeCompany?.role ?? null
   const myEmployeeId   = activeCompany?.employeeId ?? null
 
-  const branding = await getCompanyBranding(activeCompany?.id)
+  const [branding, acesso] = await Promise.all([
+    getCompanyBranding(activeCompany?.id),
+    activeCompany ? getPermissoes(activeCompany.id) : null,
+  ])
 
   // Tema: cores derivadas da empresa ativa (server-side → sem flash).
   // --brand-icon: ícone da empresa no pré-loader (sem ele, o CSS usa o símbolo padrão).
@@ -89,6 +93,8 @@ export default async function AppLayout({
           userEmail={user.email}
           userAvatar={profile?.avatar_url}
           companies={companies}
+          perfilNome={acesso?.perfilNome ?? null}
+          permissoes={acesso?.permissoes ?? null}
         />
         <AppShell>
           <main className="relative flex-1 p-6 pt-16 md:pt-6">

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { semAcesso } from '@/lib/auth/acesso'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -10,6 +11,9 @@ async function getAuthUser() {
 }
 
 export async function createHealthSafetyAction(companyId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.seguranca-saude', companyId)
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -34,6 +38,9 @@ export async function createHealthSafetyAction(companyId: string, formData: Form
 }
 
 export async function updateHealthSafetyAction(recordId: string, formData: FormData) {
+  const negado = await semAcesso('pessoas.seguranca-saude')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
@@ -54,6 +61,9 @@ export async function updateHealthSafetyAction(recordId: string, formData: FormD
 }
 
 export async function deleteHealthSafetyAction(recordId: string) {
+  const negado = await semAcesso('pessoas.seguranca-saude')
+  if (negado) return negado
+
   const user = await getAuthUser()
   if (!user) return { error: 'Não autenticado' }
 
