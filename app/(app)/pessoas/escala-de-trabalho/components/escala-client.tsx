@@ -1,15 +1,20 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { FilterResult, FilterSelect } from '@/components/ui/filter-select'
+import { Tabs } from '@/components/ui/form-steps'
+import { Icon } from '@/components/ui/icon'
+import { iniciais } from '../../funcionarios/components/ficha/ficha-config'
 import { ModalRegraEscala } from './modal-regra-escala'
 import { ModalExcecao } from './modal-excecao'
 import { deleteRuleAction } from '../actions'
 import { generateMonth } from '@/lib/escala/generate'
 import type { ScheduleRule, ScheduleException, DayResult } from '@/lib/escala/generate'
-import { exportListaPDF, exportCalendarioPDF, exportExcel } from '@/lib/export/escala-export'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { exportCalendarioPDF, exportExcel } from '@/lib/export/escala-export'
 
 interface Props {
   rules: ScheduleRule[]
@@ -31,10 +36,6 @@ function formatTime(t: string | null) {
 
 function getDaysInMonth(ano: number, mes: number) { return new Date(ano, mes, 0).getDate() }
 function getFirstDayOfWeek(ano: number, mes: number) { return new Date(ano, mes - 1, 1).getDay() }
-
-function getInitials(nome: string): string {
-  return nome.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase()
-}
 
 function getWeeksOfMonth(mes: number, ano: number): Date[][] {
   const firstDay = new Date(ano, mes - 1, 1)
@@ -118,58 +119,22 @@ function ThreeDotMenu({ onEdit, onDelete, loading }: { onEdit: () => void; onDel
   )
 }
 
-// ── ExportMenu ────────────────────────────────────────────────────────────────
+// ── Legenda ───────────────────────────────────────────────────────────────────
 
-function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void }) {
-  const [open, setOpen] = useState(false)
-  const [pos,  setPos]  = useState({ top: 0, right: 0 })
-  const menuRef = useRef<HTMLDivElement>(null)
-  const btnRef  = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        btnRef.current  && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false)
-    }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const openUp = rect.bottom + 130 > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - 134, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen(v => !v)
-  }
-
+function Legenda({ itens, className = '' }: { itens: [string, string][]; className?: string }) {
   return (
-    <div>
-      <button ref={btnRef} type="button" onClick={handleOpen}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
-        style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}>
-        Baixar ▾
-      </button>
-      {open && (
-        <div ref={menuRef} className="fixed w-40 rounded-xl border shadow-lg py-1 z-50"
-          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}>
-          <button type="button" onClick={() => { setOpen(false); onPDF() }}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
-            style={{ color: 'var(--color-text-secondary)' }}>PDF</button>
-          <button type="button" onClick={() => { setOpen(false); onExcel() }}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
-            style={{ color: 'var(--color-text-secondary)' }}>Excel</button>
-        </div>
-      )}
+    <div className={`flex flex-wrap items-center gap-4 text-xs ${className}`} style={{ color: 'var(--color-text-muted)' }}>
+      {itens.map(([cor, rotulo]) => (
+        <span key={rotulo} className="flex items-center gap-1">
+          <span className="inline-block w-2.5 h-2.5 rounded-sm border" style={{ backgroundColor: cor, borderColor: 'var(--color-card-border)' }} />
+          {rotulo}
+        </span>
+      ))}
+      <span>* = exceção manual</span>
     </div>
   )
 }
+
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -197,26 +162,35 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
   const calendarRef = useRef<HTMLDivElement>(null)
 
   const filteredEmps = filterEmployee ? employees.filter(e => e.id === filterEmployee) : employees
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+
+  // Os dias do mês de cada pessoa
+  const porPessoa = useMemo(
+    () => (filterEmployee ? employees.filter(e => e.id === filterEmployee) : employees).map(emp => ({ emp, days: generateMonth(rules, exceptions, mes, ano, emp.id) })),
+    [employees, filterEmployee, rules, exceptions, mes, ano],
+  )
 
   // Mapa data → [{emp, day}] para o calendário
   const byDate: Record<string, ListRow[]> = {}
-  for (const emp of filteredEmps) {
-    const days = generateMonth(rules, exceptions, mes, ano, emp.id)
+  // Dias de trabalho, para o Excel
+  const listaRows: ListRow[] = []
+  for (const { emp, days } of porPessoa) {
     for (const day of days) {
       if (!byDate[day.date]) byDate[day.date] = []
       byDate[day.date].push({ emp, day })
-    }
-  }
-
-  // Linhas da view Lista (só dias de trabalho)
-  const listaRows: ListRow[] = []
-  for (const emp of filteredEmps) {
-    const days = generateMonth(rules, exceptions, mes, ano, emp.id)
-    for (const day of days) {
       if (day.tipo === 'trabalho') listaRows.push({ emp, day })
     }
   }
   listaRows.sort((a, b) => a.day.date.localeCompare(b.day.date) || a.emp.nome.localeCompare(b.emp.nome))
+
+  const todosOsDias = porPessoa.flatMap(p => p.days)
+  const indicadores = {
+    comEscala: porPessoa.filter(p => p.days.some(d => d.tipo !== 'sem_regra')).length,
+    trabalho: todosOsDias.filter(d => d.tipo === 'trabalho').length,
+    folgas: todosOsDias.filter(d => d.tipo === 'folga').length,
+    feriados: new Set(todosOsDias.filter(d => d.feriado).map(d => d.date)).size,
+    excecoes: todosOsDias.filter(d => d.excecao).length,
+  }
 
   // Cronograma semanal
   const weeksOfMonth = getWeeksOfMonth(mes, ano)
@@ -280,317 +254,230 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
   const excEmpName = excEmpId ? employees.find(e => e.id === excEmpId)?.nome ?? null : null
   const filteredRules = filterEmployee ? rules.filter(r => r.employee_id === filterEmployee) : rules
 
+  const seta = 'w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-gray-100'
+  const botao = 'inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-50 shrink-0'
+  const estiloBotao = { borderColor: 'var(--color-card-border)', color: 'var(--color-text-secondary)' }
+  const borda = { borderColor: 'var(--color-card-border)' }
+  const cursorDia = readOnly ? 'cursor-default' : 'cursor-pointer'
+
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Escala de Trabalho
-            </h1>
-            <Breadcrumb />
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Escala de Trabalho</h1>
+        <Breadcrumb />
+      </div>
+
+      <Tabs labels={['Calendário', 'Cronograma']} step={view === 'calendario' ? 0 : 1} onSelect={(i) => setView(i === 0 ? 'calendario' : 'cronograma')} />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+        <SummaryCard icon="users" title="Pessoas com escala" value={indicadores.comEscala} caption={`de ${porPessoa.length} ${porPessoa.length === 1 ? 'funcionário' : 'funcionários'}`} accent={indicadores.comEscala < porPessoa.length ? 'yellow' : undefined} />
+        <SummaryCard icon="briefcase" title="Dias de trabalho" value={indicadores.trabalho} caption={`em ${MESES[mes - 1].toLowerCase()}`} delay={60} />
+        <SummaryCard icon="star" title="Folgas" value={indicadores.folgas} caption="dias no mês" delay={120} />
+        <SummaryCard icon="calendar" title="Feriados" value={indicadores.feriados} caption="no mês" delay={180} />
+        <SummaryCard icon="pencil" title="Exceções" value={indicadores.excecoes} caption="ajustes manuais" delay={240} />
+      </div>
+
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1" style={{ color: 'var(--color-sidebar-text)' }}>
+            <button type="button" onClick={() => navMes(-1)} aria-label="Mês anterior" className={seta}><Icon name="chevron-left" size={18} /></button>
+            <span className="w-36 text-center text-sm font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{MESES[mes - 1]} {ano}</span>
+            <button type="button" onClick={() => navMes(1)} aria-label="Próximo mês" className={seta}><Icon name="chevron-right" size={18} /></button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {view === 'calendario' && (
+              <>
+                <button type="button" onClick={handleExportPDF} className={botao} style={estiloBotao}><Icon name="download" size={16} /> PDF</button>
+                <button type="button" onClick={handleExportExcel} className={botao} style={estiloBotao}><Icon name="download" size={16} /> Excel</button>
+              </>
+            )}
+            {!readOnly && <AddButton onClick={() => router.push('/pessoas/escala-de-trabalho/nova')} />}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-bg-surface)' }}>
-            {(['calendario', 'cronograma'] as const).map(v => (
-              <button key={v} onClick={() => setView(v)}
-                className="px-3 py-1.5 text-xs font-medium transition-colors"
-                style={{
-                  backgroundColor: view === v ? 'var(--color-primary)' : 'white',
-                  color: view === v ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
-                }}>
-                {v === 'calendario' ? '📅 Calendário' : '📋 Cronograma'}
-              </button>
-            ))}
-          </div>
-          {!readOnly && (
-            <Button variant="ghost" onClick={() => router.push('/pessoas/escala-de-trabalho/nova')}>Adicionar</Button>
-          )}
-        </div>
-      </div>
 
-      {/* Navegação de mês */}
-      <div className="flex items-center justify-between mb-4 p-3 app-card">
-        <button onClick={() => navMes(-1)} className="px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-          style={{ color: 'var(--color-text-secondary)' }}>← Anterior</button>
-        <span className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
-          {MESES[mes - 1]} {ano}
-        </span>
-        <button onClick={() => navMes(1)} className="px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-          style={{ color: 'var(--color-text-secondary)' }}>Próximo →</button>
-      </div>
-
-      {/* Filtro */}
-      <div className="mb-4">
-        <select value={filterEmployee} onChange={e => setFilter(e.target.value)}
-          className="w-full px-4 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}>
-          <option value="">Todos os funcionários</option>
-          {employees.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-        </select>
-      </div>
-
-      {/* ── Calendário ───────────────────────────────────────────────────── */}
-      {view === 'calendario' && (
-        <div ref={calendarRef} className="app-card overflow-hidden">
-          <div className="grid grid-cols-7 border-b"
-            style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
-            {DIAS_SEMANA.map(d => (
-              <div key={d} className="text-center py-2 text-xs font-medium"
-                style={{ color: 'var(--color-text-secondary)' }}>{d}</div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7">
-            {cells.map((day, idx) => {
-              const dateStr = day
-                ? `${ano}-${String(mes).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                : ''
-              const entries   = dateStr ? (byDate[dateStr] ?? []) : []
-              const isToday   = dateStr === new Date().toISOString().slice(0, 10)
-              const firstDay2 = entries[0]?.day
-              const isFeriado = firstDay2?.feriado ?? false
-              const isDomingo = firstDay2?.domingo ?? false
-
-              let cellBg = day ? 'white' : '#FAFAFA'
-              if (day && isDomingo) cellBg = '#F5F5F5'
-              if (day && isFeriado) cellBg = '#EBF5FB'
-
+        {(employees.length > 1 || view === 'cronograma') && (
+          <div className="flex flex-wrap items-center gap-2">
+            {employees.length > 1 && (
+              <FilterSelect
+                value={filterEmployee}
+                onChange={setFilter}
+                label="Filtrar por funcionário"
+                options={[{ value: '', label: 'Todos os funcionários' }, ...employees.map(e => ({ value: e.id, label: e.nome }))]}
+              />
+            )}
+            {view === 'cronograma' && weeksOfMonth.map((week, i) => {
+              const ativa = i === weekIdx
               return (
-                <div key={idx} className="min-h-[90px] border-r border-b p-1"
-                  style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: cellBg }}>
-                  {day && (
-                    <>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full"
-                          style={{
-                            backgroundColor: isToday ? 'var(--color-primary-dark)' : 'transparent',
-                            color: isToday ? 'white' : isDomingo ? '#999' : 'var(--color-text-secondary)',
-                          }}>
-                          {day}
-                        </span>
-                        {isFeriado && firstDay2?.feriado_nome && (
-                          <span title={firstDay2.feriado_nome}
-                            style={{ fontSize: '0.58rem', color: '#2471A3', maxWidth: 56, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {firstDay2.feriado_nome}
-                          </span>
-                        )}
-                      </div>
-
-                      {entries.map(({ emp, day: d }) => {
-                        if (d.tipo === 'sem_regra') return null
-                        const isFolga = d.tipo === 'folga'
-                        return (
-                          <button key={emp.id}
-                            onClick={() => openExcecao(dateStr, emp.id)}
-                            className="w-full text-left mb-0.5 px-1.5 py-0.5 rounded"
-                            style={{
-                              backgroundColor: isFolga ? '#F4F6F7' : '#E9F7EF',
-                              color: isFolga ? '#888' : '#1E8449',
-                            }}
-                            title={`${emp.nome} — ${isFolga ? 'Folga' : `${formatTime(d.hora_entrada)}–${formatTime(d.hora_saida)}`}${d.excecao ? ' (exceção)' : ''}`}>
-                            <div style={{ fontSize: '0.72rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {emp.nome.split(' ')[0]}{d.excecao ? ' *' : ''}
-                            </div>
-                            {!isFolga && (
-                              <div style={{ fontSize: '0.63rem', opacity: 0.8 }}>
-                                {formatTime(d.hora_entrada)}–{formatTime(d.hora_saida)}
-                              </div>
-                            )}
-                          </button>
-                        )
-                      })}
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Legenda */}
-          <div className="flex flex-wrap items-center gap-4 px-4 py-2 border-t text-xs"
-            style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
-            {[
-              { bg: '#E9F7EF', label: 'Trabalho' },
-              { bg: '#F4F6F7', label: 'Folga' },
-              { bg: '#EBF5FB', label: 'Feriado' },
-              { bg: '#F5F5F5', label: 'Domingo' },
-            ].map(l => (
-              <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: l.bg, display: 'inline-block' }} />
-                {l.label}
-              </span>
-            ))}
-            <span>* = exceção manual</span>
-          </div>
-        </div>
-      )}
-
-      {/* Exportar — abaixo do calendário, alinhado à direita */}
-      {view === 'calendario' && (
-        <div className="flex justify-end mt-3">
-          <ExportMenu onPDF={handleExportPDF} onExcel={handleExportExcel} />
-        </div>
-      )}
-
-      {/* ── Cronograma ───────────────────────────────────────────────────── */}
-      {view === 'cronograma' && (
-        <>
-          {/* Tabs de semana */}
-          <div className="flex gap-1.5 flex-wrap mb-4">
-            {weeksOfMonth.map((week, i) => {
-              const label  = weekTabLabel(week, mes)
-              const active = i === weekIdx
-              return (
-                <button key={i} onClick={() => setWeekIdx(i)}
-                  style={{
-                    padding: '0.3rem 0.75rem', borderRadius: '0.5rem', border: '1px solid',
-                    fontSize: '0.75rem', fontWeight: active ? 600 : 400, cursor: 'pointer',
-                    borderColor: active ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)',
-                    backgroundColor: active ? 'var(--color-primary)' : 'white',
-                    color: active ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
-                  }}>
-                  {label}
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setWeekIdx(i)}
+                  aria-pressed={ativa}
+                  className={`h-9 px-3 rounded-lg border text-sm tabular-nums transition-colors cursor-pointer ${ativa ? 'font-semibold' : 'hover:bg-gray-50'}`}
+                  style={ativa
+                    ? { borderColor: 'var(--color-brand)', backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }
+                    : estiloBotao}
+                >
+                  {weekTabLabel(week, mes)}
                 </button>
               )
             })}
+            {filterEmployee && <FilterResult total={porPessoa.length} onClear={() => setFilter('')} />}
           </div>
+        )}
 
-          {/* Grade semanal */}
-          <div className="app-card overflow-x-auto">
-            <table style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                  <th style={{ textAlign: 'left', padding: '0.6rem 0.75rem', fontWeight: 600, fontSize: '0.72rem', color: 'var(--color-text-secondary)', width: 160, borderBottom: '1px solid var(--color-bg-surface)' }}>
-                    Pessoa
-                  </th>
-                  {weekDates.map((d, i) => {
-                    const isToday = d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10)
-                    const isDom   = d.getDay() === 0
-                    const isSab   = d.getDay() === 6
-                    return (
-                      <th key={i} style={{
-                        textAlign: 'center', padding: '0.5rem 0.25rem',
-                        fontWeight: 600, fontSize: '0.72rem', borderBottom: '1px solid var(--color-bg-surface)',
-                        color: isDom ? '#bbb' : 'var(--color-text-secondary)',
-                        backgroundColor: isToday ? 'var(--color-primary)' : isSab ? '#FAFAFA' : undefined,
-                        minWidth: 88,
-                      }}>
-                        <div>{DIAS_SEMANA[d.getDay()]}</div>
-                        <div style={{ fontWeight: 400, fontSize: '0.68rem', marginTop: 1 }}>
-                          {String(d.getDate()).padStart(2, '0')}/{String(d.getMonth() + 1).padStart(2, '0')}
-                        </div>
-                      </th>
-                    )
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {cronogramaData.length === 0 && (
-                  <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-muted)' }}>
-                      Nenhum funcionário com escala cadastrada.
-                    </td>
-                  </tr>
-                )}
-                {cronogramaData.map(({ emp, days }, empIdx) => (
-                  <tr key={emp.id} style={{
-                    borderTop: '1px solid var(--color-bg-surface)',
-                    backgroundColor: empIdx % 2 === 0 ? 'white' : '#FAFAFA',
-                  }}>
-                    {/* Coluna de pessoa */}
-                    <td style={{ padding: '0.5rem 0.75rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <div style={{
-                          width: 30, height: 30, borderRadius: '50%',
-                          backgroundColor: 'var(--color-primary)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-primary-darker)',
-                          flexShrink: 0,
-                        }}>
-                          {getInitials(emp.nome)}
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-primary)', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {emp.nome.split(' ').slice(0, 2).join(' ')}
+        {/* ── Calendário ───────────────────────────────────────────────────── */}
+        {view === 'calendario' && (
+          <div className="rounded-xl border overflow-x-auto" style={borda}>
+            {/* O PDF é uma imagem deste bloco */}
+            <div ref={calendarRef} className="min-w-[720px] bg-white">
+              <div className="grid grid-cols-7 border-b" style={{ ...borda, backgroundColor: 'var(--color-bg-surface)' }}>
+                {DIAS_SEMANA.map(d => (
+                  <div key={d} className="text-center py-2 text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>{d}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7">
+                {cells.map((day, idx) => {
+                  const dateStr = day
+                    ? `${ano}-${String(mes).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                    : ''
+                  const entries   = dateStr ? (byDate[dateStr] ?? []) : []
+                  const isToday   = dateStr === hoje
+                  const firstDay2 = entries[0]?.day
+                  const isFeriado = firstDay2?.feriado ?? false
+                  const isDomingo = firstDay2?.domingo ?? false
+
+                  let cellBg = day ? 'white' : '#FAFAFA'
+                  if (day && isDomingo) cellBg = '#F5F5F5'
+                  if (day && isFeriado) cellBg = '#EBF5FB'
+
+                  return (
+                    <div key={idx} className="min-h-[96px] border-r border-b p-1.5" style={{ ...borda, backgroundColor: cellBg }}>
+                      {day && (
+                        <>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span
+                              className="text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full shrink-0"
+                              style={{
+                                backgroundColor: isToday ? 'var(--color-brand)' : 'transparent',
+                                color: isToday ? '#fff' : isDomingo ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
+                              }}
+                            >
+                              {day}
+                            </span>
+                            {isFeriado && firstDay2?.feriado_nome && (
+                              <span title={firstDay2.feriado_nome} className="text-[10px] truncate" style={{ color: '#2471A3' }}>{firstDay2.feriado_nome}</span>
+                            )}
                           </div>
-                          {emp.cargo && (
-                            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: 1 }}>{emp.cargo}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    {/* Células de dia */}
-                    {days.map((day, dayIdx) => {
-                      const dateStr = weekDates[dayIdx].toISOString().slice(0, 10)
-                      const isDom   = weekDates[dayIdx].getDay() === 0
-                      const isSab   = weekDates[dayIdx].getDay() === 6
 
-                      if (!day || day.tipo === 'sem_regra') {
+                          {entries.map(({ emp, day: d }) => {
+                            if (d.tipo === 'sem_regra') return null
+                            const isFolga = d.tipo === 'folga'
+                            return (
+                              <button
+                                key={emp.id}
+                                type="button"
+                                onClick={() => openExcecao(dateStr, emp.id)}
+                                className={`w-full text-left mb-0.5 px-1.5 py-0.5 rounded ${cursorDia}`}
+                                style={{ backgroundColor: isFolga ? '#F4F6F7' : '#E9F7EF', color: isFolga ? '#888' : '#1E8449' }}
+                                title={`${emp.nome} — ${isFolga ? 'Folga' : `${formatTime(d.hora_entrada)}–${formatTime(d.hora_saida)}`}${d.excecao ? ' (exceção)' : ''}`}
+                              >
+                                <span className="block text-xs font-medium truncate">{emp.nome.split(' ')[0]}{d.excecao ? ' *' : ''}</span>
+                                {!isFolga && <span className="block text-[10px] tabular-nums opacity-80">{formatTime(d.hora_entrada)}–{formatTime(d.hora_saida)}</span>}
+                              </button>
+                            )
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <Legenda itens={[['#E9F7EF', 'Trabalho'], ['#F4F6F7', 'Folga'], ['#EBF5FB', 'Feriado'], ['#F5F5F5', 'Domingo']]} className="px-4 py-2" />
+            </div>
+          </div>
+        )}
+
+        {/* ── Cronograma ───────────────────────────────────────────────────── */}
+        {view === 'cronograma' && (
+          <>
+            <div className="rounded-xl border overflow-x-auto" style={borda}>
+              <table className="w-full border-collapse text-sm" style={{ minWidth: 860 }}>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                    <th className="text-left px-3 py-2 text-xs font-semibold w-44" style={{ color: 'var(--color-text-secondary)' }}>Pessoa</th>
+                    {weekDates.map((d, i) => (
+                      <th
+                        key={i}
+                        className="text-center px-1 py-2 text-xs font-semibold"
+                        style={{
+                          minWidth: 88,
+                          color: d.getDay() === 0 ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
+                          backgroundColor: d.toISOString().slice(0, 10) === hoje ? 'var(--color-brand-light)' : undefined,
+                        }}
+                      >
+                        <span className="block">{DIAS_SEMANA[d.getDay()]}</span>
+                        <span className="block font-normal text-[11px] tabular-nums">{String(d.getDate()).padStart(2, '0')}/{String(d.getMonth() + 1).padStart(2, '0')}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cronogramaData.length === 0 && (
+                    <tr><td colSpan={8} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>Nenhum funcionário com escala cadastrada.</td></tr>
+                  )}
+                  {cronogramaData.map(({ emp, days }) => (
+                    <tr key={emp.id} className="border-t bg-white" style={borda}>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+                            {iniciais(emp.nome)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold truncate" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{emp.nome.split(' ').slice(0, 2).join(' ')}</p>
+                            {emp.cargo && <p className="text-[11px] truncate" style={{ color: 'var(--color-text-muted)' }}>{emp.cargo}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      {days.map((day, dayIdx) => {
+                        const dateStr = weekDates[dayIdx].toISOString().slice(0, 10)
+                        const fimDeSemana = weekDates[dayIdx].getDay() === 0 || weekDates[dayIdx].getDay() === 6
+
+                        if (!day || day.tipo === 'sem_regra') {
+                          return <td key={dayIdx} className="text-center px-1 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>—</td>
+                        }
+                        const isFolga = day.tipo === 'folga'
                         return (
-                          <td key={dayIdx} style={{ textAlign: 'center', padding: '0.5rem 0.25rem', color: 'var(--color-text-muted)', fontSize: '0.68rem', backgroundColor: isDom ? '#F8F8F8' : undefined }}>
-                            —
+                          <td
+                            key={dayIdx}
+                            onClick={() => openExcecao(dateStr, emp.id)}
+                            className={`text-center px-1 py-2 border-l ${cursorDia}`}
+                            style={{ ...borda, backgroundColor: isFolga ? (fimDeSemana ? '#F0F0F0' : '#F4F6F7') : day.feriado ? '#EBF5FB' : '#E9F7EF' }}
+                            title={`${emp.nome} — ${isFolga ? 'Folga' : `${formatTime(day.hora_entrada)}–${formatTime(day.hora_saida)}`}${day.excecao ? ' (exceção)' : ''}`}
+                          >
+                            {isFolga ? (
+                              <span className="text-xs font-medium" style={{ color: '#888' }}>Folga{day.excecao ? ' *' : ''}</span>
+                            ) : (
+                              <>
+                                <span className="block text-xs font-semibold tabular-nums" style={{ color: '#1E8449' }}>{formatTime(day.hora_entrada)}{day.excecao ? ' *' : ''}</span>
+                                <span className="block text-[11px] tabular-nums" style={{ color: '#1E8449', opacity: 0.8 }}>{formatTime(day.hora_saida)}</span>
+                              </>
+                            )}
                           </td>
                         )
-                      }
-                      const isFolga = day.tipo === 'folga'
-                      return (
-                        <td key={dayIdx}
-                          onClick={() => openExcecao(dateStr, emp.id)}
-                          style={{
-                            textAlign: 'center', padding: '0.5rem 0.25rem', cursor: 'pointer',
-                            backgroundColor: isFolga
-                              ? (isDom || isSab ? '#F0F0F0' : '#F4F6F7')
-                              : day.feriado ? '#EBF5FB' : '#E9F7EF',
-                          }}
-                          title={`${emp.nome} — ${isFolga ? 'Folga' : `${formatTime(day.hora_entrada)}–${formatTime(day.hora_saida)}`}${day.excecao ? ' (exceção)' : ''}`}
-                        >
-                          {isFolga ? (
-                            <span style={{ fontSize: '0.68rem', color: '#aaa', fontWeight: 500 }}>Folga</span>
-                          ) : (
-                            <div>
-                              <div style={{ fontSize: '0.72rem', color: '#1E8449', fontWeight: 600, lineHeight: 1.3 }}>
-                                {formatTime(day.hora_entrada)}
-                              </div>
-                              <div style={{ fontSize: '0.65rem', color: '#27AE60', lineHeight: 1.2 }}>
-                                {formatTime(day.hora_saida)}
-                              </div>
-                            </div>
-                          )}
-                          {day.excecao && (
-                            <span style={{ fontSize: '0.58rem', color: 'var(--color-text-muted)' }}> ✱</span>
-                          )}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-          {/* Legenda */}
-          <div className="flex flex-wrap items-center gap-4 px-2 py-2 mt-2 text-xs"
-            style={{ color: 'var(--color-text-muted)' }}>
-            {[
-              { bg: '#E9F7EF', label: 'Trabalho' },
-              { bg: '#F4F6F7', label: 'Folga' },
-              { bg: '#EBF5FB', label: 'Feriado' },
-              { bg: '#F0F0F0', label: 'Fim de semana' },
-            ].map(l => (
-              <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: l.bg, display: 'inline-block', border: '1px solid #e0e0e0' }} />
-                {l.label}
-              </span>
-            ))}
-            <span>✱ = exceção manual</span>
-          </div>
-
-        </>
-      )}
+            <Legenda itens={[['#E9F7EF', 'Trabalho'], ['#F4F6F7', 'Folga'], ['#EBF5FB', 'Feriado'], ['#F0F0F0', 'Fim de semana']]} />
+          </>
+        )}
+      </div>
 
       <ModalRegraEscala
         open={modalRegra}
