@@ -22,39 +22,32 @@ const hojeIso = () => { const h = new Date(); return paraIso(h.getFullYear(), h.
 const valido = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v)
 
 /** Escreve o valor no campo como se o usuário tivesse digitado (o React e o react-hook-form recebem o onChange) */
-function escreverNoCampo(el: HTMLInputElement, valor: string) {
+export function escreverNoCampo(el: HTMLInputElement, valor: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
   setter?.call(el, valor)
   el.dispatchEvent(new Event('input', { bubbles: true }))
   el.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
-type Visao = 'dias' | 'meses' | 'anos'
-
-function Calendario({ valor, min, max, ancora, onEscolher, onFechar }: {
-  valor: string
-  min?: string
-  max?: string
+/** Posição de um seletor flutuante e seu fechamento (clique fora e Esc); usado pelos seletores de data e de hora */
+export function usePosicaoFlutuante(opcoes: {
   ancora: HTMLElement
-  onEscolher: (v: string) => void
+  caixaRef: React.RefObject<HTMLDivElement | null>
+  largura: number
+  altura: number
   onFechar: () => void
 }) {
-  const caixaRef = useRef<HTMLDivElement>(null)
-  const inicial = valido(valor) ? valor : hojeIso()
-  const [ano, setAno] = useState(Number(inicial.slice(0, 4)))
-  const [mes, setMes] = useState(Number(inicial.slice(5, 7)) - 1)
-  const [visao, setVisao] = useState<Visao>('dias')
+  const { ancora, caixaRef, largura, altura, onFechar } = opcoes
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
-  const hoje = hojeIso()
 
   // Abaixo do campo; sem espaço, acima. Acompanha a rolagem (inclusive dentro de modais)
   const posicionar = useCallback(() => {
     const r = ancora.getBoundingClientRect()
     const abaixo = r.bottom + 6
-    const top = abaixo + ALTURA > window.innerHeight && r.top - 6 - ALTURA > 0 ? r.top - 6 - ALTURA : abaixo
-    const left = Math.min(Math.max(8, r.left), window.innerWidth - LARGURA - 8)
+    const top = abaixo + altura > window.innerHeight && r.top - 6 - altura > 0 ? r.top - 6 - altura : abaixo
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - largura - 8)
     setPos({ top, left })
-  }, [ancora])
+  }, [ancora, largura, altura])
 
   useLayoutEffect(() => { posicionar() }, [posicionar])
   useEffect(() => {
@@ -73,7 +66,28 @@ function Calendario({ valor, min, max, ancora, onEscolher, onFechar }: {
       document.removeEventListener('mousedown', fora)
       document.removeEventListener('keydown', tecla, true)
     }
-  }, [posicionar, ancora, onFechar])
+  }, [posicionar, ancora, caixaRef, onFechar])
+
+  return pos
+}
+
+type Visao = 'dias' | 'meses' | 'anos'
+
+function Calendario({ valor, min, max, ancora, onEscolher, onFechar }: {
+  valor: string
+  min?: string
+  max?: string
+  ancora: HTMLElement
+  onEscolher: (v: string) => void
+  onFechar: () => void
+}) {
+  const caixaRef = useRef<HTMLDivElement>(null)
+  const inicial = valido(valor) ? valor : hojeIso()
+  const [ano, setAno] = useState(Number(inicial.slice(0, 4)))
+  const [mes, setMes] = useState(Number(inicial.slice(5, 7)) - 1)
+  const [visao, setVisao] = useState<Visao>('dias')
+  const pos = usePosicaoFlutuante({ ancora, caixaRef, largura: LARGURA, altura: ALTURA, onFechar })
+  const hoje = hojeIso()
 
   const foraDoLimite = (iso: string) => (!!min && iso < min) || (!!max && iso > max)
 

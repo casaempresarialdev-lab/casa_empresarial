@@ -7,7 +7,7 @@ import { MeuPontoClient } from './components/meu-ponto-client'
 
 export const dynamic = 'force-dynamic'
 
-// Administrar ponto do colaborador: os próprios dias e horários, com pedido de ajuste
+// Meu ponto: os próprios dias e horários, com pedido de ajuste
 export default async function MeuPontoPage({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
   await exigirAcessoPagina('visao-geral.bater-ponto')
 

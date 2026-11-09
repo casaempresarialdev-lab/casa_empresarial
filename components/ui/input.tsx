@@ -3,6 +3,7 @@
 import { forwardRef } from 'react'
 import { cn } from '@/lib/utils'
 import { CampoData } from './date-picker'
+import { CampoHora } from './time-picker'
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: React.ReactNode
@@ -16,8 +17,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, hint, invalid, id, ...props }, ref) => {
     const inputId = id ?? (typeof label === 'string' ? label.toLowerCase().replace(/\s+/g, '-') : undefined)
     const hasError = !!error || !!invalid
-    // Data: mesmo campo, com o seletor de data na cor da empresa no lugar do calendário do navegador
-    const Campo = props.type === 'date' ? CampoData : 'input'
+    // Data e hora: mesmo campo, com o seletor na cor da empresa no lugar do seletor do navegador
+    const Campo = props.type === 'date' ? CampoData : props.type === 'time' ? CampoHora : 'input'
 
     return (
       <div className="flex flex-col gap-1">

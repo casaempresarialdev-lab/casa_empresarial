@@ -586,6 +586,8 @@ export function FuncionarioFicha({
         {!cadastro && <Bloco titulo="Acesso ao sistema" descricao="Com acesso, o funcionário entra no sistema como colaborador e vê os próprios dados.">
           {temAcesso ? (
             <p className="text-sm flex items-center gap-2" style={{ color: '#15803D' }}><Icon name="check" size={16} /> Tem acesso ao sistema.</p>
+          ) : employee?.status === 'demitido' || employee?.status === 'inativo' ? (
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Sem acesso ao sistema: a pessoa foi desligada.</p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Ainda não tem acesso ao sistema.</p>

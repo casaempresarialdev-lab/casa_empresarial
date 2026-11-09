@@ -2,8 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
-import { getActiveEmployeesForPayroll, getPayrollEntriesVariable } from './queries'
-import { getEncargosAliquotas } from '../encargos/queries'
+import { montarFolha } from './queries'
 import { getCompany } from '../../empresa/queries'
 import { FolhaClient } from './components/folha-client'
 import { exigirAcessoPagina } from '@/lib/auth/acesso'
@@ -26,39 +25,27 @@ export default async function FolhaPagamentoPage({
   if (!companyId) redirect('/empresa')
 
   const params = await searchParams
-  const now = new Date()
-  const mes = (params.mes ?? String(now.getMonth() + 1)).padStart(2, '0')
-  const ano = params.ano ?? String(now.getFullYear())
+  const [anoAtual, mesAtual] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()).split('-')
+  const mes = (params.mes ?? mesAtual).padStart(2, '0')
+  const ano = params.ano ?? anoAtual
   const mesAno = `${ano}-${mes}`
 
   const viewer = await getViewerContext(companyId)
   if (viewer?.isColaborador && !viewer.myEmployeeId) notFound()
 
-  const [employeesAll, aliquotas, company, entriesArr] = await Promise.all([
-    getActiveEmployeesForPayroll(companyId),
-    getEncargosAliquotas(companyId),
-    getCompany(companyId),
-    getPayrollEntriesVariable(companyId, mesAno),
-  ])
+  const [folha, company] = await Promise.all([montarFolha(companyId, mesAno), getCompany(companyId)])
 
-  const employees = viewer?.isColaborador ? employeesAll.filter(e => e.id === viewer.myEmployeeId) : employeesAll
-
-  // Convert to plain object map for serialization across server→client boundary
-  const entries: Record<string, typeof entriesArr[number]> = {}
-  for (const e of entriesArr) {
-    if (viewer?.isColaborador && e.employee_id !== viewer.myEmployeeId) continue
-    entries[e.employee_id] = e
-  }
+  // Colaborador só recebe a própria linha
+  const linhas = viewer?.isColaborador ? folha.linhas.filter((l) => l.employee.id === viewer.myEmployeeId) : folha.linhas
 
   return (
     <div className="w-full">
       <FolhaClient
-        employees={employees}
-        aliquotas={aliquotas}
+        linhas={linhas}
+        fechada={folha.fechada}
         mesAno={mesAno}
         company={company}
         companyId={companyId}
-        entries={entries}
         readOnly={viewer?.isColaborador ?? false}
       />
     </div>

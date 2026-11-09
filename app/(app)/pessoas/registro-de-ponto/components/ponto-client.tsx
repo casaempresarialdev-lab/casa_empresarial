@@ -14,11 +14,13 @@ import { Modal } from '@/components/ui/modal'
 import { toast } from '@/lib/toast'
 import { generateMonth } from '@/lib/escala/generate'
 import type { ScheduleRule, ScheduleException, DayResult } from '@/lib/escala/generate'
-import { horaDe } from '@/lib/validations/ponto'
+import { minutosTrabalhados, rotuloBatida } from '@/lib/ponto'
+import { faixasDeHorario, horaDe } from '@/lib/validations/ponto'
 import { deleteTimeRecordAction } from '../actions'
 import type { AjusteEquipe, TimeRecord } from '../queries'
 import { Aprovacoes } from './aprovacoes'
 import { ModalPonto } from './modal-ponto'
+import { LinkMapa, TextoLocal } from './texto-local'
 
 interface Props {
   records: TimeRecord[]
@@ -47,6 +49,7 @@ type Status =
   | 'folga_extra'
   | 'ferias'
   | 'falta'
+  | 'atestado'
   | 'previsto'
   | 'sem_escala'
 
@@ -74,15 +77,20 @@ const FILTRO_SITUACAO: { value: string; label: string }[] = [
   { value: 'incompleto', label: 'Sem saída' },
   { value: 'ausente', label: 'Ausente' },
   { value: 'falta', label: 'Falta' },
+  { value: 'atestado', label: 'Atestado' },
   { value: 'folga', label: 'Folga' },
   { value: 'ferias', label: 'Férias' },
 ]
 
-const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'pendente'])
+const SKIP_METRICS = new Set<Status>(['folga', 'folga_extra', 'sem_escala', 'ferias', 'atestado', 'pendente'])
 
 const BOTAO_CAIXA = 'inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-50 shrink-0'
 
 const hora = (ts: string | null | undefined) => horaDe(ts) || '—'
+const horariosDe = (r: TimeRecord | null) => (r?.batidas ?? []).map((b) => b.em)
+/** A última batida só é saída quando o número de batidas é par */
+const saidaDe = (h: string[]) => (h.length && h.length % 2 === 0 ? h[h.length - 1] : null)
+const textoBatidas = (r: TimeRecord | null) => faixasDeHorario(horariosDe(r)).join('  ·  ') || '—'
 
 /** Minutos do dia no horário de Brasília */
 function minutosDoDia(ts: string) {
@@ -99,6 +107,7 @@ function getSituacao(
 ): SituacaoInfo {
   if (record?.tipo === 'ferias') return { label: 'Férias',  color: '#1E8449', bg: '#E9F7EF', status: 'ferias' }
   if (record?.tipo === 'falta')  return { label: 'Falta',   color: '#C0392B', bg: '#FDEDEC', status: 'falta'  }
+  if (record?.tipo === 'atestado') return { label: 'Atestado', color: '#2471A3', bg: '#EBF5FB', status: 'atestado' }
 
   const noSchedule = !dayResult || dayResult.tipo === 'sem_regra'
   if (noSchedule) {
@@ -112,13 +121,16 @@ function getSituacao(
     return { label: 'Extra na folga', color: '#2471A3', bg: '#EBF5FB', status: 'folga_extra' }
   }
 
-  if (!record || !record.entrada) {
+  const horarios = horariosDe(record)
+  const saida = saidaDe(horarios)
+
+  if (!record || !horarios.length) {
     if (isFuture) return { label: 'Previsto',   color: '#2471A3', bg: '#EBF5FB', status: 'previsto'   }
     if (isToday)  return { label: 'Pendente', color: '#7F8C8D', bg: '#F2F3F4', status: 'pendente' }
     return { label: 'Ausente', color: '#C0392B', bg: '#FDEDEC', status: 'ausente' }
   }
 
-  if (!record.saida) {
+  if (!saida) {
     if (isToday) return { label: 'Em andamento', color: '#D35400', bg: '#FDEBD0', status: 'em_andamento' }
     return { label: 'Sem saída', color: '#E67E22', bg: '#FDEBD0', status: 'incompleto' }
   }
@@ -127,15 +139,15 @@ function getSituacao(
 
   let isLate = false, lateMin = 0, isEarlyOut = false
 
-  if (record.entrada && dayResult.hora_entrada) {
+  if (dayResult.hora_entrada) {
     const [eh, em] = dayResult.hora_entrada.split(':').map(Number)
-    lateMin = minutosDoDia(record.entrada) - (eh * 60 + em)
+    lateMin = minutosDoDia(horarios[0]) - (eh * 60 + em)
     if (lateMin > toleranciaMin) isLate = true
   }
 
-  if (record.saida && dayResult.hora_saida) {
+  if (dayResult.hora_saida) {
     const [sh, sm] = dayResult.hora_saida.split(':').map(Number)
-    if (minutosDoDia(record.saida) < sh * 60 + sm) isEarlyOut = true
+    if (minutosDoDia(saida) < sh * 60 + sm) isEarlyOut = true
   }
 
   if (isLate)     return { label: `Atraso ${lateMin}min`, color: '#D35400', bg: '#FDEBD0', status: 'atraso'           }
@@ -153,12 +165,11 @@ function weekday(dateStr: string) {
   return DIAS_SEMANA[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]
 }
 
-function formatInterval(interval: string | null) {
-  if (!interval) return '—'
-  const match = interval.match(/(\d+):(\d+)/)
-  if (!match) return interval
-  const h = match[1], min = match[2]
-  return min !== '00' ? `${h}h ${min}min` : `${h}h`
+function horasTrabalhadas(r: TimeRecord | null) {
+  const total = minutosTrabalhados(horariosDe(r))
+  if (!total) return '—'
+  const h = Math.floor(total / 60), min = total % 60
+  return min ? `${h}h ${String(min).padStart(2, '0')}min` : `${h}h`
 }
 
 function getPrevistoLabel(dayResult: DayResult | null): string {
@@ -168,8 +179,6 @@ function getPrevistoLabel(dayResult: DayResult | null): string {
   const s = dayResult.hora_saida?.slice(0, 5) ?? '?'
   return `${h}–${s}`
 }
-
-const almoco = (r: TimeRecord | null) => (r?.saida_almoco ? `${hora(r.saida_almoco)}–${hora(r.retorno_almoco)}` : '—')
 
 function Situacao({ sit }: { sit: SituacaoInfo }) {
   return (
@@ -197,6 +206,41 @@ function Campo({ rotulo, valor }: { rotulo: string; valor: string }) {
   )
 }
 
+/** Localização e IP de cada batida: só aparecem aqui */
+function OrigemBatidas({ r }: { r: TimeRecord }) {
+  const legado = r.localizacao
+  if (!r.batidas.length) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>Batidas e origem</p>
+      {r.batidas.map((b, i) => {
+        const o = b.origem
+        return (
+          <div key={i} className="p-3 rounded-xl text-sm" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+            <div className="flex justify-between gap-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+              <span>{rotuloBatida(i)}</span>
+              <span className="tabular-nums">{hora(b.em)}</span>
+            </div>
+            {o ? (
+              <div className="mt-1 flex flex-col gap-0.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                <span><TextoLocal local={o} /></span>
+                <span>IP: {o.ip ?? 'não identificado'}</span>
+              </div>
+            ) : (
+              <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>Sem localização e IP: lançamento manual ou batida anterior a este controle</p>
+            )}
+          </div>
+        )
+      })}
+      {legado?.lat != null && legado.lng != null && (
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          Localização da última batida (controle anterior): <LinkMapa lat={legado.lat} lng={legado.lng} texto={legado.endereco} />
+        </p>
+      )}
+    </div>
+  )
+}
+
 function ModalDetalhar({ entry, onClose }: { entry: DayEntry; onClose: () => void }) {
   const r = entry.record
   return (
@@ -205,13 +249,10 @@ function ModalDetalhar({ entry, onClose }: { entry: DayEntry; onClose: () => voi
         <div><Situacao sit={entry.sit} /></div>
         <div className="grid grid-cols-2 gap-3">
           <Campo rotulo="Previsto" valor={getPrevistoLabel(entry.dayResult)} />
-          <Campo rotulo="Horas trabalhadas" valor={formatInterval(r?.horas_trabalhadas ?? null)} />
-          <Campo rotulo="Entrada" valor={hora(r?.entrada)} />
-          <Campo rotulo="Saída almoço" valor={hora(r?.saida_almoco)} />
-          <Campo rotulo="Retorno almoço" valor={hora(r?.retorno_almoco)} />
-          <Campo rotulo="Saída" valor={hora(r?.saida)} />
+          <Campo rotulo="Horas trabalhadas" valor={horasTrabalhadas(r)} />
         </div>
         {r?.observacao && <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Observação: {r.observacao}</p>}
+        {r && <OrigemBatidas r={r} />}
       </div>
     </Modal>
   )
@@ -331,20 +372,18 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
     const hasFuncCol = !filterEmployee
     const headers = [
       ...(hasFuncCol ? ['Funcionário'] : []),
-      'Data', 'Previsto', 'Entrada', 'Almoço', 'Saída', 'Horas', 'Situação',
+      'Data', 'Previsto', 'Batidas', 'Horas', 'Situação',
     ]
     const rows = visiveis.map(e => [
       ...(hasFuncCol ? [e.empNome] : []),
       `${formatDate(e.date)} ${weekday(e.date)}`,
       getPrevistoLabel(e.dayResult),
-      hora(e.record?.entrada),
-      almoco(e.record),
-      hora(e.record?.saida),
-      formatInterval(e.record?.horas_trabalhadas ?? null),
+      textoBatidas(e.record),
+      horasTrabalhadas(e.record),
       e.sit.label,
     ])
 
-    const colW = hasFuncCol ? [44, 30, 24, 22, 36, 22, 20, 28] : [30, 24, 22, 36, 22, 20, 28]
+    const colW = hasFuncCol ? [44, 30, 24, 110, 22, 28] : [30, 24, 150, 22, 28]
     const rowH = 7
     let y = 24
     doc.setFontSize(8)
@@ -357,7 +396,7 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
       if (y > 190) { doc.addPage(); y = 14 }
       x = 10
       row.forEach((cell, i) => {
-        doc.text(String(cell).slice(0, 24), x + 2, y + 5)
+        doc.text(String(cell).slice(0, Math.floor(colW[i] / 1.5)), x + 2, y + 5)
         x += colW[i]
       })
       y += rowH
@@ -370,17 +409,15 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
     const hasFuncCol = !filterEmployee
     const headers = [
       ...(hasFuncCol ? ['Funcionário'] : []),
-      'Data', 'Dia', 'Previsto', 'Entrada', 'Almoço', 'Saída', 'Horas', 'Situação',
+      'Data', 'Dia', 'Previsto', 'Batidas', 'Horas', 'Situação',
     ]
     const rows = visiveis.map(e => [
       ...(hasFuncCol ? [e.empNome] : []),
       formatDate(e.date),
       weekday(e.date),
       getPrevistoLabel(e.dayResult),
-      horaDe(e.record?.entrada),
-      e.record?.saida_almoco ? almoco(e.record) : '',
-      horaDe(e.record?.saida),
-      formatInterval(e.record?.horas_trabalhadas ?? null),
+      textoBatidas(e.record),
+      horasTrabalhadas(e.record),
       e.sit.label,
     ])
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
@@ -454,23 +491,18 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
           {visiveis.length === 0 && <ListEmpty>Nenhum registro em {MESES[mes - 1]} de {ano}.</ListEmpty>}
           {visiveis.map(e => {
             const r = e.record
-            const horarios = `Entrada ${hora(r?.entrada)} · Almoço ${almoco(r)} · Saída ${hora(r?.saida)}`
-            const previsto = `Previsto ${getPrevistoLabel(e.dayResult)} · ${formatInterval(r?.horas_trabalhadas ?? null)} trabalhadas`
+            const faixas = faixasDeHorario(horariosDe(r))
+            const previsto = `Previsto ${getPrevistoLabel(e.dayResult)} · ${horasTrabalhadas(r)} trabalhadas`
             return (
               <ListItem
                 key={`${e.empId}|${e.date}`}
                 media={<Dia date={e.date} hoje={e.isToday} />}
                 title={e.empNome}
-                subtitle={<><span className="lg:hidden">{horarios}</span><span className="hidden lg:inline">{previsto}</span></>}
+                subtitle={<><span className="lg:hidden">{faixas.join(' · ') || 'Sem batidas'}</span><span className="hidden lg:inline">{previsto}</span></>}
                 aside={
                   <>
-                    <span className="hidden lg:grid grid-cols-4 gap-4 w-80">
-                      {([['Entrada', r?.entrada], ['Almoço', r?.saida_almoco], ['Retorno', r?.retorno_almoco], ['Saída', r?.saida]] as const).map(([rotulo, ts]) => (
-                        <span key={rotulo}>
-                          <span className="block text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{rotulo}</span>
-                          <span className="block text-sm font-semibold tabular-nums" style={{ color: ts ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{horaDe(ts) || '--:--'}</span>
-                        </span>
-                      ))}
+                    <span className="hidden lg:flex flex-wrap justify-end gap-x-4 gap-y-0.5 w-80 text-sm font-semibold tabular-nums" style={{ color: faixas.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+                      {faixas.length ? faixas.map((f, i) => <span key={i}>{f}</span>) : <span>--:--</span>}
                     </span>
                     <span className="lg:w-32 flex justify-end"><Situacao sit={e.sit} /></span>
                   </>

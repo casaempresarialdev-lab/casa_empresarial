@@ -79,7 +79,6 @@ export const MODULOS: ModuloAcesso[] = [
       { key: 'pessoas.folha-de-pagamento', label: 'Folha de Pagamento', href: '/pessoas/folha-de-pagamento' },
       { key: 'pessoas.beneficios', label: 'Benefícios', href: '/pessoas/beneficios' },
       { key: 'pessoas.encargos', label: 'Encargos', href: '/pessoas/encargos' },
-      { key: 'pessoas.reunioes', label: 'Reuniões', href: '/pessoas/reunioes', rotas: ['/marketing/reunioes'] },
       { key: 'pessoas.pesquisas', label: 'Pesquisas', href: '/pessoas/pesquisas' },
       { key: 'pessoas.seguranca-saude', label: 'Segurança e Saúde', href: '/pessoas/seguranca-saude' },
     ],

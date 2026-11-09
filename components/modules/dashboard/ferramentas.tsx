@@ -15,12 +15,11 @@ function useHoje() {
 }
 
 // Lançador: fundo na cor da empresa, com o ícone em marca d'água
-function Lancador({ href, icone, titulo, legenda, destaque, delay }: {
+function Lancador({ href, icone, titulo, legenda, delay }: {
   href: string
   icone: 'alarm' | 'calendar'
   titulo: string
   legenda: string
-  destaque?: boolean
   delay: number
 }) {
   return (
@@ -41,7 +40,7 @@ function Lancador({ href, icone, titulo, legenda, destaque, delay }: {
       </span>
       <span className="relative flex-1 min-w-0">
         <span className="block text-base font-bold text-white" style={{ fontFamily: 'Manrope' }}>{titulo}</span>
-        <span className="block text-xs truncate first-letter:uppercase" style={{ color: destaque ? '#fff' : 'rgba(255,255,255,0.82)', fontWeight: destaque ? 700 : undefined }}>{legenda || ' '}</span>
+        <span className="block text-xs truncate first-letter:uppercase" style={{ color: 'rgba(255,255,255,0.82)' }}>{legenda || ' '}</span>
       </span>
       <span className="relative shrink-0 transition-transform duration-200 group-hover:translate-x-1" style={{ color: 'rgba(255,255,255,0.85)' }}>
         <Icon name="chevron-right" size={20} />
@@ -51,9 +50,9 @@ function Lancador({ href, icone, titulo, legenda, destaque, delay }: {
 }
 
 // Lançador de ferramentas da home: cada uma aparece conforme o perfil de acesso
-export function Ferramentas({ baterPonto, administrarPonto, ajustesPendentes }: { baterPonto: boolean; administrarPonto: boolean; ajustesPendentes: number }) {
+export function Ferramentas({ baterPonto }: { baterPonto: boolean }) {
   const hoje = useHoje()
-  if (!baterPonto && !administrarPonto) return null
+  if (!baterPonto) return null
   return (
     <section className="mb-12">
       <h2 className="animate-enter flex items-center gap-2 text-lg font-bold mb-4" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)', animationDelay: '100ms' }}>
@@ -61,20 +60,8 @@ export function Ferramentas({ baterPonto, administrarPonto, ajustesPendentes }: 
         Ferramentas
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {baterPonto && <Lancador href="/registrar-ponto" icone="alarm" titulo="Bater ponto" legenda={hoje} delay={160} />}
-        {administrarPonto && (
-          <Lancador
-            href={ajustesPendentes ? '/pessoas/registro-de-ponto?aba=aprovacoes' : '/pessoas/registro-de-ponto'}
-            icone="calendar"
-            titulo="Administrar ponto"
-            legenda={ajustesPendentes ? `${ajustesPendentes} ${ajustesPendentes === 1 ? 'ajuste para aprovar' : 'ajustes para aprovar'}` : 'Registros e ajustes da equipe'}
-            destaque={ajustesPendentes > 0}
-            delay={baterPonto ? 220 : 160}
-          />
-        )}
-        {baterPonto && (
-          <Lancador href="/meu-ponto" icone="calendar" titulo={administrarPonto ? 'Meu ponto' : 'Administrar ponto'} legenda="Meus horários e pedidos de ajuste" delay={administrarPonto ? 280 : 220} />
-        )}
+        <Lancador href="/registrar-ponto" icone="alarm" titulo="Bater ponto" legenda={hoje} delay={160} />
+        <Lancador href="/meu-ponto" icone="calendar" titulo="Meu ponto" legenda="Meus horários e pedidos de ajuste" delay={220} />
       </div>
     </section>
   )

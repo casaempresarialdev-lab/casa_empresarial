@@ -138,16 +138,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const verSuaCasa = !colaborador && pode(permissoes, 'visao-geral.sua-casa')
   const verCalendario = colaborador || pode(permissoes, 'visao-geral.calendario')
   const verBaterPonto = colaborador || pode(permissoes, 'visao-geral.bater-ponto')
-  const verAdministrarPonto = !colaborador && pode(permissoes, 'pessoas.registro-de-ponto')
 
   // Calendário: meus eventos, convites e agendas que acompanho
-  const [resumo, eventos, agendas, ajustesPendentes] = await Promise.all([
+  const [resumo, eventos, agendas] = await Promise.all([
     verSuaCasa ? carregarResumo(admin, companyId) : null,
     verCalendario ? getEventos(user.id) : [],
     verCalendario ? getAgendas(user.id) : null,
-    verAdministrarPonto
-      ? admin.from('time_adjustments').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'pendente').then((r) => r.count ?? 0)
-      : 0,
   ])
   const { atencao, docsVencidos, saldoTotal, empAtivos, emAndamento, publicacoes } = resumo ?? {
     atencao: 0, docsVencidos: 0, saldoTotal: 0, empAtivos: 0, emAndamento: 0, publicacoes: 0,
@@ -157,11 +153,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <IntroProvider play={cookieStore.get('play_intro')?.value === '1'}>
       <Welcome firstName={firstName} />
 
-      <Ferramentas
-        baterPonto={verBaterPonto}
-        administrarPonto={verAdministrarPonto}
-        ajustesPendentes={ajustesPendentes}
-      />
+      <Ferramentas baterPonto={verBaterPonto} />
 
       {verSuaCasa && <section>
         <h2
@@ -223,7 +215,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
       </section>}
 
-      {!verSuaCasa && !verCalendario && !verBaterPonto && !verAdministrarPonto && (
+      {!verSuaCasa && !verCalendario && !verBaterPonto && (
         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Seu perfil de acesso não tem itens na Visão geral.</p>
       )}
     </IntroProvider>

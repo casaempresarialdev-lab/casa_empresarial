@@ -2,12 +2,22 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ModalAliquota } from './modal-aliquota'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, SearchField } from '@/components/ui/filter-select'
+import { Tabs } from '@/components/ui/form-steps'
+import { Icon } from '@/components/ui/icon'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
+import { custoEmpresaMensal } from '@/lib/beneficios-calculo'
+import { iniciais } from '../../funcionarios/components/ficha/ficha-config'
 import { deleteAliquotaAction, seedDefaultAliquotasAction } from '../actions'
 import type { EmployeeEncargo, AliquotaRow } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
-import { custoEmpresaMensal } from '@/lib/beneficios-calculo'
+import { ModalAliquota } from './modal-aliquota'
 
 interface Props {
   employees: EmployeeEncargo[]
@@ -24,15 +34,16 @@ const FALLBACK_ALIQUOTAS: AliquotaRow[] = [
   { id: '', company_id: '', nome: 'Férias + 1/3', percentual: 11.11, ativo: true, ordem: 6, created_at: '' },
 ]
 
+const ehFgts = (a: AliquotaRow) => a.nome.toUpperCase().includes('FGTS')
 
 function calcFgts(salario: number, aliquotas: AliquotaRow[]): number {
-  const fgts = aliquotas.find(a => a.ativo && a.nome.toUpperCase().includes('FGTS'))
+  const fgts = aliquotas.find(a => a.ativo && ehFgts(a))
   return salario * ((fgts?.percentual ?? 8) / 100)
 }
 
 function calcOutrosEncargos(salario: number, aliquotas: AliquotaRow[]): number {
   return aliquotas
-    .filter(a => a.ativo && !a.nome.toUpperCase().includes('FGTS'))
+    .filter(a => a.ativo && !ehFgts(a))
     .reduce((s, a) => s + salario * (a.percentual / 100), 0)
 }
 
@@ -48,7 +59,6 @@ function fmtPct(v: number) {
   return `${v.toFixed(2).replace('.', ',')}%`
 }
 
-// ── CSV Export ──
 function buildCustoCsv(employees: EmployeeEncargo[], aliquotas: AliquotaRow[]): string {
   const header = [
     'Funcionário', 'Cargo', 'Salário', 'FGTS (8%)', 'Outros Encargos', 'Total Encargos',
@@ -85,330 +95,224 @@ function downloadCsv(content: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+function Avatar({ nome }: { nome: string }) {
+  return (
+    <span className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+      {iniciais(nome)}
+    </span>
+  )
+}
+
+function Valor({ rotulo, valor }: { rotulo: string; valor: number }) {
+  return (
+    <span className="text-right">
+      <span className="block text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{rotulo}</span>
+      <span className="block text-sm font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(valor)}</span>
+    </span>
+  )
+}
+
+// Encargos: custo de cada funcionário para a empresa e as alíquotas usadas no cálculo. Ações dentro da caixa, como nas demais telas.
 export function EncargosClient({ employees, aliquotas, companyId }: Props) {
   const router = useRouter()
-  const [search, setSearch] = useState('')
+  const [aba, setAba] = useState(0)
+  const [busca, setBusca] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingAliquota, setEditingAliquota] = useState<AliquotaRow | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [editing, setEditing] = useState<AliquotaRow | null>(null)
+  const [excluir, setExcluir] = useState<AliquotaRow | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
   const [seeding, setSeeding] = useState(false)
-  const [showAliquotas, setShowAliquotas] = useState(aliquotas.length === 0)
 
   const usingFallback = aliquotas.length === 0
   const effectiveAliquotas = usingFallback ? FALLBACK_ALIQUOTAS : aliquotas
-  const totalPct  = effectiveAliquotas.filter(a => a.ativo).reduce((s, a) => s + a.percentual, 0)
-  const fgtsPct   = effectiveAliquotas.find(a => a.ativo && a.nome.toUpperCase().includes('FGTS'))?.percentual ?? 8
+  const ativas = effectiveAliquotas.filter(a => a.ativo)
+  const totalPct  = ativas.reduce((s, a) => s + a.percentual, 0)
+  const fgtsPct   = ativas.find(ehFgts)?.percentual ?? 8
   const outrosPct = totalPct - fgtsPct
 
-  const filtered = employees.filter(e =>
-    !search || e.nome.toLowerCase().includes(search.toLowerCase())
-  )
+  const q = busca.toLowerCase()
+  const visiveis = employees.filter(e => !q || e.nome.toLowerCase().includes(q) || (e.cargo ?? '').toLowerCase().includes(q))
 
   const totalFolha      = employees.reduce((s, e) => s + (e.salario ?? 0), 0)
   const totalFgts       = employees.reduce((s, e) => s + calcFgts(e.salario ?? 0, effectiveAliquotas), 0)
   const totalOutrosEnc  = employees.reduce((s, e) => s + calcOutrosEncargos(e.salario ?? 0, effectiveAliquotas), 0)
-  const totalEncargos   = totalFgts + totalOutrosEnc
   const totalBeneficios = employees.reduce((s, e) => s + calcBeneficios(e), 0)
 
-  function openAdd() { setEditingAliquota(null); setModalOpen(true) }
-  function openEdit(a: AliquotaRow) { setEditingAliquota(a); setModalOpen(true) }
+  const abrirNovo = () => { setEditing(null); setModalOpen(true) }
+  const abrirEdicao = (a: AliquotaRow) => { setEditing(a); setModalOpen(true) }
 
-  async function handleDelete(a: AliquotaRow) {
-    if (!confirm(`Excluir alíquota "${a.nome}"?`)) return
-    setDeletingId(a.id)
-    const result = await deleteAliquotaAction(a.id)
-    setDeletingId(null)
-    if ('error' in result) alert(result.error)
-    else router.refresh()
+  async function confirmarExclusao() {
+    const a = excluir
+    if (!a) return
+    setExcluindo(true)
+    const r = await toast.promise(deleteAliquotaAction(a.id), {
+      loading: `Excluindo ${a.nome}…`,
+      success: `Alíquota ${a.nome} excluída.`,
+      error: 'Não foi possível excluir a alíquota.',
+    })
+    setExcluindo(false)
+    setExcluir(null)
+    if (!('error' in r)) router.refresh()
   }
 
-  async function handleSeed() {
+  async function inicializar() {
     setSeeding(true)
-    const result = await seedDefaultAliquotasAction(companyId)
+    const r = await toast.promise(seedDefaultAliquotasAction(companyId), {
+      loading: 'Salvando as alíquotas padrão…',
+      success: 'Alíquotas padrão salvas.',
+      error: 'Não foi possível salvar as alíquotas.',
+    })
     setSeeding(false)
-    if ('error' in result) alert(result.error)
-    else router.refresh()
-  }
-
-  function handleExportCsv() {
-    downloadCsv(buildCustoCsv(employees, effectiveAliquotas), 'custo-funcionarios.csv')
+    if (!('error' in r)) router.refresh()
   }
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Encargos Trabalhistas
-            </h1>
-            <Breadcrumb />
-          </div>
-        </div>
-        {employees.length > 0 && (
-          <Button variant="ghost" onClick={handleExportCsv}>↓ Exportar custo CSV</Button>
-        )}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Encargos Trabalhistas</h1>
+        <Breadcrumb />
       </div>
 
-      {/* Cards de resumo */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <div className="p-4 app-card">
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total salários</p>
-          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha)}</p>
-        </div>
-        <div className="p-4 app-card">
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>FGTS mensal</p>
-          <p className="text-xl font-bold mt-1" style={{ color: '#E67E22' }}>{fmtCurrency(totalFgts)}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{fmtPct(fgtsPct)} sobre salário</p>
-        </div>
-        <div className="p-4 app-card">
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Outros encargos + prov.</p>
-          <p className="text-xl font-bold mt-1" style={{ color: '#C0392B' }}>{fmtCurrency(totalOutrosEnc)}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{fmtPct(outrosPct)} sobre salário</p>
-        </div>
-        <div className="p-4 app-card">
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Custo total empresa</p>
-          <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(totalFolha + totalEncargos + totalBeneficios)}</p>
-        </div>
-      </div>
+      <Tabs labels={['Custo por funcionário', 'Alíquotas']} step={aba} onSelect={setAba} />
 
-      {/* Gerenciamento de Alíquotas */}
-      <div className="app-card mb-4">
-        {/* Cabeçalho clicável */}
-        <button
-          type="button"
-          onClick={() => setShowAliquotas(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors rounded-xl"
-        >
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <p className="text-sm font-semibold shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
-              ALÍQUOTAS
-            </p>
-            {!showAliquotas && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {effectiveAliquotas.filter(a => a.ativo).map(a => (
-                  <span
-                    key={a.id || a.nome}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                    style={{
-                      backgroundColor: a.nome.toUpperCase().includes('FGTS') ? '#FEF3E7' : '#F4F6F7',
-                      color: a.nome.toUpperCase().includes('FGTS') ? '#E67E22' : 'var(--color-text-secondary)',
-                    }}
-                  >
-                    {a.nome}
-                    <strong>{fmtPct(a.percentual)}</strong>
-                  </span>
-                ))}
-                <span className="text-xs font-semibold ml-1" style={{ color: '#C0392B' }}>
-                  = {fmtPct(totalPct)} total
-                </span>
-              </div>
-            )}
-            {showAliquotas && (
-              <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                Total ativo: <strong style={{ color: '#C0392B' }}>{fmtPct(totalPct)}</strong>
-                {' '}· FGTS: <strong style={{ color: '#E67E22' }}>{fmtPct(fgtsPct)}</strong>
-                {' '}· Outros: <strong>{fmtPct(outrosPct)}</strong>
-              </span>
-            )}
-          </div>
-          <span className="text-xs ml-3 shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {showAliquotas ? '▲ Recolher' : '▼ Gerenciar'}
-          </span>
-        </button>
-
-        {/* Conteúdo expandível */}
-        {showAliquotas && (
-          <div className="px-4 pb-4 border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-            {usingFallback ? (
-              <div
-                className="mt-3 p-3 rounded-lg flex items-start justify-between gap-4"
-                style={{ backgroundColor: '#FEF9E7', borderLeft: '3px solid #F4D03F' }}
-              >
-                <div>
-                  <p className="text-xs font-semibold" style={{ color: '#9A7D0A' }}>
-                    Usando alíquotas padrão CLT
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: '#B7950B' }}>
-                    Clique em "Inicializar" para salvar e personalizar as alíquotas desta empresa.
-                  </p>
-                </div>
-                <Button size="sm" variant="ghost" loading={seeding} onClick={handleSeed}>
-                  Inicializar padrões
-                </Button>
-              </div>
-            ) : (
-              <div className="mt-3 rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                <table className="w-full text-sm">
-                  <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Nome / Descrição</th>
-                      <th className="text-right px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Percentual</th>
-                      <th className="text-left px-3 py-2 font-medium text-xs" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-                      <th className="px-3 py-2 w-20" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {aliquotas.map(a => (
-                      <tr key={a.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                        <td className="px-3 py-1.5" style={{ color: a.ativo ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-                          {a.nome}
-                          {a.nome.toUpperCase().includes('FGTS') && (
-                            <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#FEF3E7', color: '#E67E22' }}>
-                              depósito mensal
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-semibold"
-                          style={{ color: a.ativo ? (a.nome.toUpperCase().includes('FGTS') ? '#E67E22' : '#C0392B') : 'var(--color-text-muted)' }}>
-                          {fmtPct(a.percentual)}
-                        </td>
-                        <td className="px-3 py-1.5">
-                          <span
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                            style={{
-                              backgroundColor: a.ativo ? '#E9F7EF' : '#F4F6F7',
-                              color: a.ativo ? '#1E8449' : '#717D7E',
-                            }}
-                          >
-                            {a.ativo ? 'Ativa' : 'Inativa'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1.5">
-                          <div className="flex items-center gap-1 justify-end">
-                            <button
-                              onClick={() => openEdit(a)}
-                              className="text-xs px-2 py-1 rounded hover:bg-gray-100 transition-colors"
-                              style={{ color: 'var(--color-text-muted)' }}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => handleDelete(a)}
-                              disabled={deletingId === a.id}
-                              className="text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                              style={{ color: '#C0392B' }}
-                            >
-                              {deletingId === a.id ? '...' : 'Excluir'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between mt-3">
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                * Estimativa. Valores reais variam conforme RAT/FAP, atividade e regime tributário.
-              </p>
-              <Button size="sm" onClick={openAdd}>+ Adicionar alíquota</Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Busca */}
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Buscar funcionário..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full px-4 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-        />
-      </div>
-
-      {/* Tabela custo por funcionário */}
-      {employees.length === 0 ? (
-        <div className="app-card p-10 text-center">
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            Nenhum funcionário ativo com salário cadastrado.
-          </p>
-        </div>
-      ) : (
-        <div className="app-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <tr>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Salário</th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: '#E67E22' }}>
-                  FGTS <span style={{ fontWeight: 400, opacity: 0.7 }}>({fmtPct(fgtsPct)})</span>
-                </th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: '#C0392B' }}>
-                  Outros enc. <span style={{ fontWeight: 400, opacity: 0.7 }}>({fmtPct(outrosPct)})</span>
-                </th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: '#8E44AD' }}>Benefícios</th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Custo total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(emp => {
-                const sal  = emp.salario ?? 0
-                const fgts = calcFgts(sal, effectiveAliquotas)
-                const out  = calcOutrosEncargos(sal, effectiveAliquotas)
-                const ben  = calcBeneficios(emp)
-                return (
-                  <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                    <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
-                      <div className="font-medium">{emp.nome}</div>
-                      {emp.cargo && (
-                        <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{emp.cargo}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right" style={{ color: 'var(--color-text-primary)' }}>
-                      {fmtCurrency(sal)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold" style={{ color: '#E67E22' }}>
-                      {fmtCurrency(fgts)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold" style={{ color: '#C0392B' }}>
-                      {fmtCurrency(out)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold" style={{ color: '#8E44AD' }}>
-                      {fmtCurrency(ben)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                      {fmtCurrency(sal + fgts + out + ben)}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <tr>
-                <td colSpan={2} className="px-4 py-3 text-right font-semibold text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  TOTAIS
-                </td>
-                <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#E67E22' }}>
-                  {fmtCurrency(totalFgts)}
-                </td>
-                <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#C0392B' }}>
-                  {fmtCurrency(totalOutrosEnc)}
-                </td>
-                <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: '#8E44AD' }}>
-                  {fmtCurrency(totalBeneficios)}
-                </td>
-                <td className="px-4 py-3 text-right font-bold text-xs" style={{ color: 'var(--color-text-primary)' }}>
-                  {fmtCurrency(totalFolha + totalEncargos + totalBeneficios)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+      {aba === 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 mb-6">
+          <SummaryCard icon="users" title="Total de salários" value={fmtCurrency(totalFolha)} caption={`${employees.length} ${employees.length === 1 ? 'funcionário ativo' : 'funcionários ativos'}`} />
+          <SummaryCard icon="wallet" title="FGTS mensal" value={fmtCurrency(totalFgts)} caption={`${fmtPct(fgtsPct)} sobre o salário`} delay={60} />
+          <SummaryCard icon="file" title="Outros encargos e provisões" value={fmtCurrency(totalOutrosEnc)} caption={`${fmtPct(outrosPct)} sobre o salário`} delay={120} />
+          <SummaryCard icon="dollar" title="Custo total da empresa" value={fmtCurrency(totalFolha + totalFgts + totalOutrosEnc + totalBeneficios)} caption={`Inclui ${fmtCurrency(totalBeneficios)} de benefícios`} delay={180} />
         </div>
       )}
 
-      <ModalAliquota
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        aliquota={editingAliquota}
+      {/* Custo por funcionário */}
+      <div className={aba === 0 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome ou cargo..." />
+          {busca && <FilterResult total={visiveis.length} onClear={() => setBusca('')} />}
+          {employees.length > 0 && (
+            <button
+              type="button"
+              onClick={() => downloadCsv(buildCustoCsv(employees, effectiveAliquotas), 'custo-funcionarios.csv')}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-50 shrink-0"
+              style={{ borderColor: 'var(--color-card-border)', color: 'var(--color-text-secondary)' }}
+            >
+              <Icon name="download" size={16} /> Exportar CSV
+            </button>
+          )}
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {visiveis.length === 0 && <ListEmpty>{employees.length === 0 ? 'Nenhum funcionário ativo com salário cadastrado.' : 'Nenhum funcionário encontrado.'}</ListEmpty>}
+          {visiveis.map(e => {
+            const sal  = e.salario ?? 0
+            const fgts = calcFgts(sal, effectiveAliquotas)
+            const out  = calcOutrosEncargos(sal, effectiveAliquotas)
+            const ben  = calcBeneficios(e)
+            const abrirFicha = () => router.push(`/pessoas/funcionarios/${e.id}`)
+            return (
+              <ListItem
+                key={e.id}
+                media={<Avatar nome={e.nome} />}
+                title={e.nome}
+                subtitle={
+                  <>
+                    <span className="xl:hidden">Salário {fmtCurrency(sal)} · FGTS {fmtCurrency(fgts)} · Outros {fmtCurrency(out)} · Benefícios {fmtCurrency(ben)}</span>
+                    <span className="hidden xl:inline">{e.cargo ?? 'Sem cargo informado'}</span>
+                  </>
+                }
+                aside={
+                  <>
+                    <span className="hidden xl:grid grid-cols-4 gap-4 w-[28rem]">
+                      <Valor rotulo="Salário" valor={sal} />
+                      <Valor rotulo="FGTS" valor={fgts} />
+                      <Valor rotulo="Outros encargos" valor={out} />
+                      <Valor rotulo="Benefícios" valor={ben} />
+                    </span>
+                    <span className="xl:w-28 text-right">
+                      <span className="block text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Custo total</span>
+                      <span className="block font-bold tabular-nums whitespace-nowrap" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>{fmtCurrency(sal + fgts + out + ben)}</span>
+                    </span>
+                  </>
+                }
+                onClick={abrirFicha}
+                actionsLabel={e.nome}
+                actions={[{ icon: 'eye', label: 'Ver ficha', onClick: abrirFicha }]}
+              />
+            )
+          })}
+        </ul>
+
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          Estimativa. Os valores reais variam conforme RAT/FAP, atividade e regime tributário.
+        </p>
+      </div>
+
+      {/* Alíquotas */}
+      <div className={aba === 1 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
+              {fmtPct(totalPct)} <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>sobre o salário</span>
+            </h2>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+              FGTS {fmtPct(fgtsPct)} · outros encargos {fmtPct(outrosPct)} · {ativas.length} {ativas.length === 1 ? 'alíquota ativa' : 'alíquotas ativas'}
+            </p>
+          </div>
+          <AddButton onClick={abrirNovo} />
+        </div>
+
+        {usingFallback && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3" style={{ backgroundColor: 'var(--color-brand-light)' }}>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Usando as alíquotas padrão CLT</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>Salve os padrões para poder editar os percentuais desta empresa.</p>
+            </div>
+            <Button type="button" size="sm" loading={seeding} onClick={inicializar}>Salvar padrões</Button>
+          </div>
+        )}
+
+        <ul className="flex flex-col gap-3">
+          {usingFallback
+            ? FALLBACK_ALIQUOTAS.map(a => (
+                <li key={a.nome} className="flex items-center justify-between gap-4 rounded-xl border bg-white px-4 py-3.5" style={{ borderColor: 'var(--color-card-border)' }}>
+                  <span className="font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{a.nome}</span>
+                  <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--color-text-primary)' }}>{fmtPct(a.percentual)}</span>
+                </li>
+              ))
+            : aliquotas.map(a => (
+                <div key={a.id} style={{ opacity: a.ativo ? 1 : 0.55 }}>
+                  <ListItem
+                    icon="file"
+                    title={a.nome}
+                    subtitle={ehFgts(a) ? 'Depósito mensal' : 'Calculado sobre o salário bruto'}
+                    aside={
+                      <>
+                        <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{fmtPct(a.percentual)}</span>
+                        <StatusBadge status={a.ativo ? 'active' : 'inactive'} />
+                      </>
+                    }
+                    onClick={() => abrirEdicao(a)}
+                    actionsLabel={a.nome}
+                    actions={[
+                      { icon: 'pencil', label: 'Editar', onClick: () => abrirEdicao(a) },
+                      { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir(a) },
+                    ]}
+                  />
+                </div>
+              ))}
+        </ul>
+      </div>
+
+      <ModalAliquota open={modalOpen} onClose={() => setModalOpen(false)} companyId={companyId} aliquota={editing} />
+
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title="Excluir alíquota"
+        confirmLabel="Excluir"
+        message={<p>Excluir a alíquota <strong>{excluir?.nome}</strong>? Ela deixa de entrar no cálculo dos encargos.</p>}
       />
     </>
   )

@@ -1,435 +1,301 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { pdf } from '@react-pdf/renderer'
-import { Button } from '@/components/ui/button'
-import { RelatorioPdf } from './relatorio-folha-pdf'
-import { ModalLancamentoFolha } from './modal-lancamento-folha'
-import type { EmployeeForPayroll, PayrollEntryVariable } from '../queries'
-import type { AliquotaRow } from '../../encargos/queries'
-import type { Company } from '../../../empresa/queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
-import { descontoMensal, valorMensal } from '@/lib/beneficios-calculo'
-
-// ── INSS empregado 2024 — tabela progressiva ─────────────────────────────────
-const INSS_FAIXAS = [
-  { limite: 1412.00, aliq: 0.075 },
-  { limite: 2666.68, aliq: 0.09 },
-  { limite: 4000.03, aliq: 0.12 },
-  { limite: 7786.02, aliq: 0.14 },
-]
-function calcInssProgressivo(salario: number): number {
-  let inss = 0
-  let limiteAnterior = 0
-  const base = Math.min(salario, 7786.02)
-  for (const { limite, aliq } of INSS_FAIXAS) {
-    if (base <= limiteAnterior) break
-    inss += (Math.min(base, limite) - limiteAnterior) * aliq
-    limiteAnterior = limite
-  }
-  return Math.round(inss * 100) / 100
-}
-
-// ── IRRF 2024 ─────────────────────────────────────────────────────────────────
-const IRRF_FAIXAS = [
-  { limite: 2259.20,  aliq: 0,     deduz: 0 },
-  { limite: 2826.65,  aliq: 0.075, deduz: 169.44 },
-  { limite: 3751.05,  aliq: 0.15,  deduz: 381.44 },
-  { limite: 4664.68,  aliq: 0.225, deduz: 662.77 },
-  { limite: Infinity, aliq: 0.275, deduz: 896.00 },
-]
-const DEP_DEDUCAO = 189.59
-function calcIrrf(bruto: number, inss: number, dependentes: number): number {
-  const base = bruto - inss - dependentes * DEP_DEDUCAO
-  for (const f of IRRF_FAIXAS) {
-    if (base <= f.limite) return Math.max(0, Math.round((base * f.aliq - f.deduz) * 100) / 100)
-  }
-  return 0
-}
-
-// ── Encargos / FGTS ──────────────────────────────────────────────────────────
-const FALLBACK_ALIQUOTAS: AliquotaRow[] = [
-  { id: '', company_id: '', nome: 'FGTS', percentual: 8.00, ativo: true, ordem: 1, created_at: '' },
-  { id: '', company_id: '', nome: 'INSS Patronal', percentual: 20.00, ativo: true, ordem: 2, created_at: '' },
-  { id: '', company_id: '', nome: 'RAT/FAP', percentual: 2.00, ativo: true, ordem: 3, created_at: '' },
-  { id: '', company_id: '', nome: 'Sistema S', percentual: 5.80, ativo: true, ordem: 4, created_at: '' },
-  { id: '', company_id: '', nome: '13º Salário', percentual: 8.33, ativo: true, ordem: 5, created_at: '' },
-  { id: '', company_id: '', nome: 'Férias + 1/3', percentual: 11.11, ativo: true, ordem: 6, created_at: '' },
-]
-
-const RE_FGTS = /fgts/i
-function fgtsPercentual(aliquotas: AliquotaRow[]): number {
-  const f = aliquotas.find(a => a.ativo && RE_FGTS.test(a.nome))
-  return f ? f.percentual : 8
-}
-function outrosEncargos(salario: number, aliquotas: AliquotaRow[]): number {
-  return aliquotas
-    .filter(a => a.ativo && !RE_FGTS.test(a.nome))
-    .reduce((s, a) => s + salario * (a.percentual / 100), 0)
-}
-
-// ── VA / VT a partir dos benefícios vinculados ───────────────────────────────
-const RE_VT = /transp|\bvt\b|v\.?t\b/i
-const RE_VA = /aliment|refei|\bva\b|\bvr\b|v\.?[ar]\b/i
-
-function benefCost(eb: EmployeeForPayroll['employee_benefits'][number]): number {
-  return valorMensal(eb.benefit, eb.valor_override)
-}
-function custoBeneficio(benefits: EmployeeForPayroll['employee_benefits'], re: RegExp): number {
-  return benefits.filter(b => re.test(b.benefit.nome)).reduce((s, b) => s + benefCost(b), 0)
-}
-/** Desconto no salário dos benefícios escolhidos, pela regra de cada um */
-function descontoBeneficios(benefits: EmployeeForPayroll['employee_benefits'], salario: number): number {
-  return Math.round(benefits.reduce((s, b) => s + descontoMensal(b.benefit, b.valor_override, salario), 0) * 100) / 100
-}
-
-function fmtCurrency(v: number) {
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-function fmtDash(v: number) {
-  return v > 0 ? fmtCurrency(v) : '—'
-}
-function fmtDashInt(v: number) {
-  return v > 0 ? String(v) : '—'
-}
-
-function mesAnoLabel(mesAno: string) {
-  const [ano, mes] = mesAno.split('-')
-  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-  return `${meses[parseInt(mes) - 1]} ${ano}`
-}
-
-function buildRow(emp: EmployeeForPayroll, aliquotas: AliquotaRow[]) {
-  const salario   = emp.salario ?? 0
-  const pericul   = emp.tem_periculosidade ? Math.round(salario * 0.30 * 100) / 100 : 0
-  const bruto     = salario + pericul
-
-  const inss = calcInssProgressivo(bruto)
-  const irpf = calcIrrf(bruto, inss, emp.dependentes ?? 0)
-
-  const custoVT = Math.round(custoBeneficio(emp.employee_benefits, RE_VT) * 100) / 100
-  const custoVA = Math.round(custoBeneficio(emp.employee_benefits, RE_VA) * 100) / 100
-  const desc6VT = descontoBeneficios(emp.employee_benefits.filter(b => RE_VT.test(b.benefit.nome)), salario)
-  // VA e os demais benefícios com desconto (ex.: plano de saúde)
-  const fixoVA  = descontoBeneficios(emp.employee_benefits.filter(b => !RE_VT.test(b.benefit.nome)), salario)
-  const custoBeneficios = Math.round(emp.employee_benefits.reduce((s, b) => s + benefCost(b), 0) * 100) / 100
-
-  const liquido = Math.max(0, bruto - inss - irpf - desc6VT - fixoVA)
-
-  const fgtsPct = fgtsPercentual(aliquotas)
-  const fgts    = Math.round(bruto * (fgtsPct / 100) * 100) / 100
-  const outros  = Math.round(outrosEncargos(bruto, aliquotas) * 100) / 100
-  const custoTotal = bruto + fgts + outros + custoBeneficios - desc6VT - fixoVA
-
-  return {
-    emp, salario, pericul, bruto, inss, irpf,
-    desc6VT, fixoVA, liquido,
-    fgts, fgtsPct, custoVA, custoVT, custoTotal,
-  }
-}
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-select'
+import { Icon } from '@/components/ui/icon'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { Modal } from '@/components/ui/modal'
+import { toast } from '@/lib/toast'
+import { calcularFolha, horas, type MotivoSemApuracao, type ResultadoFolha } from '@/lib/folha/calculo'
+import { iniciais } from '../../funcionarios/components/ficha/ficha-config'
+import type { Company } from '../../../empresa/queries'
+import { fecharFolhaAction, reabrirFolhaAction } from '../actions'
+import type { LinhaFolha } from '../queries'
+import { ModalConferenciaFolha } from './modal-conferencia-folha'
+import type { PayrollPdfRow } from './relatorio-folha-pdf'
 
 interface Props {
-  employees: EmployeeForPayroll[]
-  aliquotas: AliquotaRow[]
+  linhas: LinhaFolha[]
+  fechada: boolean
   mesAno: string
   company: Company | null
   companyId: string
-  entries: Record<string, PayrollEntryVariable>
-  readOnly?: boolean
+  readOnly: boolean
 }
 
-export function FolhaClient({ employees, aliquotas: rawAliquotas, mesAno, company, companyId, entries, readOnly = false }: Props) {
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
+
+const SELO_MOTIVO: Partial<Record<MotivoSemApuracao, string>> = {
+  sem_escala: 'Sem escala',
+  sem_registros: 'Sem ponto no mês',
+}
+
+const FILTROS = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'ocorrencias', label: 'Com ocorrências' },
+  { value: 'atencao', label: 'Precisam de atenção' },
+  { value: 'editados', label: 'Editados' },
+]
+
+type Item = LinhaFolha & { r: ResultadoFolha; editado: boolean; atencao: string | null; temOcorrencia: boolean }
+
+function resumoPonto(l: Item) {
+  const v = l.r.valores
+  const he = l.ponto.he50Min + l.ponto.heFeriadoMin + l.ponto.heDomingoMin
+  const partes = [
+    v.desconto_faltas > 0 && plural(v.desconto_faltas, 'falta', 'faltas'),
+    v.atestados > 0 && plural(v.atestados, 'atestado', 'atestados'),
+    l.ponto.atrasoMin > 0 && `${horas(l.ponto.atrasoMin)} de atraso`,
+    he > 0 && `${horas(he)} de hora extra`,
+  ].filter(Boolean)
+  return partes.length ? partes.join(' · ') : l.employee.cargo ?? 'Sem ocorrências'
+}
+
+function Selo({ children, alerta }: { children: React.ReactNode; alerta?: boolean }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={alerta ? { backgroundColor: '#FEF3C7', color: '#B45309' } : { backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+      {children}
+    </span>
+  )
+}
+
+function Valor({ rotulo, valor, forte }: { rotulo: string; valor: number; forte?: boolean }) {
+  return (
+    <span className="text-right">
+      <span className="block text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{rotulo}</span>
+      <span className={`block text-sm tabular-nums whitespace-nowrap ${forte ? 'font-bold' : 'font-semibold'}`} style={{ color: forte ? 'var(--color-brand)' : 'var(--color-text-primary)', fontFamily: forte ? 'Manrope' : undefined }}>{moeda(valor)}</span>
+    </span>
+  )
+}
+
+// Folha do mês: tudo vem do ponto, da escala e dos benefícios; aqui só se confere, edita e fecha
+export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readOnly }: Props) {
   const router = useRouter()
-  const [mes, setMes] = useState(mesAno.split('-')[1])
-  const [ano, setAno] = useState(mesAno.split('-')[0])
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [ano, mes] = mesAno.split('-').map(Number)
+  const rotuloMes = `${MESES[mes - 1]} ${ano}`
 
-  // Modal state
-  const [modalOpen, setModalOpen]       = useState(false)
-  const [modalEmployee, setModalEmployee] = useState<EmployeeForPayroll | null>(null)
+  const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState('todos')
+  const [conferindo, setConferindo] = useState<LinhaFolha | null>(null)
+  const [gerandoPdf, setGerandoPdf] = useState(false)
+  const [confirmar, setConfirmar] = useState<'fechar' | 'reabrir' | null>(null)
+  const [processando, setProcessando] = useState(false)
 
-  const effectiveAliquotas = rawAliquotas.length > 0 ? rawAliquotas : FALLBACK_ALIQUOTAS
-  const rows = employees.map(emp => buildRow(emp, effectiveAliquotas))
+  const itens = useMemo<Item[]>(() => linhas.map((l) => {
+    const r = calcularFolha(l.insumos, l.ponto, l.ajustes)
+    const v = r.valores
+    return {
+      ...l,
+      r,
+      editado: Object.keys(l.ajustes).length > 0,
+      atencao: l.ponto.incompletos > 0 ? plural(l.ponto.incompletos, 'ponto incompleto', 'pontos incompletos') : (l.ponto.motivo && SELO_MOTIVO[l.ponto.motivo]) || null,
+      temOcorrencia: v.desconto_faltas + v.atestados + l.ponto.atrasoMin + l.ponto.he50Min + l.ponto.heFeriadoMin + l.ponto.heDomingoMin > 0,
+    }
+  }), [linhas])
 
-  function navigate(newMes: string, newAno: string) {
-    router.push(`/pessoas/folha-de-pagamento?mes=${newMes}&ano=${newAno}`)
+  const totais = useMemo(() => itens.reduce((t, { r }) => ({
+    bruto: t.bruto + r.bruto,
+    descontos: t.descontos + r.descontos,
+    liquido: t.liquido + r.liquido,
+    encargos: t.encargos + r.fgts + r.outrosEncargos,
+    fgts: t.fgts + r.fgts,
+    custo: t.custo + r.custoTotal,
+  }), { bruto: 0, descontos: 0, liquido: 0, encargos: 0, fgts: 0, custo: 0 }), [itens])
+
+  const q = busca.toLowerCase()
+  const visiveis = itens
+    .filter((l) => !q || l.employee.nome.toLowerCase().includes(q) || (l.employee.cargo ?? '').toLowerCase().includes(q))
+    .filter((l) => filtro === 'todos' || (filtro === 'ocorrencias' && l.temOcorrencia) || (filtro === 'atencao' && !!l.atencao) || (filtro === 'editados' && l.editado))
+
+  const comAtencao = itens.filter((l) => l.atencao).length
+
+  function navegar(delta: number) {
+    const d = new Date(Date.UTC(ano, mes - 1 + delta, 1))
+    router.push(`/pessoas/folha-de-pagamento?mes=${String(d.getUTCMonth() + 1).padStart(2, '0')}&ano=${d.getUTCFullYear()}`)
   }
-  function prevMonth() {
-    const d = new Date(parseInt(ano), parseInt(mes) - 2, 1)
-    const m = String(d.getMonth() + 1).padStart(2, '0'); const a = String(d.getFullYear())
-    setMes(m); setAno(a); navigate(m, a)
-  }
-  function nextMonth() {
-    const d = new Date(parseInt(ano), parseInt(mes), 1)
-    const m = String(d.getMonth() + 1).padStart(2, '0'); const a = String(d.getFullYear())
-    setMes(m); setAno(a); navigate(m, a)
-  }
 
-  function openModal(emp: EmployeeForPayroll) {
-    setModalEmployee(emp)
-    setModalOpen(true)
-  }
-
-  function handleSaved() {
-    // Refresh server data by navigating to same page
-    router.refresh()
-  }
-
-  async function handleExportPdf() {
-    setPdfLoading(true)
+  async function exportarPdf() {
+    setGerandoPdf(true)
     try {
-      const label = mesAnoLabel(mesAno)
-      const geradoEm = new Date().toLocaleString('pt-BR', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-      })
-      const pdfRows = rows.map(r => {
-        const entry = entries[r.emp.id]
-        return {
-          nome: r.emp.nome,
-          cpf: r.emp.cpf,
-          regime: r.emp.tipo_contrato ?? '',
-          cargo: r.emp.cargo,
-          bruto: r.bruto,
-          inss: r.inss,
-          irpf: r.irpf,
-          desc6VT: r.desc6VT,
-          fixoVA: r.fixoVA,
-          liquido: r.liquido,
-          fgts: r.fgts,
-          custoVA: r.custoVA,
-          custoVT: r.custoVT,
-          custoTotal: r.custoTotal,
-          statusContrato: r.emp.status_contrato,
-          dataAdmissao: r.emp.data_admissao,
-          vctoFerias: r.emp.vcto_ferias,
-          concederAte: r.emp.conceder_ferias_ate,
-          exame: r.emp.exame_periodico,
-          observacao: entry?.observacao ?? null,
-          faltas:    entry?.desconto_faltas       ?? 0,
-          atestados: entry?.atestados             ?? 0,
-          he50:      entry?.horas_extras          ?? 0,
-          heFeriado: entry?.horas_extras_feriado  ?? 0,
-          heDomingo: entry?.horas_extras_domingo  ?? 0,
-          comissao:  entry?.bonus                 ?? 0,
-          descVT:    entry?.desconto_vt           ?? 0,
-          descVR:    entry?.desconto_vr           ?? 0,
-        }
-      })
-      const tot = rows.reduce(
-        (t, r) => ({ bruto: t.bruto + r.bruto, inss: t.inss + r.inss, irpf: t.irpf + r.irpf, liquido: t.liquido + r.liquido, fgts: t.fgts + r.fgts, custo: t.custo + r.custoTotal }),
-        { bruto: 0, inss: 0, irpf: 0, liquido: 0, fgts: 0, custo: 0 }
-      )
-      const blob = await pdf(
-        <RelatorioPdf company={company} rows={pdfRows} totals={tot} mesAnoLabel={label} geradoEm={geradoEm} />
-      ).toBlob()
+      const [{ pdf }, { RelatorioPdf }] = await Promise.all([import('@react-pdf/renderer'), import('./relatorio-folha-pdf')])
+      const geradoEm = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date())
+      const rows: PayrollPdfRow[] = itens.map(({ employee: e, insumos, ponto, r, observacao }) => ({
+        nome: e.nome,
+        cargo: e.cargo,
+        salario: insumos.salario + r.periculosidade,
+        diasTrabalhados: ponto.motivo ? null : ponto.diasTrabalhados,
+        faltas: r.valores.desconto_faltas,
+        atestados: r.valores.atestados,
+        atrasos: r.valores.desconto_atrasos,
+        atrasoMin: ponto.atrasoMin,
+        he50: r.valores.horas_extras,
+        he50Min: ponto.he50Min,
+        heFeriado: r.valores.horas_extras_feriado,
+        heFeriadoMin: ponto.heFeriadoMin,
+        heDomingo: r.valores.horas_extras_domingo,
+        heDomingoMin: ponto.heDomingoMin,
+        comissao: r.valores.bonus,
+        alimentacao: r.alimentacao,
+        transporte: r.transporte,
+        bruto: r.bruto,
+        inss: r.inss,
+        irrf: r.irrf,
+        descVT: r.valores.desconto_vt,
+        descVR: r.valores.desconto_vr,
+        descOutros: r.valores.desconto_outros,
+        adiantamento: r.valores.desconto_adiantamento,
+        liquido: r.liquido,
+        fgts: r.fgts,
+        encargos: r.outrosEncargos,
+        custoTotal: r.custoTotal,
+        observacao,
+      }))
+      const blob = await pdf(<RelatorioPdf company={company} rows={rows} mesAnoLabel={rotuloMes} geradoEm={geradoEm} fechada={fechada} />).toBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `folha-${label.replace(' ', '-')}.pdf`
+      a.download = `folha-${mesAno}.pdf`
       a.click()
       URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('[folha] PDF:', e)
+      toast.error('Não foi possível gerar o PDF.')
     } finally {
-      setPdfLoading(false)
+      setGerandoPdf(false)
     }
   }
 
-  const tot = rows.reduce(
-    (t, r) => ({ bruto: t.bruto + r.bruto, inss: t.inss + r.inss, irpf: t.irpf + r.irpf, liquido: t.liquido + r.liquido, fgts: t.fgts + r.fgts, custo: t.custo + r.custoTotal }),
-    { bruto: 0, inss: 0, irpf: 0, liquido: 0, fgts: 0, custo: 0 }
-  )
-
-  const TH: React.CSSProperties = {
-    color: 'var(--color-text-secondary)',
-    fontSize: '0.65rem',
-    fontWeight: 600,
-    padding: '8px 10px',
-    whiteSpace: 'nowrap',
-    backgroundColor: 'var(--color-bg-surface)',
+  async function executar() {
+    const acao = confirmar
+    if (!acao) return
+    setProcessando(true)
+    const r = await toast.promise(acao === 'fechar' ? fecharFolhaAction(companyId, mesAno) : reabrirFolhaAction(companyId, mesAno), {
+      loading: acao === 'fechar' ? 'Fechando a folha…' : 'Reabrindo a folha…',
+      success: acao === 'fechar' ? `Folha de ${rotuloMes} fechada.` : `Folha de ${rotuloMes} reaberta.`,
+      error: 'Não foi possível concluir.',
+    })
+    setProcessando(false)
+    setConfirmar(null)
+    if (!('error' in r)) router.refresh()
   }
-  const TD: React.CSSProperties = { padding: '9px 10px', fontSize: '0.72rem', whiteSpace: 'nowrap' }
-  const muted = 'var(--color-text-muted)'
 
-  const TOTAL_COLS = 14
+  const seta = 'w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-gray-100'
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Folha de Pagamento
-            </h1>
-            <Breadcrumb />
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 border rounded-lg px-3 py-1.5" style={{ borderColor: 'var(--color-bg-surface)' }}>
-            <button onClick={prevMonth} className="text-sm font-bold hover:opacity-70" style={{ color: muted }}>‹</button>
-            <span className="text-sm font-semibold min-w-[140px] text-center" style={{ color: 'var(--color-text-primary)' }}>
-              {mesAnoLabel(mesAno)}
-            </span>
-            <button onClick={nextMonth} className="text-sm font-bold hover:opacity-70" style={{ color: muted }}>›</button>
-          </div>
-          {rows.length > 0 && (
-            <Button variant="ghost" onClick={handleExportPdf} loading={pdfLoading}>↓ PDF</Button>
-          )}
-        </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Folha de Pagamento</h1>
+        <Breadcrumb />
       </div>
 
-      {/* Aviso de estimativas */}
-      <div className="mb-4 p-3 rounded-lg text-xs" style={{ backgroundColor: '#EBF5FB', color: '#2471A3' }}>
-        Informações para envio a contabilidade
+      <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="users" title="Salários brutos" value={moeda(totais.bruto)} caption={plural(itens.length, 'pessoa na folha', 'pessoas na folha')} />
+        <SummaryCard icon="wallet" title="Líquido a pagar" value={moeda(totais.liquido)} caption={`${moeda(totais.descontos)} de descontos`} delay={60} />
+        <SummaryCard icon="file" title="FGTS e encargos" value={moeda(totais.encargos)} caption={`FGTS ${moeda(totais.fgts)}`} delay={120} />
+        <SummaryCard icon="dollar" title="Custo total da empresa" value={moeda(totais.custo)} caption="Inclui encargos e benefícios" delay={180} />
       </div>
 
-      {/* Grid */}
-      <div className="app-card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr>
-              <th style={{ ...TH, textAlign: 'left', minWidth: 180 }}>Nome</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 110 }}>Sal. Bruto</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 90 }}>Alimentação</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 90 }}>Transporte</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 70 }}>Faltas</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 75 }}>Atestados</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 80 }}>HE 50%</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 95 }}>HE Feriado</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 95 }}>HE Domingo</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 90 }}>Comissão</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 85 }}>Desc. VT</th>
-              <th style={{ ...TH, textAlign: 'right', minWidth: 85 }}>Desc. VR</th>
-              <th style={{ ...TH, textAlign: 'left',  minWidth: 120 }}>Obs</th>
-              <th style={{ ...TH, textAlign: 'center', minWidth: 70 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={TOTAL_COLS} className="text-center py-12 text-sm" style={{ color: muted }}>
-                  Nenhum funcionário ativo com salário cadastrado.
-                </td>
-              </tr>
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1" style={{ color: 'var(--color-sidebar-text)' }}>
+            <button type="button" onClick={() => navegar(-1)} aria-label="Mês anterior" className={seta}><Icon name="chevron-left" size={18} /></button>
+            <span className="w-36 text-center text-sm font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{rotuloMes}</span>
+            <button type="button" onClick={() => navegar(1)} aria-label="Próximo mês" className={seta}><Icon name="chevron-right" size={18} /></button>
+            <span className="ml-2"><Selo alerta={!fechada}>{fechada ? 'Fechada' : 'Em conferência'}</Selo></span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {itens.length > 0 && <Button type="button" variant="secondary" size="sm" loading={gerandoPdf} onClick={exportarPdf}><Icon name="download" size={16} /> Baixar PDF</Button>}
+            {!readOnly && itens.length > 0 && (
+              fechada
+                ? <Button type="button" variant="secondary" size="sm" onClick={() => setConfirmar('reabrir')}>Reabrir folha</Button>
+                : <Button type="button" size="sm" onClick={() => setConfirmar('fechar')}>Fechar folha</Button>
             )}
-            {rows.map((r, idx) => {
-              const rowBg = idx % 2 === 0 ? 'white' : '#FAFAFA'
-              const entry = entries[r.emp.id]
-              const hasEntry = !!entry
-              return (
-                <tr key={r.emp.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: rowBg }}>
-                  <td style={{ ...TD, fontWeight: 500, color: 'var(--color-text-primary)' }}>
-                    {r.emp.nome}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                    {fmtCurrency(r.bruto)}
-                    {r.pericul > 0 && <div style={{ fontSize: '0.6rem', color: '#E67E22', fontWeight: 500 }}>+peric. {fmtCurrency(r.pericul)}</div>}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: r.custoVA > 0 ? 'var(--color-text-secondary)' : muted }}>
-                    {r.custoVA > 0 ? fmtCurrency(r.custoVA) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: r.custoVT > 0 ? 'var(--color-text-secondary)' : muted }}>
-                    {r.custoVT > 0 ? fmtCurrency(r.custoVT) : '—'}
-                  </td>
-                  {/* Variable fields from payroll_entries */}
-                  <td style={{ ...TD, textAlign: 'right', color: hasEntry && (entry.desconto_faltas ?? 0) > 0 ? '#C0392B' : muted }}>
-                    {hasEntry ? fmtDashInt(entry.desconto_faltas ?? 0) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: hasEntry && (entry.atestados ?? 0) > 0 ? '#2471A3' : muted }}>
-                    {hasEntry ? fmtDashInt(entry.atestados ?? 0) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: hasEntry && (entry.horas_extras ?? 0) > 0 ? '#1E8449' : muted }}>
-                    {hasEntry ? fmtDash(entry.horas_extras ?? 0) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: hasEntry && (entry.horas_extras_feriado ?? 0) > 0 ? '#1E8449' : muted }}>
-                    {hasEntry ? fmtDash(entry.horas_extras_feriado ?? 0) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: hasEntry && (entry.horas_extras_domingo ?? 0) > 0 ? '#1E8449' : muted }}>
-                    {hasEntry ? fmtDash(entry.horas_extras_domingo ?? 0) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: hasEntry && (entry.bonus ?? 0) > 0 ? '#8E44AD' : muted }}>
-                    {hasEntry ? fmtDash(entry.bonus ?? 0) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: hasEntry && (entry.desconto_vt ?? 0) > 0 ? '#C0392B' : muted }}>
-                    {hasEntry ? fmtDash(entry.desconto_vt ?? 0) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right', color: hasEntry && (entry.desconto_vr ?? 0) > 0 ? '#C0392B' : muted }}>
-                    {hasEntry ? fmtDash(entry.desconto_vr ?? 0) : '—'}
-                  </td>
-                  <td style={{ ...TD, color: muted, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }} title={entry?.observacao ?? ''}>
-                    {entry?.observacao ? (
-                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.68rem' }} title={entry.observacao}>
-                        {entry.observacao.length > 20 ? entry.observacao.slice(0, 20) + '…' : entry.observacao}
-                      </span>
-                    ) : '—'}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'center' }}>
-                    {!readOnly && (
-                      <button
-                        onClick={() => openModal(r.emp)}
-                        title="Lançar dados variáveis do mês"
-                        style={{
-                          padding: '4px 10px',
-                          fontSize: '0.68rem',
-                          fontWeight: 600,
-                          borderRadius: 6,
-                          border: '1px solid',
-                          cursor: 'pointer',
-                          borderColor: hasEntry ? '#2471A3' : '#D1D5DB',
-                          backgroundColor: hasEntry ? '#EBF5FB' : 'transparent',
-                          color: hasEntry ? '#2471A3' : muted,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {hasEntry ? '✏️' : '+'} Lançar
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-          {rows.length > 0 && (
-            <tfoot>
-              <tr style={{ backgroundColor: 'var(--color-bg-surface)', borderTop: '2px solid #E5E7EB' }}>
-                <td style={{ ...TD, fontWeight: 700, color: 'var(--color-text-secondary)' }}>TOTAL — {rows.length}</td>
-                <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: 'var(--color-text-primary)' }}>{fmtCurrency(tot.bruto)}</td>
-                <td colSpan={TOTAL_COLS - 2} />
-              </tr>
-            </tfoot>
-          )}
-        </table>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterSelect value={filtro} onChange={setFiltro} label="Filtrar" options={FILTROS} />
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome ou cargo..." />
+          {(filtro !== 'todos' || busca) && <FilterResult total={visiveis.length} onClear={() => { setFiltro('todos'); setBusca('') }} />}
+        </div>
+
+        {!fechada && comAtencao > 0 && (
+          <p className="text-sm rounded-lg px-3 py-2" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>
+            {plural(comAtencao, 'pessoa precisa', 'pessoas precisam')} de atenção antes do fechamento: há ponto incompleto, sem escala ou sem batidas no mês.
+          </p>
+        )}
+
+        <ul className="flex flex-col gap-3">
+          {visiveis.length === 0 && <ListEmpty>{itens.length === 0 ? 'Nenhum funcionário ativo com salário cadastrado.' : 'Nenhum funcionário encontrado.'}</ListEmpty>}
+          {visiveis.map((l) => (
+            <ListItem
+              key={l.employee.id}
+              media={
+                <span className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
+                  {iniciais(l.employee.nome)}
+                </span>
+              }
+              title={l.employee.nome}
+              subtitle={resumoPonto(l)}
+              aside={
+                <>
+                  {l.atencao && <Selo alerta>{l.atencao}</Selo>}
+                  {l.editado && <span className="hidden sm:inline"><Selo>Editado</Selo></span>}
+                  <span className="hidden xl:grid grid-cols-2 gap-4 w-56">
+                    <Valor rotulo="Bruto" valor={l.r.bruto} />
+                    <Valor rotulo="Descontos" valor={l.r.descontos} />
+                  </span>
+                  <span className="xl:w-28"><Valor rotulo="Líquido" valor={l.r.liquido} forte /></span>
+                </>
+              }
+              onClick={() => setConferindo(l)}
+              actionsLabel={l.employee.nome}
+              actions={[{ icon: fechada || readOnly ? 'eye' : 'pencil', label: fechada || readOnly ? 'Ver detalhes' : 'Conferir e editar', onClick: () => setConferindo(l) }]}
+            />
+          ))}
+        </ul>
+
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          Estimativa para envio à contabilidade, com INSS e IRRF pelas tabelas de 2026. DSR, adicional noturno, férias e 13º não entram no cálculo.
+        </p>
       </div>
 
-      {/* Exportar para contabilidade */}
-      {rows.length > 0 && (
-        <div className="mt-4 flex items-center justify-between p-4 app-card">
-          <div>
-            <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Enviar para a contabilidade</p>
-            <p className="text-xs mt-0.5" style={{ color: muted }}>
-              Exporta a folha de {mesAnoLabel(mesAno)} com dados da empresa, resumo executivo e todas as seções.
-            </p>
-          </div>
-          <Button variant="ghost" onClick={handleExportPdf} loading={pdfLoading}>↓ PDF</Button>
-        </div>
-      )}
-
-      {/* Modal de lançamento */}
-      {modalEmployee && (
-        <ModalLancamentoFolha
-          open={modalOpen}
-          onClose={() => setModalOpen(false)}
-          onSaved={handleSaved}
+      {conferindo && (
+        <ModalConferenciaFolha
+          key={conferindo.employee.id}
+          linha={conferindo}
           companyId={companyId}
-          employeeId={modalEmployee.id}
-          employeeName={modalEmployee.nome}
-          salarioBase={modalEmployee.salario ?? 0}
           mesAno={mesAno}
-          existing={entries[modalEmployee.id] ?? null}
+          somenteLeitura={fechada || readOnly}
+          onClose={() => setConferindo(null)}
         />
       )}
+
+      <Modal open={confirmar !== null} onClose={() => { if (!processando) setConfirmar(null) }} title={confirmar === 'fechar' ? `Fechar a folha de ${rotuloMes}` : `Reabrir a folha de ${rotuloMes}`}>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            {confirmar === 'fechar'
+              ? `Os valores ficam congelados e ${moeda(totais.liquido)} de salários, além dos benefícios, entram no fluxo de caixa como pagamentos pendentes.`
+              : 'Os lançamentos pendentes desta folha saem do fluxo de caixa e os valores voltam a acompanhar o ponto.'}
+          </p>
+          {confirmar === 'fechar' && comAtencao > 0 && (
+            <p className="text-sm rounded-lg px-3 py-2" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>
+              {plural(comAtencao, 'pessoa ainda precisa', 'pessoas ainda precisam')} de atenção. Os dias com ponto incompleto não entram no cálculo.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setConfirmar(null)} disabled={processando}>Cancelar</Button>
+            <Button type="button" loading={processando} onClick={executar}>{confirmar === 'fechar' ? 'Fechar folha' : 'Reabrir folha'}</Button>
+          </div>
+        </div>
+      </Modal>
     </>
   )
 }

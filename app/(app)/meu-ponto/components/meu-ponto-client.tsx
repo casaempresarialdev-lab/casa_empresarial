@@ -1,15 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
-import { Input } from '@/components/ui/input'
+import { CamposBatidas } from '@/components/modules/ponto/campos-batidas'
 import { Modal } from '@/components/ui/modal'
 import { toast } from '@/lib/toast'
-import { CAMPOS_PONTO, ROTULOS_PONTO, ajustePontoSchema, horaDe, type CampoPonto } from '@/lib/validations/ponto'
+import { aguardarLocal, lerLocal, type LocalBatida } from '@/lib/ponto'
+import { ajustePontoSchema, faixasDeHorario, horaDe } from '@/lib/validations/ponto'
 import { solicitarAjusteAction } from '../actions'
 import type { AjustePonto, DiaPonto } from '../queries'
 
@@ -35,27 +36,27 @@ function rotuloDia(data: string) {
 
 function ModalAjuste({ dia, onClose }: { dia: DiaPonto; onClose: () => void }) {
   const router = useRouter()
-  const [horarios, setHorarios] = useState<Record<CampoPonto, string>>(() => ({
-    entrada: horaDe(dia.registro?.entrada),
-    saida_almoco: horaDe(dia.registro?.saida_almoco),
-    retorno_almoco: horaDe(dia.registro?.retorno_almoco),
-    saida: horaDe(dia.registro?.saida),
-  }))
+  const atuais = dia.horarios.map((h) => horaDe(h))
+  const [horarios, setHorarios] = useState<string[]>(() => (atuais.length ? atuais : ['']))
   const [motivo, setMotivo] = useState('')
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
+  // Localização lida ao abrir, para já estar pronta no envio
+  const localRef = useRef<Promise<LocalBatida> | null>(null)
+
+  useEffect(() => { localRef.current = lerLocal() }, [])
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
-    const dados = { data: dia.data, ...horarios, motivo }
+    const batidas = horarios.filter(Boolean)
+    const dados = { data: dia.data, batidas, motivo }
     const v = ajustePontoSchema.safeParse(dados)
     if (!v.success) { setErro(v.error.issues[0].message); return }
-    const semMudanca = CAMPOS_PONTO.every((c) => horarios[c] === horaDe(dia.registro?.[c]))
-    if (semMudanca) { setErro('Altere ao menos um horário.'); return }
+    if (batidas.join() === atuais.join()) { setErro('Altere ao menos um horário.'); return }
 
     setErro('')
     setEnviando(true)
-    const r = await toast.promise(solicitarAjusteAction(dados), {
+    const r = await toast.promise(aguardarLocal(localRef.current).then((local) => solicitarAjusteAction(dados, local)), {
       loading: 'Enviando o ajuste…',
       success: 'Ajuste enviado para aprovação.',
       error: 'Não foi possível enviar o ajuste.',
@@ -69,13 +70,9 @@ function ModalAjuste({ dia, onClose }: { dia: DiaPonto; onClose: () => void }) {
   return (
     <Modal open onClose={() => { if (!enviando) onClose() }} title="Ajustar ponto" description={rotuloDia(dia.data).completo}>
       <form onSubmit={enviar} noValidate className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3">
-          {CAMPOS_PONTO.map((c) => (
-            <Input key={c} label={ROTULOS_PONTO[c]} type="time" value={horarios[c]} onChange={(e) => setHorarios((h) => ({ ...h, [c]: e.target.value }))} />
-          ))}
-        </div>
+        <CamposBatidas valor={horarios} onChange={setHorarios} />
         <div className="flex flex-col gap-1">
-          <label htmlFor="ajuste-motivo" className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Motivo *</label>
+          <label htmlFor="ajuste-motivo" className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Observação *</label>
           <textarea
             id="ajuste-motivo"
             rows={3}
@@ -133,13 +130,8 @@ export function MeuPontoClient({ dias, periodo, mesAtual, bloqueio }: { dias: Di
                       <p className="text-lg font-extrabold leading-none" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{dia}</p>
                       <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{semana}</p>
                     </div>
-                    <div className="flex-1 min-w-[260px] grid grid-cols-4 gap-2">
-                      {CAMPOS_PONTO.map((c) => (
-                        <div key={c}>
-                          <p className="text-[11px] truncate" style={{ color: 'var(--color-text-muted)' }}>{ROTULOS_PONTO[c]}</p>
-                          <p className="text-sm font-semibold tabular-nums" style={{ color: d.registro?.[c] ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{horaDe(d.registro?.[c]) || '--:--'}</p>
-                        </div>
-                      ))}
+                    <div className="flex-1 min-w-[180px] flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold tabular-nums" style={{ color: d.horarios.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+                      {d.horarios.length ? faixasDeHorario(d.horarios).map((f, i) => <span key={i}>{f}</span>) : <span>Sem batidas</span>}
                     </div>
                     {s && (
                       <span title={d.ajuste?.resposta ?? d.ajuste?.motivo} className="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: s.fundo, color: s.cor }}>{s.texto}</span>

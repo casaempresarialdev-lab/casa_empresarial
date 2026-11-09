@@ -1,32 +1,15 @@
 import { z } from 'zod'
 
-const hora = z.string().regex(/^(\d{2}:\d{2})?$/, 'Hora inválida')
-
-export const CAMPOS_PONTO = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida'] as const
-export type CampoPonto = (typeof CAMPOS_PONTO)[number]
-
-export const ROTULOS_PONTO: Record<CampoPonto, string> = {
-  entrada: 'Entrada',
-  saida_almoco: 'Saída almoço',
-  retorno_almoco: 'Retorno almoço',
-  saida: 'Saída',
-}
+/** Horários digitados de um dia ("08:00", "12:00"...), em ordem */
+export const horariosSchema = z
+  .array(z.string().regex(/^\d{2}:\d{2}$/, 'Hora inválida'))
+  .max(100, 'Use até 100 batidas por dia')
+  .refine((h) => h.every((v, i) => i === 0 || v > h[i - 1]), 'Cada batida precisa ser depois da anterior')
 
 export const ajustePontoSchema = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida'),
-  entrada: hora,
-  saida_almoco: hora,
-  retorno_almoco: hora,
-  saida: hora,
-  motivo: z.string().trim().min(3, 'Informe o motivo do ajuste').max(500, 'Use até 500 caracteres'),
-}).superRefine((d, ctx) => {
-  const preenchidos = CAMPOS_PONTO.filter((c) => d[c])
-  if (!preenchidos.length) ctx.addIssue({ code: 'custom', path: ['entrada'], message: 'Informe ao menos um horário' })
-  for (let i = 1; i < preenchidos.length; i++) {
-    if (d[preenchidos[i]] <= d[preenchidos[i - 1]]) {
-      ctx.addIssue({ code: 'custom', path: [preenchidos[i]], message: `${ROTULOS_PONTO[preenchidos[i]]} precisa ser depois de ${ROTULOS_PONTO[preenchidos[i - 1]].toLowerCase()}` })
-    }
-  }
+  batidas: horariosSchema.refine((h) => h.length > 0, 'Informe ao menos um horário'),
+  motivo: z.string().trim().min(3, 'Informe a observação do ajuste').max(500, 'Use até 500 caracteres'),
 })
 
 export type AjustePontoInput = z.infer<typeof ajustePontoSchema>
@@ -38,3 +21,10 @@ const FORMATO_HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute:
 
 /** Horário gravado → "08:30" */
 export const horaDe = (ts: string | null | undefined) => (ts ? FORMATO_HORA.format(new Date(ts)) : '')
+
+/** Batidas em pares: ["08:00–12:00", "13:00–--:--"] */
+export function faixasDeHorario(horarios: string[]): string[] {
+  const faixas: string[] = []
+  for (let i = 0; i < horarios.length; i += 2) faixas.push(`${horaDe(horarios[i])}–${horaDe(horarios[i + 1]) || '--:--'}`)
+  return faixas
+}

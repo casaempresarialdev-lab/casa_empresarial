@@ -5,14 +5,11 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { semAcesso } from '@/lib/auth/acesso'
 import { verifySecurityPin } from '@/lib/security-pin'
-import { minutosDeEspera } from '@/lib/ponto'
+import { minutosDeEspera, type Batida, type LocalBatida } from '@/lib/ponto'
+import { origemDaRequisicao } from '@/lib/ponto-servidor'
 
-export type TipoBatida = 'entrada' | 'saida_almoco' | 'retorno_almoco' | 'saida'
-
-const TIPOS: TipoBatida[] = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida']
-
-// Id do recibo: o id do registro do dia (único) + a batida, que só acontece uma vez em cada registro
-const SUFIXO_RECIBO: Record<TipoBatida, string> = { entrada: 'ENT', saida_almoco: 'ALM', retorno_almoco: 'RET', saida: 'SAI' }
+// Lançados pelo responsável: o dia não é de trabalho, a menos que ele altere o lançamento
+const DIA_SEM_PONTO: Record<string, string> = { falta: 'falta', ferias: 'férias', atestado: 'atestado', folga: 'folga' }
 
 /** Dia de hoje no Brasil (o servidor roda em UTC) */
 const hojeBrasil = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d)
@@ -23,15 +20,14 @@ const hojeBrasil = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Am
  */
 export async function baterPontoAction(
   pin: string,
-  dados: { tipo: TipoBatida; lat: number | null; lng: number | null; endereco: string | null },
-): Promise<{ success: true; tipo: TipoBatida; em: string; id: string } | { error: string }> {
+  local: LocalBatida,
+): Promise<{ success: true; em: string; id: string } | { error: string }> {
   const negado = await semAcesso('visao-geral.bater-ponto')
   if (negado) return negado
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Sessão inválida. Faça login novamente.' }
-  if (!TIPOS.includes(dados.tipo)) return { error: 'Ação inválida.' }
 
   const check = await verifySecurityPin(user.id, pin)
   if (!check.ok) return { error: check.error }
@@ -54,42 +50,41 @@ export async function baterPontoAction(
   const agora = new Date()
   const hoje = hojeBrasil(agora)
   const ts = agora.toISOString()
-  const { tipo } = dados
-  const localizacao = dados.lat && dados.lng ? { lat: dados.lat, lng: dados.lng, endereco: dados.endereco } : null
+  const nova: Batida = { em: ts, origem: await origemDaRequisicao(local, ts) }
 
   const { data: registro } = await admin
     .from('time_records')
-    .select('id, entrada, saida_almoco, retorno_almoco, saida')
+    .select('id, batidas, tipo')
     .eq('company_id', companyId)
     .eq('employee_id', funcionario.id)
     .eq('data', hoje)
     .maybeSingle()
 
   // Evita registros repetidos
-  const espera = minutosDeEspera([registro?.entrada, registro?.saida_almoco, registro?.retorno_almoco, registro?.saida], agora)
+  const anteriores = (registro?.batidas ?? []) as Batida[]
+  const espera = minutosDeEspera(anteriores.map((b) => b.em), agora)
   if (espera > 0) return { error: `Aguarde ${espera} ${espera === 1 ? 'minuto' : 'minutos'} para registrar de novo.` }
+  if (registro && !anteriores.length && DIA_SEM_PONTO[registro.tipo as string]) {
+    return { error: `Este dia foi lançado como ${DIA_SEM_PONTO[registro.tipo as string]}. Fale com o responsável.` }
+  }
 
+  // Em ordem: um lançamento manual pode ter deixado horários mais tarde que agora
+  const batidas = [...anteriores, nova].sort((a, b) => Date.parse(a.em) - Date.parse(b.em))
   let registroId: string
-  if (tipo === 'entrada') {
-    if (registro?.entrada) return { error: 'Entrada já registrada hoje.' }
+  if (registro) {
+    const { error } = await admin.from('time_records').update({ batidas }).eq('id', registro.id)
+    if (error) return { error: error.message }
+    registroId = registro.id as string
+  } else {
     const { data: novo, error } = await admin.from('time_records').insert({
-      company_id: companyId, employee_id: funcionario.id, data: hoje, entrada: ts, tipo: 'normal', localizacao,
+      company_id: companyId, employee_id: funcionario.id, data: hoje, tipo: 'normal', batidas,
     }).select('id').single()
     if (error || !novo) return { error: error?.message ?? 'Não foi possível registrar o ponto.' }
     registroId = novo.id as string
-  } else {
-    if (!registro?.entrada) return { error: 'Registre a entrada primeiro.' }
-    if (tipo === 'saida_almoco' && registro.saida_almoco) return { error: 'Saída do almoço já registrada.' }
-    if (tipo === 'retorno_almoco' && !registro.saida_almoco) return { error: 'Registre a saída do almoço primeiro.' }
-    if (tipo === 'retorno_almoco' && registro.retorno_almoco) return { error: 'Retorno do almoço já registrado.' }
-    if (tipo === 'saida' && registro.saida) return { error: 'Saída já registrada hoje.' }
-
-    const { error } = await admin.from('time_records').update({ [tipo]: ts, localizacao }).eq('id', registro.id)
-    if (error) return { error: error.message }
-    registroId = registro.id as string
   }
 
   revalidatePath('/registrar-ponto')
   revalidatePath('/pessoas/registro-de-ponto')
-  return { success: true, tipo, em: ts, id: `${registroId}-${SUFIXO_RECIBO[tipo]}`.toUpperCase() }
+  // Id do recibo: o id do registro do dia + o número da batida
+  return { success: true, em: ts, id: `${registroId}-${String(batidas.length).padStart(2, '0')}`.toUpperCase() }
 }

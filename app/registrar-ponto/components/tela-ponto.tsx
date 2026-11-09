@@ -1,34 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Modal } from '@/components/ui/modal'
 import { ModalPinConfirmacao, ModalSemPin } from '@/components/ui/modal-pin'
-import { minutosDeEspera } from '@/lib/ponto'
-import { baterPontoAction, type TipoBatida } from '../actions'
+import { aguardarLocal, lerLocal, minutosDeEspera, rotuloBatida, type LocalBatida } from '@/lib/ponto'
+import { baterPontoAction } from '../actions'
 
 const FUSO = 'America/Sao_Paulo'
 const RELOGIO = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: FUSO })
 const DATA = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: FUSO })
 const DATA_RECIBO = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: FUSO })
-
-export type RegistroHoje = {
-  entrada: string | null
-  saida_almoco: string | null
-  retorno_almoco: string | null
-  saida: string | null
-} | null
-
-function proximaBatida(r: RegistroHoje): TipoBatida | null {
-  if (!r?.entrada) return 'entrada'
-  if (r.saida) return null
-  if (!r.saida_almoco) return 'saida_almoco'
-  if (!r.retorno_almoco) return 'retorno_almoco'
-  return 'saida'
-}
 
 const GRADIENTE = 'linear-gradient(145deg, var(--color-brand), color-mix(in srgb, var(--color-brand) 68%, #000))'
 
@@ -53,20 +38,21 @@ interface Props {
   funcionario: string | null
   /** Motivo de não poder bater o ponto; sem motivo, está liberado */
   bloqueio: string | null
-  registro: RegistroHoje
+  /** Batidas de hoje */
+  horarios: string[]
   temPin: boolean
 }
 
 // Bater ponto: marca da empresa, relógio e o botão de digital; ao tocar, confirma com o PIN de segurança da conta
-export function TelaPonto({ empresa, funcionario, bloqueio, registro, temPin }: Props) {
+export function TelaPonto({ empresa, funcionario, bloqueio, horarios, temPin }: Props) {
   const router = useRouter()
   const [agora, setAgora] = useState<Date | null>(null)
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [endereco, setEndereco] = useState<string | null>(null)
+  // Localização lida no toque da digital, enquanto a pessoa digita o PIN
+  const localRef = useRef<Promise<LocalBatida> | null>(null)
   // Batida aguardando o PIN
-  const [pendente, setPendente] = useState<TipoBatida | null>(null)
+  const [pendente, setPendente] = useState(false)
   const [semPin, setSemPin] = useState(false)
-  const [recibo, setRecibo] = useState<{ id: string; tipo: TipoBatida; hora: string; data: string } | null>(null)
+  const [recibo, setRecibo] = useState<{ id: string; hora: string; data: string } | null>(null)
   const [baixando, setBaixando] = useState(false)
   const [erroPdf, setErroPdf] = useState(false)
 
@@ -77,41 +63,27 @@ export function TelaPonto({ empresa, funcionario, bloqueio, registro, temPin }: 
   }, [])
 
   useEffect(() => {
-    if (bloqueio) return
-    // A localização não aparece na tela, mas fica guardada no registro do ponto
-    if (!navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords: { latitude: lat, longitude: lng } }) => {
-        setCoords({ lat, lng })
-        try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, { headers: { 'Accept-Language': 'pt-BR' } })
-          const a = (await res.json())?.address
-          if (a) setEndereco([a.road ?? a.pedestrian, a.house_number, a.suburb ?? a.neighbourhood ?? a.city_district, a.city ?? a.town ?? a.village].filter(Boolean).join(', '))
-        } catch {
-          setEndereco(`${lat.toFixed(5)}, ${lng.toFixed(5)}`)
-        }
-      },
-      () => {},
-      { timeout: 10000 },
-    )
+    // Só para o navegador já pedir a permissão ao abrir; a posição que vale é lida no toque da digital
+    if (!bloqueio) navigator.geolocation?.getCurrentPosition(() => {}, () => {})
   }, [bloqueio])
 
-  const proxima = proximaBatida(registro)
-  const espera = agora ? minutosDeEspera([registro?.entrada, registro?.saida_almoco, registro?.retorno_almoco, registro?.saida], agora) : 0
-  const liberado = !!proxima && espera === 0
+  const espera = agora ? minutosDeEspera(horarios, agora) : 0
+  const liberado = espera === 0
 
-  function pedirBatida(tipo: TipoBatida) {
+  function pedirBatida() {
     if (!temPin) { setSemPin(true); return }
-    setPendente(tipo)
+    localRef.current = lerLocal()
+    setPendente(true)
   }
 
   async function confirmar(pin: string) {
     if (!pendente) return
-    const r = await baterPontoAction(pin, { tipo: pendente, lat: coords?.lat ?? null, lng: coords?.lng ?? null, endereco })
+    const local = await aguardarLocal(localRef.current)
+    const r = await baterPontoAction(pin, local)
     if ('error' in r) return { error: r.error }
-    setPendente(null)
+    setPendente(false)
     const momento = new Date(r.em)
-    setRecibo({ id: r.id, tipo: r.tipo, hora: RELOGIO.format(momento), data: DATA_RECIBO.format(momento) })
+    setRecibo({ id: r.id, hora: RELOGIO.format(momento), data: DATA_RECIBO.format(momento) })
   }
 
   function fecharRecibo() {
@@ -177,8 +149,8 @@ export function TelaPonto({ empresa, funcionario, bloqueio, registro, temPin }: 
               <button
                 type="button"
                 disabled={!liberado}
-                onClick={() => proxima && pedirBatida(proxima)}
-                aria-label={proxima ? 'Bater ponto' : 'Jornada completa'}
+                onClick={pedirBatida}
+                aria-label="Bater ponto"
                 className={`group relative w-48 h-48 rounded-full ${liberado ? 'cursor-pointer' : 'cursor-default'}`}
               >
                 {liberado && (
@@ -191,34 +163,29 @@ export function TelaPonto({ empresa, funcionario, bloqueio, registro, temPin }: 
                   className="absolute inset-0 rounded-full overflow-hidden flex items-center justify-center text-white transition-transform duration-200 group-hover:scale-105 group-active:scale-95"
                   style={{ background: liberado ? GRADIENTE : 'var(--color-brand-light)', color: liberado ? '#fff' : 'var(--color-brand)', boxShadow: liberado ? '0 18px 40px color-mix(in srgb, var(--color-brand) 45%, transparent)' : undefined }}
                 >
-                  {proxima ? <Digital tamanho={104} /> : <Icon name="check" size={72} />}
+                  <Digital tamanho={104} />
                   {liberado && <span aria-hidden className="ponto-scan absolute left-6 right-6 h-0.5 rounded-full bg-white" />}
                 </span>
               </button>
               <p className="text-lg font-bold mt-6" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-                {proxima ? 'Bater ponto' : 'Jornada completa'}
+                Bater ponto
               </p>
               <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                {!proxima ? 'Todos os registros de hoje foram feitos'
-                  : espera > 0 ? `Próximo registro liberado em ${espera} ${espera === 1 ? 'minuto' : 'minutos'}`
-                  : 'Toque na digital para registrar'}
+                {espera > 0
+                  ? `Próximo registro liberado em ${espera} ${espera === 1 ? 'minuto' : 'minutos'}`
+                  : `Toque na digital para registrar a ${rotuloBatida(horarios.length).toLowerCase()}`}
               </p>
-              {liberado && proxima === 'saida_almoco' && (
-                <button type="button" onClick={() => pedirBatida('saida')} className="text-xs font-semibold mt-2 hover:underline cursor-pointer" style={{ color: 'var(--color-brand)' }}>
-                  Encerrar sem almoço
-                </button>
-              )}
             </div>
           </>
         )}
       </div>
 
       <ModalPinConfirmacao
-        open={!!pendente}
+        open={pendente}
         titulo="Confirme com seu PIN"
         descricao="Digite o PIN de segurança para bater o ponto."
         acaoLabel="Confirmar"
-        onClose={() => setPendente(null)}
+        onClose={() => setPendente(false)}
         onConfirmar={confirmar}
       />
       <ModalSemPin open={semPin} onClose={() => setSemPin(false)} motivo="bater o ponto" />

@@ -7,9 +7,10 @@ import { FilterSelect } from '@/components/ui/filter-select'
 import { ListEmpty } from '@/components/ui/list-item'
 import { Modal } from '@/components/ui/modal'
 import { toast } from '@/lib/toast'
-import { CAMPOS_PONTO, ROTULOS_PONTO, horaDe } from '@/lib/validations/ponto'
+import { faixasDeHorario } from '@/lib/validations/ponto'
 import { decidirAjusteAction } from '../actions'
 import type { AjusteEquipe } from '../queries'
+import { TextoLocal } from './texto-local'
 
 const fmtData = (d: string) => d.split('-').reverse().join('/')
 const FMT_DECISAO = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
@@ -68,24 +69,36 @@ export function Aprovacoes({ ajustes, companyId }: { ajustes: AjusteEquipe[]; co
             <li key={a.id} className="rounded-xl border bg-white px-4 py-3.5 flex flex-col gap-3" style={{ borderColor: 'var(--color-card-border)' }}>
               <div>
                 <p className="font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{a.nome} <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>· {fmtData(a.data)}</span></p>
-                <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>Motivo: {a.motivo}</p>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>Observação: {a.motivo}</p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {CAMPOS_PONTO.map((c) => {
-                  const antes = horaDe(a.atual?.[c]) || '--:--'
-                  const depois = horaDe(a[c]) || '--:--'
-                  const mudou = emAnalise && antes !== depois
-                  return (
-                    <div key={c}>
-                      <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{ROTULOS_PONTO[c]}</p>
-                      <p className="text-sm tabular-nums">
-                        {mudou && <span className="line-through mr-1.5" style={{ color: 'var(--color-text-muted)' }}>{antes}</span>}
-                        <span className="font-semibold" style={{ color: mudou ? 'var(--color-brand)' : 'var(--color-text-primary)' }}>{depois}</span>
-                      </p>
-                    </div>
-                  )
-                })}
+              {/* De onde e quando o pedido foi feito */}
+              <dl className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)_auto] gap-x-6 gap-y-2 rounded-lg px-3 py-2 text-sm" style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}>
+                <div>
+                  <dt className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Registrado em</dt>
+                  <dd className="tabular-nums">{FMT_DECISAO.format(new Date(a.created_at))}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Localização</dt>
+                  <dd className="break-words">{a.origem ? <TextoLocal local={a.origem} /> : 'Não registrada'}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>IP</dt>
+                  <dd className="tabular-nums break-all">{a.origem?.ip ?? 'Não registrado'}</dd>
+                </div>
+              </dl>
+
+              <div className={emAnalise ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : ''}>
+                {emAnalise && (
+                  <div>
+                    <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Batidas atuais</p>
+                    <p className="text-sm tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{faixasDeHorario(a.atual ?? []).join('  ·  ') || 'Sem batidas'}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{emAnalise ? 'Batidas propostas' : 'Batidas pedidas'}</p>
+                  <p className="text-sm font-semibold tabular-nums" style={{ color: emAnalise ? 'var(--color-brand)' : 'var(--color-text-primary)' }}>{faixasDeHorario(a.batidas).join('  ·  ') || 'Sem batidas'}</p>
+                </div>
               </div>
 
               {emAnalise ? (

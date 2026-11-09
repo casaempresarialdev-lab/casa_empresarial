@@ -5,7 +5,8 @@ import { exigirAcessoPagina } from '@/lib/auth/acesso'
 import { getCompanyBranding } from '@/lib/company-branding'
 import { temPinCadastrado } from '@/lib/security-pin'
 import { DEFAULT_BRAND_COLOR, themeCssVars } from '@/lib/theme'
-import { TelaPonto, type RegistroHoje } from './components/tela-ponto'
+import type { Batida } from '@/lib/ponto'
+import { TelaPonto } from './components/tela-ponto'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,7 @@ export default async function RegistrarPontoPage() {
   const { data: registro } = funcionario
     ? await admin
         .from('time_records')
-        .select('entrada, saida_almoco, retorno_almoco, saida')
+        .select('batidas')
         .eq('company_id', companyId)
         .eq('employee_id', funcionario.id)
         .eq('data', hoje)
@@ -56,7 +57,7 @@ export default async function RegistrarPontoPage() {
         empresa={{ nome: company?.nome_fantasia || company?.razao_social || '', logoUrl: company?.logo_url ?? null, cor: company?.cor_primaria || DEFAULT_BRAND_COLOR }}
         funcionario={funcionario?.nome ?? null}
         bloqueio={bloqueio}
-        registro={(registro as RegistroHoje) ?? null}
+        horarios={((registro?.batidas ?? []) as Batida[]).map((b) => b.em)}
         temPin={temPin}
       />
     </>

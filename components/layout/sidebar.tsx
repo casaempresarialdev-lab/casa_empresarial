@@ -35,7 +35,7 @@ const COLABORADOR_NAV_ITEMS: NavItem[] = [
     label: 'Pessoas',
     icon: 'users',
     children: [
-      { label: 'Registro de Ponto',    href: '/pessoas/registro-de-ponto' },
+      { label: 'Meu ponto',            href: '/meu-ponto' },
       { label: 'Escala de Trabalho',   href: '/pessoas/escala-de-trabalho' },
       { label: 'Folha de Pagamento',   href: '/pessoas/folha-de-pagamento' },
       { label: 'Benefícios',           href: '/pessoas/beneficios' },

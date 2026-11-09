@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { CamposBatidas } from '@/components/modules/ponto/campos-batidas'
 import { createTimeRecordAction, updateTimeRecordAction } from '../actions'
 import { generateMonth } from '@/lib/escala/generate'
 import { horaDe as extractTime } from '@/lib/validations/ponto'
@@ -44,11 +45,8 @@ export function ModalPonto({
 
   const [employeeId,     setEmployeeId]     = useState('')
   const [data,           setData]           = useState('')
-  const [entrada,        setEntrada]        = useState('')
-  const [saidaAlmoco,    setSaidaAlmoco]    = useState('')
-  const [retornoAlmoco,  setRetornoAlmoco]  = useState('')
-  const [saida,          setSaida]          = useState('')
-  const [tipo,           setTipo]           = useState('normal')
+  const [batidas,        setBatidas]        = useState<string[]>([''])
+  const [tipo,          setTipo]           = useState('normal')
   const [observacao,     setObservacao]     = useState('')
   const [loading,        setLoading]        = useState(false)
   const [error,          setError]          = useState('')
@@ -59,19 +57,14 @@ export function ModalPonto({
     if (record) {
       setEmployeeId(record.employee_id)
       setData(record.data)
-      setEntrada(extractTime(record.entrada))
-      setSaidaAlmoco(extractTime(record.saida_almoco))
-      setRetornoAlmoco(extractTime(record.retorno_almoco))
-      setSaida(extractTime(record.saida))
+      setBatidas(record.batidas.length ? record.batidas.map((b) => extractTime(b.em)) : [''])
       setTipo(record.tipo)
       setObservacao(record.observacao ?? '')
     } else {
       setEmployeeId(defaultEmployeeId ?? '')
       setData(defaultDate ?? todayStr(defaultMes, defaultAno))
-      setEntrada(defaultEntrada ?? '')
-      setSaidaAlmoco('')
-      setRetornoAlmoco('')
-      setSaida(defaultSaida ?? '')
+      // Sugestão vinda da escala
+      setBatidas(defaultEntrada || defaultSaida ? [defaultEntrada ?? '', defaultSaida ?? ''].map((h) => h.slice(0, 5)) : [''])
       setTipo(defaultTipo ?? 'normal')
       setObservacao('')
     }
@@ -85,7 +78,7 @@ export function ModalPonto({
     return days.find(d => d.date === data) ?? null
   }, [employeeId, data, rules, exceptions])
 
-  const semHorario = tipo === 'folga' || tipo === 'ferias' || tipo === 'falta'
+  const semHorario = tipo === 'folga' || tipo === 'ferias' || tipo === 'falta' || tipo === 'atestado'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -96,12 +89,7 @@ export function ModalPonto({
     fd.set('data', data)
     fd.set('tipo', tipo)
     fd.set('observacao', observacao)
-    if (!semHorario) {
-      fd.set('entrada',        entrada)
-      fd.set('saida_almoco',   saidaAlmoco)
-      fd.set('retorno_almoco', retornoAlmoco)
-      fd.set('saida',          saida)
-    }
+    fd.set('batidas', JSON.stringify(semHorario ? [] : batidas.filter(Boolean)))
 
     const result = isEdit
       ? await updateTimeRecordAction(record!.id, fd)
@@ -176,6 +164,7 @@ export function ModalPonto({
               <option value="folga">Folga</option>
               <option value="ferias">Férias</option>
               <option value="falta">Falta</option>
+              <option value="atestado">Atestado</option>
             </select>
           </div>
         </div>
@@ -196,42 +185,9 @@ export function ModalPonto({
 
         {!semHorario && (
           <>
-            {/* 1º Turno */}
-            <div>
-              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
-                1º Turno
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label style={labelStyle}>Entrada</label>
-                  <Input type="time" value={entrada} onChange={e => setEntrada(e.target.value)} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Saída p/ almoço</label>
-                  <Input type="time" value={saidaAlmoco} onChange={e => setSaidaAlmoco(e.target.value)} />
-                </div>
-              </div>
-            </div>
-
-            {/* Almoço / 2º Turno */}
-            <div>
-              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
-                2º Turno
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label style={labelStyle}>Retorno do almoço</label>
-                  <Input type="time" value={retornoAlmoco} onChange={e => setRetornoAlmoco(e.target.value)} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Saída final</label>
-                  <Input type="time" value={saida} onChange={e => setSaida(e.target.value)} />
-                </div>
-              </div>
-            </div>
-
+            <CamposBatidas valor={batidas} onChange={setBatidas} />
             <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '-0.25rem' }}>
-              Sem almoço? Deixe os campos de almoço em branco — as horas são calculadas de Entrada até Saída final.
+              Entradas e saídas se alternam, em ordem. As horas são a soma de cada par.
             </p>
           </>
         )}

@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { semAcesso } from '@/lib/auth/acesso'
+import { mesclarBatidas, type Batida } from '@/lib/ponto'
+import { horaParaTimestamp, horariosSchema } from '@/lib/validations/ponto'
 
 async function getAuthUser() {
   const supabase = await createClient()
@@ -40,29 +42,22 @@ async function encerrarAjusteDoDia(companyId: string, employeeId: string, data: 
   if (error) console.error('[ponto] ajuste não encerrado:', error.message)
 }
 
+/** Campos do lançamento; os horários vêm "08:00" e viram horário de Brasília no dia informado */
 function parsePontoFields(formData: FormData) {
-  const data           = formData.get('data') as string
-  const entrada        = (formData.get('entrada')        as string) || null
-  const saida_almoco   = (formData.get('saida_almoco')   as string) || null
-  const retorno_almoco = (formData.get('retorno_almoco') as string) || null
-  const saida          = (formData.get('saida')          as string) || null
-
-  const ts = (h: string | null) => {
-    if (!h) return null
-    const [hh = '00', mm = '00', ss = '00'] = h.split(':')
-    // offset explícito: sem ele, o Postgres assume UTC e desloca o horário em -3h na exibição
-    return `${data}T${hh}:${mm}:${ss}-03:00`
-  }
+  const data = formData.get('data') as string
+  let lista: unknown = null
+  try { lista = JSON.parse(String(formData.get('batidas') ?? '[]')) } catch { /* cai na validação abaixo */ }
+  const parsed = horariosSchema.safeParse(lista)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   return {
-    employee_id:    formData.get('employee_id') as string,
-    data,
-    entrada:        ts(entrada),
-    saida_almoco:   ts(saida_almoco),
-    retorno_almoco: ts(retorno_almoco),
-    saida:          ts(saida),
-    tipo:           (formData.get('tipo') as string) || 'normal',
-    observacao:     (formData.get('observacao') as string) || null,
+    horarios: parsed.data.map((h) => horaParaTimestamp(data, h) as string),
+    campos: {
+      employee_id: formData.get('employee_id') as string,
+      data,
+      tipo:        (formData.get('tipo') as string) || 'normal',
+      observacao:  (formData.get('observacao') as string) || null,
+    },
   }
 }
 
@@ -92,25 +87,25 @@ export async function decidirAjusteAction(companyId: string, id: string, decisao
     .eq('id', id)
     .eq('company_id', companyId)
     .eq('status', 'pendente')
-    .select('employee_id, data, entrada, saida_almoco, retorno_almoco, saida')
+    .select('employee_id, data, batidas')
     .maybeSingle()
   if (error) return { error: error.message }
   if (!ajuste) return { error: 'Este ajuste já foi decidido.' }
 
   if (decisao === 'aprovado') {
-    const horarios = { entrada: ajuste.entrada, saida_almoco: ajuste.saida_almoco, retorno_almoco: ajuste.retorno_almoco, saida: ajuste.saida }
     const { data: registro } = await admin
       .from('time_records')
-      .select('id')
+      .select('id, batidas')
       .eq('company_id', companyId)
       .eq('employee_id', ajuste.employee_id)
       .eq('data', ajuste.data)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
+    const batidas = mesclarBatidas((registro?.batidas ?? []) as Batida[], ajuste.batidas as string[])
     const { error: errAplicar } = registro
-      ? await admin.from('time_records').update(horarios).eq('id', registro.id)
-      : await admin.from('time_records').insert({ company_id: companyId, employee_id: ajuste.employee_id, data: ajuste.data, tipo: 'normal', ...horarios })
+      ? await admin.from('time_records').update({ batidas }).eq('id', registro.id)
+      : await admin.from('time_records').insert({ company_id: companyId, employee_id: ajuste.employee_id, data: ajuste.data, tipo: 'normal', batidas })
     if (errAplicar) {
       // Não conseguiu alterar o ponto: o pedido volta para a fila
       await admin.from('time_adjustments').update({ status: 'pendente', decidido_por: null, decidido_por_nome: null, decidido_em: null }).eq('id', id)
@@ -132,7 +127,9 @@ export async function createTimeRecordAction(companyId: string, formData: FormDa
   const viewer = await getViewerContext(companyId)
   if (viewer?.isColaborador) return { error: 'Sem permissão para esta ação.' }
 
-  const fields = parsePontoFields(formData)
+  const lancamento = parsePontoFields(formData)
+  if ('error' in lancamento) return { error: lancamento.error }
+  const fields = lancamento.campos
   if (!fields.employee_id) return { error: 'Selecione um funcionário.' }
   if (!fields.data) return { error: 'Data é obrigatória.' }
 
@@ -141,7 +138,9 @@ export async function createTimeRecordAction(companyId: string, formData: FormDa
   if (!funcionario) return { error: 'Funcionário não encontrado.' }
 
   // Um registro por pessoa e dia: o lançamento feito aqui substitui o que foi batido
-  const { error } = await admin.from('time_records').upsert({ company_id: companyId, ...fields }, { onConflict: 'employee_id,data' })
+  const { data: existente } = await admin.from('time_records').select('batidas').eq('employee_id', fields.employee_id).eq('data', fields.data).maybeSingle()
+  const batidas = mesclarBatidas((existente?.batidas ?? []) as Batida[], lancamento.horarios)
+  const { error } = await admin.from('time_records').upsert({ company_id: companyId, ...fields, batidas }, { onConflict: 'employee_id,data' })
   if (error) return { error: error.message }
 
   await encerrarAjusteDoDia(companyId, fields.employee_id, fields.data, user.id)
@@ -155,7 +154,7 @@ export async function updateTimeRecordAction(recordId: string, formData: FormDat
 
   const admin = createAdminClient()
 
-  const { data: current } = await admin.from('time_records').select('company_id, employee_id, data').eq('id', recordId).single()
+  const { data: current } = await admin.from('time_records').select('company_id, employee_id, data, batidas').eq('id', recordId).single()
   if (!current) return { error: 'Registro não encontrado.' }
 
   const negado = await semAcesso('pessoas.registro-de-ponto', current.company_id)
@@ -165,7 +164,11 @@ export async function updateTimeRecordAction(recordId: string, formData: FormDat
 
   // A edição corrige o dia do registro: pessoa e data não mudam
   const { employee_id, data } = current
-  const { error } = await admin.from('time_records').update({ ...parsePontoFields(formData), employee_id, data }).eq('id', recordId)
+  formData.set('data', data)
+  const lancamento = parsePontoFields(formData)
+  if ('error' in lancamento) return { error: lancamento.error }
+  const batidas = mesclarBatidas((current.batidas ?? []) as Batida[], lancamento.horarios)
+  const { error } = await admin.from('time_records').update({ ...lancamento.campos, employee_id, data, batidas }).eq('id', recordId)
   if (error) return { error: error.message }
 
   await encerrarAjusteDoDia(current.company_id, employee_id, data, user.id)

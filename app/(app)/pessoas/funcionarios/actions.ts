@@ -416,12 +416,13 @@ export async function grantSystemAccessAction(employeeId: string, companyId: str
 
   const { data: employee } = await admin
     .from('employees')
-    .select('nome, email, profile_id, company_id')
+    .select('nome, email, profile_id, company_id, status')
     .eq('id', employeeId)
     .eq('company_id', companyId)
     .single()
 
   if (!employee) return { error: 'Funcionário não encontrado.' }
+  if (employee.status === 'demitido' || employee.status === 'inativo') return { error: 'Quem foi desligado não pode receber acesso ao sistema.' }
   if (!employee.email) return { error: 'Cadastre um e-mail para o funcionário antes de conceder acesso.' }
   if (employee.profile_id) return { error: 'Este funcionário já tem acesso ao sistema.' }
 

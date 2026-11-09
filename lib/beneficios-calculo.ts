@@ -32,14 +32,14 @@ function regra(b: BeneficioCalculo): { tipo: RegraDesconto; valor: number } {
 }
 
 /** O que a empresa oferece por mês; o valor ajustado para a pessoa substitui o do cadastro */
-export function valorMensal(b: BeneficioCalculo, valorPessoa?: number | null) {
+export function valorMensal(b: BeneficioCalculo, valorPessoa?: number | null, dias: number = DIAS_UTEIS_MES) {
   const v = valorPessoa ?? b.valor
-  return centavos(b.por_dia_trabalhado ? v * DIAS_UTEIS_MES : v)
+  return centavos(b.por_dia_trabalhado ? v * dias : v)
 }
 
 /** O que sai do salário por mês. Nunca passa do valor do benefício. */
-export function descontoMensal(b: BeneficioCalculo, valorPessoa: number | null | undefined, salario: number | null | undefined) {
-  const oferecido = valorMensal(b, valorPessoa)
+export function descontoMensal(b: BeneficioCalculo, valorPessoa: number | null | undefined, salario: number | null | undefined, dias: number = DIAS_UTEIS_MES) {
+  const oferecido = valorMensal(b, valorPessoa, dias)
   const { tipo, valor } = regra(b)
   const desconto =
     tipo === 'percentual_salario' ? (salario ?? 0) * (valor / 100)

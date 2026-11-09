@@ -1,19 +1,18 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import type { Batida, OrigemBatida } from '@/lib/ponto'
 
 export type TimeRecord = {
   id: string
   company_id: string
   employee_id: string
   data: string
-  entrada: string | null
-  saida_almoco: string | null
-  retorno_almoco: string | null
-  saida: string | null
-  horas_trabalhadas: string | null
+  batidas: Batida[]
   horas_extras: string | null
-  tipo: 'normal' | 'extra' | 'folga' | 'ferias' | 'falta'
+  tipo: 'normal' | 'extra' | 'folga' | 'ferias' | 'falta' | 'atestado'
   observacao: string | null
   created_at: string
+  /** Formato antigo: só a localização da última batida */
+  localizacao: { lat?: number; lng?: number; endereco?: string | null } | null
   employee: {
     nome: string
     cargo: string | null
@@ -32,7 +31,7 @@ export async function getTimeRecords(
 
   const { data, error } = await admin
     .from('time_records')
-    .select('id, company_id, employee_id, data, entrada, saida_almoco, retorno_almoco, saida, horas_trabalhadas, horas_extras, tipo, observacao, created_at, employee:employees(nome, cargo)')
+    .select('id, company_id, employee_id, data, batidas, horas_extras, tipo, observacao, created_at, localizacao, employee:employees(nome, cargo)')
     .eq('company_id', companyId)
     .gte('data', dataInicio)
     .lte('data', dataFim)
@@ -48,23 +47,26 @@ export type AjusteEquipe = {
   employee_id: string
   nome: string
   data: string
-  entrada: string | null
-  saida_almoco: string | null
-  retorno_almoco: string | null
-  saida: string | null
+  /** Horários propostos */
+  batidas: string[]
   motivo: string
   status: 'pendente' | 'aprovado' | 'recusado'
   resposta: string | null
   decidido_por_nome: string | null
   decidido_em: string | null
+  /** Quando o pedido foi feito */
+  created_at: string
+  /** Localização e IP do pedido; vazio nos pedidos anteriores a este controle */
+  origem?: OrigemBatida | null
   /** Horários que estão no registro hoje (só nos pedidos em análise) */
-  atual: Pick<AjusteEquipe, 'entrada' | 'saida_almoco' | 'retorno_almoco' | 'saida'> | null
+  atual: string[] | null
 }
 
 /** Pedidos em análise e as 50 decisões mais recentes (sem a migration 20261108000094: nenhum) */
 export async function getAjustes(companyId: string): Promise<AjusteEquipe[]> {
   const admin = createAdminClient()
-  const colunas = 'id, employee_id, data, entrada, saida_almoco, retorno_almoco, saida, motivo, status, resposta, decidido_por_nome, decidido_em, employee:employee_id(nome)'
+  // '*': com a migration 20261109000096 pendente, os pedidos continuam aparecendo, só sem a origem
+  const colunas = '*, employee:employee_id(nome)'
   const [pendentes, decididos] = await Promise.all([
     admin.from('time_adjustments').select(colunas).eq('company_id', companyId).eq('status', 'pendente').order('created_at', { ascending: true }),
     admin.from('time_adjustments').select(colunas).eq('company_id', companyId).neq('status', 'pendente').order('decidido_em', { ascending: false }).limit(50),
@@ -78,7 +80,7 @@ export async function getAjustes(companyId: string): Promise<AjusteEquipe[]> {
   const { data: registros } = emAnalise.length
     ? await admin
         .from('time_records')
-        .select('employee_id, data, entrada, saida_almoco, retorno_almoco, saida')
+        .select('employee_id, data, batidas')
         .eq('company_id', companyId)
         .in('employee_id', [...new Set(emAnalise.map((l) => l.employee_id))])
         .in('data', [...new Set(emAnalise.map((l) => l.data))])
@@ -87,7 +89,9 @@ export async function getAjustes(companyId: string): Promise<AjusteEquipe[]> {
   return [...emAnalise, ...historico].map(({ employee, ...l }) => ({
     ...l,
     nome: employee?.nome ?? 'Funcionário',
-    atual: l.status === 'pendente' ? (registros ?? []).find((r) => r.employee_id === l.employee_id && r.data === l.data) ?? null : null,
+    atual: l.status === 'pendente'
+      ? (((registros ?? []).find((r) => r.employee_id === l.employee_id && r.data === l.data)?.batidas ?? []) as Batida[]).map((b) => b.em)
+      : null,
   }))
 }
 
