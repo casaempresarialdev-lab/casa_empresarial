@@ -8,8 +8,9 @@ import { verifySecurityPin } from '@/lib/security-pin'
 import { minutosDeEspera, type Batida, type LocalBatida } from '@/lib/ponto'
 import { origemDaRequisicao } from '@/lib/ponto-servidor'
 
-// Lançados pelo responsável: o dia não é de trabalho, a menos que ele altere o lançamento
-const DIA_SEM_PONTO: Record<string, string> = { falta: 'falta', ferias: 'férias', atestado: 'atestado', folga: 'folga' }
+// Lançados pelo responsável: o dia não é de trabalho, a menos que ele altere o lançamento.
+// Dia abonado (atestado ou ausência) não entra aqui: a pessoa pode trabalhar parte do dia.
+const DIA_SEM_PONTO: Record<string, string> = { falta: 'falta', ferias: 'férias', folga: 'folga' }
 
 /** Dia de hoje no Brasil (o servidor roda em UTC) */
 const hojeBrasil = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d)
@@ -58,6 +59,8 @@ export async function baterPontoAction(
     .eq('company_id', companyId)
     .eq('employee_id', funcionario.id)
     .eq('data', hoje)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   // Evita registros repetidos

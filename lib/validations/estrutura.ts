@@ -12,6 +12,8 @@ export const cargoSchema = z.object({
   superior_id: z.string().uuid().or(z.literal('')),
   salario_min: dinheiro,
   salario_max: dinheiro,
+  adicional: z.enum(['nenhum', 'insalubridade_10', 'insalubridade_20', 'insalubridade_40', 'periculosidade'], 'Escolha o adicional').default('nenhum'),
+  bate_ponto: z.boolean().default(true),
 })
 
 export type CargoInput = z.infer<typeof cargoSchema>

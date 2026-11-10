@@ -176,6 +176,8 @@ export type Valores = {
   status: string
   grau_instrucao: string
   salario: string
+  /** '' = igual ao cargo */
+  adicional_risco: string
   plano_saude: boolean
   cnpj: string
   servico: string
@@ -218,6 +220,7 @@ export function valoresIniciais(e: Employee | null): Valores {
     status: e?.status ?? 'admissao',
     grau_instrucao: e?.grau_instrucao ? labelDe(GRAU_OPTIONS, e.grau_instrucao) : '',
     salario: valorBr(e?.salario),
+    adicional_risco: e?.adicional_risco ?? '',
     plano_saude: e?.plano_saude ?? false,
     cnpj: e?.cnpj ? maskCnpj(e.cnpj) : '',
     servico: e?.servico ?? '',

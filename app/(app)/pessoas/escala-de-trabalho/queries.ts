@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import type { ScheduleRule, ScheduleException, FolgaPattern } from '@/lib/escala/generate'
+import type { FeriadoEmpresa } from '@/lib/escala/feriados'
 
 // ── Tipos exportados ──────────────────────────────────────────────────────────
 
@@ -56,6 +57,32 @@ export async function getScheduleExceptions(
 
   if (error) throw error
   return (data ?? []) as unknown as ScheduleException[]
+}
+
+export async function getScheduleExceptionsEntre(companyId: string, de: string, ate: string): Promise<ScheduleException[]> {
+  const { data, error } = await createAdminClient()
+    .from('employee_schedule_exceptions')
+    .select('id, employee_id, data, tipo, observacao')
+    .eq('company_id', companyId)
+    .gte('data', de)
+    .lte('data', ate)
+
+  if (error) throw error
+  return (data ?? []) as unknown as ScheduleException[]
+}
+
+// ── Feriados da empresa ───────────────────────────────────────────────────────
+
+/** Sem a migration 20261109000098: nenhum ajuste, valem só os feriados nacionais */
+export async function getFeriadosEmpresa(companyId: string): Promise<FeriadoEmpresa[]> {
+  const { data, error } = await createAdminClient()
+    .from('company_holidays')
+    .select('id, data, nome, tipo, recorrente')
+    .eq('company_id', companyId)
+    .order('data', { ascending: true })
+
+  if (error) { console.error('[escala] feriados da empresa indisponíveis:', error.message); return [] }
+  return (data ?? []) as FeriadoEmpresa[]
 }
 
 // ── Funcionários ativos ───────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { semAcesso } from '@/lib/auth/acesso'
 import { mesclarBatidas, type Batida } from '@/lib/ponto'
+import { notificarFuncionario, periodoTexto } from '@/lib/notificacoes'
 import { horaParaTimestamp, horariosSchema } from '@/lib/validations/ponto'
 
 async function getAuthUser() {
@@ -26,7 +27,8 @@ async function nomeDoUsuario(userId: string) {
 
 /** O lançamento do gestor vale para o dia: o pedido em análise deixa de fazer sentido e é encerrado */
 async function encerrarAjusteDoDia(companyId: string, employeeId: string, data: string, userId: string) {
-  const { error } = await createAdminClient()
+  const admin = createAdminClient()
+  const { data: encerrados, error } = await admin
     .from('time_adjustments')
     .update({
       status: 'recusado',
@@ -39,7 +41,14 @@ async function encerrarAjusteDoDia(companyId: string, employeeId: string, data: 
     .eq('employee_id', employeeId)
     .eq('data', data)
     .eq('status', 'pendente')
+    .select('id')
   if (error) console.error('[ponto] ajuste não encerrado:', error.message)
+  if (encerrados?.length) {
+    await notificarFuncionario(admin, {
+      companyId, employeeId, autorId: userId, tipo: 'ponto',
+      titulo: 'Ajuste de ponto encerrado', mensagem: `O responsável lançou o seu ponto de ${periodoTexto(data, data)} diretamente.`, link: '/meu-ponto',
+    })
+  }
 }
 
 /** Campos do lançamento; os horários vêm "08:00" e viram horário de Brasília no dia informado */
@@ -113,6 +122,14 @@ export async function decidirAjusteAction(companyId: string, id: string, decisao
     }
   }
 
+  const texto = resposta?.trim()
+  await notificarFuncionario(admin, {
+    companyId, employeeId: ajuste.employee_id as string, autorId: user.id, tipo: 'ponto',
+    titulo: decisao === 'aprovado' ? 'Ajuste de ponto aprovado' : 'Ajuste de ponto recusado',
+    mensagem: `Seu pedido para ${periodoTexto(ajuste.data as string, ajuste.data as string)} foi ${decisao}${texto ? `: ${texto}` : '.'}`,
+    link: '/meu-ponto',
+  })
+
   revalidarPonto()
   return { success: true as const }
 }
@@ -138,9 +155,20 @@ export async function createTimeRecordAction(companyId: string, formData: FormDa
   if (!funcionario) return { error: 'Funcionário não encontrado.' }
 
   // Um registro por pessoa e dia: o lançamento feito aqui substitui o que foi batido
-  const { data: existente } = await admin.from('time_records').select('batidas').eq('employee_id', fields.employee_id).eq('data', fields.data).maybeSingle()
+  // (a tabela não garante um registro por dia: atualiza o mais recente, se houver, em vez de depender disso)
+  const { data: existente } = await admin
+    .from('time_records')
+    .select('id, batidas')
+    .eq('company_id', companyId)
+    .eq('employee_id', fields.employee_id)
+    .eq('data', fields.data)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
   const batidas = mesclarBatidas((existente?.batidas ?? []) as Batida[], lancamento.horarios)
-  const { error } = await admin.from('time_records').upsert({ company_id: companyId, ...fields, batidas }, { onConflict: 'employee_id,data' })
+  const { error } = existente
+    ? await admin.from('time_records').update({ ...fields, batidas }).eq('id', existente.id)
+    : await admin.from('time_records').insert({ company_id: companyId, ...fields, batidas })
   if (error) return { error: error.message }
 
   await encerrarAjusteDoDia(companyId, fields.employee_id, fields.data, user.id)

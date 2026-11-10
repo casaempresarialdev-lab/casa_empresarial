@@ -1,6 +1,7 @@
 'use server'
 
-import { headers } from 'next/headers'
+import { cookies, headers } from 'next/headers'
+import { getAvisosSistema, marcarAvisosSistemaVistos, type AvisoSistema } from '@/lib/notificacoes'
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { eventoSchema, mesmaRegra, SEM_REPETICAO, type EventoData, type Regra } from '@/lib/validations/evento'
@@ -22,10 +23,12 @@ export type ResumoNotificacoes = {
   compartilhamentos: AvisoCompartilhamento[]
   /** Convites recebidos, avisos de eventos para os quais fui convidado e agendas compartilhadas comigo */
   calendario: AvisoCalendario[]
+  /** Pedidos e decisões de Pessoas (ponto, atestados, férias) na empresa ativa */
+  sistema: AvisoSistema[]
   naoVistos: number
   proximoAvisoEm: string | null
 }
-const RESUMO_VAZIO: ResumoNotificacoes = { avisos: [], compartilhamentos: [], calendario: [], naoVistos: 0, proximoAvisoEm: null }
+const RESUMO_VAZIO: ResumoNotificacoes = { avisos: [], compartilhamentos: [], calendario: [], sistema: [], naoVistos: 0, proximoAvisoEm: null }
 
 /** Editar/excluir um evento repetido: só ele ou ele e os próximos da série */
 export type Escopo = 'este' | 'proximos'
@@ -465,7 +468,8 @@ export async function resumoNotificacoesAction(): Promise<ResumoNotificacoes> {
   // E-mails de aviso deste usuário (a rotina agendada cobre quem está com o sistema fechado)
   if (user.email) await enviarAvisosEventos(admin, { profileId: user.id, email: user.email })
 
-  const [{ data, error }, compartilhamentos, calendario, proximoConvite] = await Promise.all([
+  const companyId = (await cookies()).get('active_company_id')?.value
+  const [{ data, error }, compartilhamentos, calendario, proximoConvite, sistema] = await Promise.all([
     admin
       .from('reminders')
       .select(EVENTO_COLS)
@@ -477,9 +481,10 @@ export async function resumoNotificacoesAction(): Promise<ResumoNotificacoes> {
     getAvisosCompartilhamento(user.id, 20),
     getAvisosCalendario(user.id, 30),
     getProximoAvisoConvite(user.id),
+    getAvisosSistema(admin, user.id, companyId, 30),
   ])
-  const outrosNaoVistos = compartilhamentos.filter((c) => !c.aviso_visto_em).length + calendario.filter((c) => !c.visto).length
-  if (error || !data) return { ...RESUMO_VAZIO, compartilhamentos, calendario, naoVistos: outrosNaoVistos }
+  const outrosNaoVistos = compartilhamentos.filter((c) => !c.aviso_visto_em).length + calendario.filter((c) => !c.visto).length + sistema.filter((s) => !s.visto).length
+  if (error || !data) return { ...RESUMO_VAZIO, compartilhamentos, calendario, sistema, naoVistos: outrosNaoVistos }
 
   const agora = Date.now()
   const lista = (data as Parameters<typeof normalizarEvento>[0][]).map((r) => ({ ...normalizarEvento(r), origem: 'meu' as const, participantes: [] }))
@@ -488,7 +493,7 @@ export async function resumoNotificacoesAction(): Promise<ResumoNotificacoes> {
   const proximoAvisoEm = futuros.length ? new Date(Math.min(...futuros)).toISOString() : null
   // Contador do sino: só os avisos ainda não vistos
   const naoVistos = avisos.filter((e) => !e.aviso_visto_em).length + outrosNaoVistos
-  return { avisos, compartilhamentos, calendario, naoVistos, proximoAvisoEm }
+  return { avisos, compartilhamentos, calendario, sistema, naoVistos, proximoAvisoEm }
 }
 
 /** Abriu o sino ou a página de notificações: os avisos que já chegaram passam a "vistos" (zera o contador) */
@@ -502,6 +507,7 @@ export async function marcarAvisosVistosAction() {
     admin.from('credential_shares').update({ aviso_visto_em: agoraIso }).eq('shared_with', user.id).is('aviso_visto_em', null),
     admin.from('reminder_participants').update({ aviso_visto_em: agoraIso }).eq('profile_id', user.id).is('aviso_visto_em', null),
     admin.from('calendar_shares').update({ aviso_visto_em: agoraIso }).eq('shared_with', user.id).is('aviso_visto_em', null),
+    marcarAvisosSistemaVistos(admin, user.id),
   ])
 
   // Avisos de horário dos eventos para os quais fui convidado

@@ -25,7 +25,7 @@ export function CamposBatidas({ valor, onChange }: { valor: string[]; onChange: 
         ))}
       </div>
       <button type="button" onClick={() => onChange([...valor, ''])} className="self-start inline-flex items-center gap-1 text-sm font-semibold cursor-pointer hover:underline" style={{ color: 'var(--color-brand)' }}>
-        <Icon name="plus" size={15} /> Adicionar batida
+        <Icon name="plus" size={15} /> Adicionar registro
       </button>
     </div>
   )

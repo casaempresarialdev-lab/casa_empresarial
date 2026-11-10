@@ -124,7 +124,7 @@ function Rodape({ geradoEm }: { geradoEm: string }) {
   return (
     <View style={s.rodape} fixed>
       <Text style={s.rodapeTexto}>Gerado em {geradoEm}</Text>
-      <Text style={s.rodapeTexto}>Estimativa para a contabilidade · INSS e IRRF pelas tabelas de 2026 · DSR, adicional noturno, férias e 13º não incluídos</Text>
+      <Text style={s.rodapeTexto}>Estimativa para a contabilidade · INSS e IRRF pelas tabelas de 2026 · DSR, adicional noturno e 13º não incluídos</Text>
       <Text style={s.rodapeTexto} render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
     </View>
   )

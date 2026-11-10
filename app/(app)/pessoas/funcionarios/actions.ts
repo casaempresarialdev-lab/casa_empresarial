@@ -9,6 +9,7 @@ import { getEtapasAdmissao } from '../admissao/queries'
 import { findUserIdByEmail, adicionarContaExistente, enviarConvite } from '@/lib/invitations'
 import { semAcesso } from '@/lib/auth/acesso'
 import { buscarCargo } from '@/lib/estrutura'
+import { ADICIONAIS_CARGO } from '@/lib/validations/folha'
 import { criarAcessoFuncionario } from '@/lib/admissao-acesso'
 
 async function getAppUrl() {
@@ -154,6 +155,20 @@ function parseEmployeeFields(formData: FormData) {
   }
 }
 
+/**
+ * Adicional de risco da ficha: vazio segue o cargo. Gravado à parte porque a coluna vem da migration 20261110000103;
+ * sem ela, só dá erro se alguém escolheu uma exceção.
+ */
+async function aplicarAdicional(admin: ReturnType<typeof createAdminClient>, employeeId: string, formData: FormData) {
+  if (!formData.has('adicional_risco')) return null
+  const valor = (formData.get('adicional_risco') as string) || null
+  if (valor && !(ADICIONAIS_CARGO as readonly string[]).includes(valor)) return 'Escolha o adicional de risco.'
+  const { error } = await admin.from('employees').update({ adicional_risco: valor }).eq('id', employeeId)
+  if (!error) return null
+  if (error.code === 'PGRST204') return valor ? 'Execute a migration 20261110000103 para definir o adicional da pessoa.' : null
+  return error.message
+}
+
 /** Cargo escolhido na ficha: cargo e departamento vêm do cadastro da Estrutura. Devolve o erro, se houver. */
 async function aplicarCargo(admin: ReturnType<typeof createAdminClient>, companyId: string, fields: Record<string, unknown>, formData: FormData) {
   const positionId = (formData.get('position_id') as string) || ''
@@ -260,6 +275,9 @@ export async function createEmployeeAction(companyId: string, formData: FormData
   }
 
   await syncEmployeeBenefits(admin, companyId, data.id, formData)
+  // Ficha já criada: o adicional que não gravar fica para a próxima edição, sem perder o cadastro
+  const erroAdicional = await aplicarAdicional(admin, data.id, formData)
+  if (erroAdicional) console.error('[equipe] adicional de risco:', erroAdicional)
 
   const { updates, error: docErr } = await uploadEmployeeDocs(admin, companyId, data.id, formData, {})
   if (docErr) return { error: docErr }
@@ -324,6 +342,8 @@ export async function updateEmployeeAction(employeeId: string, formData: FormDat
 
   const { error } = await admin.from('employees').update({ ...fields, ...semCargo, ...docUpdates }).eq('id', employeeId)
   if (error) return { error: error.message }
+  const erroAdicional = await aplicarAdicional(admin, employeeId, formData)
+  if (erroAdicional) return { error: erroAdicional }
 
   await syncEmployeeBenefits(admin, current.company_id, employeeId, formData)
 

@@ -105,11 +105,21 @@ export async function salvarCargoAction(companyId: string, id: string | null, da
     superior_id: d.superior_id || null,
     salario_min: salarioMin,
     salario_max: salarioMax,
+    adicional: d.adicional,
+    bate_ponto: d.bate_ponto,
     updated_at: new Date().toISOString(),
   }
-  const { error } = id
-    ? await admin.from('job_positions').update(campos).eq('id', id).eq('company_id', companyId)
-    : await admin.from('job_positions').insert({ ...campos, company_id: companyId })
+  const gravar = (c: Partial<typeof campos>) => id
+    ? admin.from('job_positions').update(c).eq('id', id).eq('company_id', companyId)
+    : admin.from('job_positions').insert({ ...c, company_id: companyId })
+  let { error } = await gravar(campos)
+  // Sem as migrations 20261110000102/105 faltam colunas: salva o resto, se elas estiverem no padrão
+  if (error?.code === 'PGRST204') {
+    if (d.adicional !== 'nenhum') return { error: 'Execute a migration 20261110000102 para definir o adicional do cargo.' }
+    if (!d.bate_ponto) return { error: 'Execute a migration 20261110000105 para definir se o cargo registra ponto.' }
+    const { adicional: _a, bate_ponto: _b, ...basicos } = campos
+    ;({ error } = await gravar(basicos))
+  }
   if (error) return { error: error.code === '23505' ? 'Já existe esse cargo neste departamento.' : error.message }
 
   if (id) await copiarTextos(admin, companyId, id, d.nome, dep.nome as string)

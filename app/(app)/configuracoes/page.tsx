@@ -9,7 +9,10 @@ import { ConfigIdentidadeVisual } from './components/config-identidade-visual'
 import { ConfigAbas } from './components/config-abas'
 import { ConfigAdmissao } from './components/config-admissao'
 import { ConfigRescisao } from './components/config-rescisao'
+import { ConfigFolhaForm } from './components/config-folha'
+import { ConfigFeriasForm } from './components/config-ferias'
 import { getConfigRescisao } from '../pessoas/rescisao/queries'
+import { getConfigFolha } from '../pessoas/folha-de-pagamento/queries'
 import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
@@ -26,15 +29,26 @@ export default async function ConfiguracoesPage() {
   if (!companyId) redirect('/empresa')
 
   const admin = createAdminClient()
-  const [configAdmissao, configRescisao, clinicas, company, { data: row }] = await Promise.all([
+  const [configAdmissao, configRescisao, configFolha, clinicas, company, { data: row }] = await Promise.all([
     getConfigAdmissao(companyId),
     getConfigRescisao(companyId),
+    getConfigFolha(companyId),
     getClinicas(companyId),
     getCompany(companyId),
     // select('*'): as colunas opcionais (migrations 20261023000053/54) podem ainda não existir
     admin.from('companies').select('*').eq('id', companyId).maybeSingle(),
   ])
   const extras = (row ?? {}) as Record<string, string | null | undefined>
+
+  // Resumo dos adicionais de risco: definidos no cargo (Estrutura) e nas exceções da ficha ('*': colunas das migrations 102 e 103)
+  const [{ data: posicoes }, { data: pessoas }] = await Promise.all([
+    admin.from('job_positions').select('*').eq('company_id', companyId),
+    admin.from('employees').select('*').eq('company_id', companyId).not('status', 'in', '(inativo,demitido)'),
+  ])
+  const adicionais = {
+    cargos: ((posicoes ?? []) as { adicional?: string | null }[]).filter((p) => p.adicional && p.adicional !== 'nenhum').length,
+    excecoes: ((pessoas ?? []) as { adicional_risco?: string | null }[]).filter((p) => p.adicional_risco).length,
+  }
 
   return (
     <div className="w-full">
@@ -56,6 +70,8 @@ export default async function ConfiguracoesPage() {
         }
         admissao={<ConfigAdmissao companyId={companyId} inicial={configAdmissao} clinicas={clinicas} />}
         rescisao={<ConfigRescisao companyId={companyId} inicial={configRescisao} clinicas={clinicas.length} />}
+        folha={<ConfigFolhaForm companyId={companyId} inicial={configFolha} adicionais={adicionais} />}
+        ferias={<ConfigFeriasForm companyId={companyId} inicial={configFolha} />}
       />
     </div>
   )

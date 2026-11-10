@@ -11,12 +11,18 @@ import { Icon } from '@/components/ui/icon'
 import { ListEmpty, ListItem } from '@/components/ui/list-item'
 import { Modal } from '@/components/ui/modal'
 import { toast } from '@/lib/toast'
+import { baixarHolerite } from '@/components/modules/folha/baixar-holerite'
 import { calcularFolha, horas, type MotivoSemApuracao, type ResultadoFolha } from '@/lib/folha/calculo'
+import { fmtDataBr } from '@/lib/folha/config'
+import { montarHolerite } from '@/lib/folha/holerite'
 import { iniciais } from '../../funcionarios/components/ficha/ficha-config'
 import type { Company } from '../../../empresa/queries'
 import { fecharFolhaAction, reabrirFolhaAction } from '../actions'
 import type { LinhaFolha } from '../queries'
 import { ModalConferenciaFolha } from './modal-conferencia-folha'
+import { ModalHoleritesEnviados } from './modal-holerites-enviados'
+import { AbasFolha } from './abas-folha'
+import type { HoleriteEnviado } from '@/lib/folha/documentos'
 import type { PayrollPdfRow } from './relatorio-folha-pdf'
 
 interface Props {
@@ -26,6 +32,12 @@ interface Props {
   company: Company | null
   companyId: string
   readOnly: boolean
+  periodo: { inicio: string; fim: string }
+  vencimentos: { salario: string; adiantamento: string; beneficios: string; guias: string }
+  responsavel: 'sistema' | 'contabilidade'
+  /** Holerite do colaborador: gerado pelo sistema, enviado em PDF ou não disponibilizado */
+  holeriteFonte: 'sistema' | 'arquivo' | null
+  enviados: HoleriteEnviado[]
 }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -35,6 +47,7 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
 const SELO_MOTIVO: Partial<Record<MotivoSemApuracao, string>> = {
   sem_escala: 'Sem escala',
   sem_registros: 'Sem ponto no mês',
+  afastado: 'Afastado',
 }
 
 const FILTROS = [
@@ -50,10 +63,12 @@ function resumoPonto(l: Item) {
   const v = l.r.valores
   const he = l.ponto.he50Min + l.ponto.heFeriadoMin + l.ponto.heDomingoMin
   const partes = [
+    l.r.diasFerias > 0 && `${l.r.diasFerias} dias de férias${l.r.feriasNoRecibo ? ' (pagas no recibo)' : ''}`,
     v.desconto_faltas > 0 && plural(v.desconto_faltas, 'falta', 'faltas'),
     v.atestados > 0 && plural(v.atestados, 'atestado', 'atestados'),
     l.ponto.atrasoMin > 0 && `${horas(l.ponto.atrasoMin)} de atraso`,
     he > 0 && `${horas(he)} de hora extra`,
+    (l.ponto.noturnoMin ?? 0) > 0 && `${horas(l.ponto.noturnoMin ?? 0)} noturnas`,
   ].filter(Boolean)
   return partes.length ? partes.join(' · ') : l.employee.cargo ?? 'Sem ocorrências'
 }
@@ -76,7 +91,9 @@ function Valor({ rotulo, valor, forte }: { rotulo: string; valor: number; forte?
 }
 
 // Folha do mês: tudo vem do ponto, da escala e dos benefícios; aqui só se confere, edita e fecha
-export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readOnly }: Props) {
+export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readOnly, periodo, vencimentos, responsavel, holeriteFonte, enviados }: Props) {
+  const [enviando, setEnviando] = useState<LinhaFolha['employee'] | null>(null)
+  const enviadosDe = (id: string) => enviados.filter((e) => e.employee_id === id)
   const router = useRouter()
   const [ano, mes] = mesAno.split('-').map(Number)
   const rotuloMes = `${MESES[mes - 1]} ${ano}`
@@ -129,7 +146,7 @@ export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readO
       const rows: PayrollPdfRow[] = itens.map(({ employee: e, insumos, ponto, r, observacao }) => ({
         nome: e.nome,
         cargo: e.cargo,
-        salario: insumos.salario + r.periculosidade,
+        salario: r.remuneracao,
         diasTrabalhados: ponto.motivo ? null : ponto.diasTrabalhados,
         faltas: r.valores.desconto_faltas,
         atestados: r.valores.atestados,
@@ -172,6 +189,17 @@ export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readO
     }
   }
 
+  async function holerite(l: Item) {
+    try {
+      await toast.promise(
+        baixarHolerite({ company, employee: l.employee, competencia: rotuloMes, documento: montarHolerite(l.insumos, l.ponto, l.ajustes), responsavel, pagamentoEm: vencimentos.salario },`holerite-${mesAno}-${l.employee.nome.split(' ')[0].toLowerCase()}`),
+        { loading: 'Gerando o holerite…', success: 'Holerite baixado.', error: 'Não foi possível gerar o holerite.' },
+      )
+    } catch {
+      // A mensagem de erro já apareceu
+    }
+  }
+
   async function executar() {
     const acao = confirmar
     if (!acao) return
@@ -202,6 +230,8 @@ export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readO
         <SummaryCard icon="dollar" title="Custo total da empresa" value={moeda(totais.custo)} caption="Inclui encargos e benefícios" delay={180} />
       </div>
 
+      <AbasFolha aba="mensal" ano={ano} />
+
       <div className="app-card p-5 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-1" style={{ color: 'var(--color-sidebar-text)' }}>
@@ -220,6 +250,10 @@ export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readO
           </div>
         </div>
 
+        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+          Ponto de <strong>{fmtDataBr(periodo.inicio)}</strong> a <strong>{fmtDataBr(periodo.fim)}</strong> · pagamento em <strong>{fmtDataBr(vencimentos.salario)}</strong> · guias em <strong>{fmtDataBr(vencimentos.guias)}</strong>
+        </p>
+
         <div className="flex flex-wrap items-center gap-2">
           <FilterSelect value={filtro} onChange={setFiltro} label="Filtrar" options={FILTROS} />
           <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome ou cargo..." />
@@ -228,7 +262,7 @@ export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readO
 
         {!fechada && comAtencao > 0 && (
           <p className="text-sm rounded-lg px-3 py-2" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>
-            {plural(comAtencao, 'pessoa precisa', 'pessoas precisam')} de atenção antes do fechamento: há ponto incompleto, sem escala ou sem batidas no mês.
+            {plural(comAtencao, 'pessoa precisa', 'pessoas precisam')} de atenção antes do fechamento: há ponto incompleto, sem escala ou sem registros de ponto no mês.
           </p>
         )}
 
@@ -248,6 +282,7 @@ export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readO
                 <>
                   {l.atencao && <Selo alerta>{l.atencao}</Selo>}
                   {l.editado && <span className="hidden sm:inline"><Selo>Editado</Selo></span>}
+                  {holeriteFonte === 'arquivo' && enviadosDe(l.employee.id).length > 0 && <span className="hidden sm:inline"><Selo>Holerite enviado</Selo></span>}
                   <span className="hidden xl:grid grid-cols-2 gap-4 w-56">
                     <Valor rotulo="Bruto" valor={l.r.bruto} />
                     <Valor rotulo="Descontos" valor={l.r.descontos} />
@@ -257,15 +292,30 @@ export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readO
               }
               onClick={() => setConferindo(l)}
               actionsLabel={l.employee.nome}
-              actions={[{ icon: fechada || readOnly ? 'eye' : 'pencil', label: fechada || readOnly ? 'Ver detalhes' : 'Conferir e editar', onClick: () => setConferindo(l) }]}
+              actions={[
+                { icon: fechada || readOnly ? 'eye' : 'pencil', label: fechada || readOnly ? 'Ver detalhes' : 'Conferir e editar', onClick: () => setConferindo(l) },
+                ...(fechada ? [{ icon: 'download' as const, label: 'Baixar holerite', onClick: () => holerite(l) }] : []),
+                ...(holeriteFonte === 'arquivo' && !readOnly ? [{ icon: 'file' as const, label: 'Holerite da contabilidade (PDF)', onClick: () => setEnviando(l.employee) }] : []),
+              ]}
             />
           ))}
         </ul>
 
         <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          Estimativa para envio à contabilidade, com INSS e IRRF pelas tabelas de 2026. DSR, adicional noturno, férias e 13º não entram no cálculo.
+          {responsavel === 'contabilidade' ? 'Estimativa para envio à contabilidade' : 'Cálculo do sistema'}, com INSS e IRRF pelas tabelas de 2026, DSR, adicional noturno e adicionais de risco do cargo, como definido em Configurações. Férias aprovadas são pagas no recibo de férias, 2 dias antes do início.
         </p>
       </div>
+
+      {enviando && (
+        <ModalHoleritesEnviados
+          companyId={companyId}
+          employee={enviando}
+          competencia={mesAno}
+          rotuloMes={rotuloMes}
+          enviados={enviadosDe(enviando.id)}
+          onClose={() => setEnviando(null)}
+        />
+      )}
 
       {conferindo && (
         <ModalConferenciaFolha
@@ -282,7 +332,7 @@ export function FolhaClient({ linhas, fechada, mesAno, company, companyId, readO
         <div className="flex flex-col gap-4">
           <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
             {confirmar === 'fechar'
-              ? `Os valores ficam congelados e ${moeda(totais.liquido)} de salários, além dos benefícios, entram no fluxo de caixa como pagamentos pendentes.`
+              ? `Os valores ficam congelados e ${moeda(totais.liquido)} de salários, além de adiantamentos, benefícios e guias, entram no fluxo de caixa como pendentes, com vencimento.`
               : 'Os lançamentos pendentes desta folha saem do fluxo de caixa e os valores voltam a acompanhar o ponto.'}
           </p>
           {confirmar === 'fechar' && comAtencao > 0 && (

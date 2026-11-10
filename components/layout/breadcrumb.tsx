@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 // Segmentos que são apenas grupos de rota — sem page.tsx própria
-// ('admin' tem página própria: o dashboard do Administrativo)
-const NON_LINK_SEGMENTS = new Set(['financeiro', 'operacional', 'pessoas', 'marketing'])
+// ('admin' e 'pessoas' têm página própria: o dashboard da área)
+const NON_LINK_SEGMENTS = new Set(['financeiro', 'operacional', 'marketing'])
 
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -51,6 +51,10 @@ const ROUTE_LABELS: Record<string, string> = {
   'meu-plano': 'Meu Plano',
   perfil: 'Minha conta',
   'meu-ponto': 'Meu ponto',
+  'meu-holerite': 'Meu holerite',
+  'minhas-ferias': 'Minhas férias',
+  'minha-saude': 'Minha saúde e segurança',
+  'ferias': 'Férias',
 }
 
 /**

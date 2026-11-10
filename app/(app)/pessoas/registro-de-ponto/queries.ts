@@ -95,6 +95,37 @@ export async function getAjustes(companyId: string): Promise<AjusteEquipe[]> {
   }))
 }
 
+export type AusenciaEquipe = {
+  id: string
+  employee_id: string
+  nome: string
+  data_inicio: string
+  data_fim: string
+  tipo: string
+  motivo: string | null
+  anexo_path: string | null
+  anexo_nome: string | null
+  status: 'pendente' | 'abonado' | 'recusado'
+  resposta: string | null
+  origem: 'colaborador' | 'gestor'
+  decidido_por_nome: string | null
+  decidido_em: string | null
+  created_at: string
+}
+
+/** Sem a migration 20261109000099: nenhuma */
+export async function getAusencias(companyId: string): Promise<AusenciaEquipe[]> {
+  const { data, error } = await createAdminClient()
+    .from('time_absences')
+    .select('*, employee:employee_id(nome)')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) { console.error('[ponto] ausências indisponíveis:', error.message); return [] }
+  type Linha = Omit<AusenciaEquipe, 'nome'> & { employee: { nome: string } | null }
+  return ((data ?? []) as unknown as Linha[]).map(({ employee, ...a }) => ({ ...a, nome: employee?.nome ?? 'Funcionário' }))
+}
+
 export async function getActiveEmployees(companyId: string) {
   const admin = createAdminClient()
   const { data, error } = await admin

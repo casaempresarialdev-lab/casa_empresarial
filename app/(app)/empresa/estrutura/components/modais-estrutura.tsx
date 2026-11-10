@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { toast } from '@/lib/toast'
+import { ROTULO_ADICIONAL, type AdicionalCargo } from '@/lib/folha/config'
+import { ADICIONAIS_CARGO } from '@/lib/validations/folha'
 import { maskMoeda } from '../../../pessoas/funcionarios/components/ficha/ficha-config'
 import { salvarCargoAction, salvarDepartamentoAction } from '../actions'
 import { descendentesDe, type Cargo, type Departamento } from '../tipos'
@@ -69,6 +71,8 @@ export function ModalCargo({ abertura, departamentos, cargos, companyId, onClose
   const [superiorId, setSuperiorId] = useState(cargo?.superior_id ?? superior?.id ?? '')
   const [salarioMin, setSalarioMin] = useState(comDecimais(cargo?.salario_min ?? null))
   const [salarioMax, setSalarioMax] = useState(comDecimais(cargo?.salario_max ?? null))
+  const [adicional, setAdicional] = useState<AdicionalCargo>(cargo?.adicional ?? 'nenhum')
+  const [batePonto, setBatePonto] = useState(cargo?.bate_ponto ?? true)
   const [salvando, setSalvando] = useState(false)
 
   // Superior possível: qualquer cargo, menos ele mesmo e os que estão abaixo dele
@@ -79,7 +83,7 @@ export function ModalCargo({ abertura, departamentos, cargos, companyId, onClose
     e.preventDefault()
     setSalvando(true)
     const r = await toast.promise(
-      salvarCargoAction(companyId, cargo?.id ?? null, { nome, department_id: departamentoId, superior_id: superiorId, salario_min: salarioMin, salario_max: salarioMax }),
+      salvarCargoAction(companyId, cargo?.id ?? null, { nome, department_id: departamentoId, superior_id: superiorId, salario_min: salarioMin, salario_max: salarioMax, adicional, bate_ponto: batePonto }),
       { loading: 'Salvando o cargo…', success: cargo ? 'Cargo salvo.' : 'Cargo criado.', error: 'Não foi possível salvar o cargo.' },
     )
     setSalvando(false)
@@ -118,6 +122,20 @@ export function ModalCargo({ abertura, departamentos, cargos, companyId, onClose
             <Input label="Salário mínimo (R$)" placeholder="0,00" inputMode="numeric" value={salarioMin} onChange={(e) => setSalarioMin(maskMoeda(e.target.value))} hint="Sugerido ao abrir uma vaga." />
             <Input label="Salário máximo (R$)" placeholder="0,00" inputMode="numeric" value={salarioMax} onChange={(e) => setSalarioMax(maskMoeda(e.target.value))} />
           </div>
+          <Select
+            label="Adicional de risco"
+            options={ADICIONAIS_CARGO.map((a) => ({ value: a, label: ROTULO_ADICIONAL[a] }))}
+            value={adicional}
+            onChange={(e) => setAdicional(e.target.value as AdicionalCargo)}
+          />
+          <p className="text-xs -mt-2" style={{ color: 'var(--color-text-muted)' }}>Vale para todos neste cargo, conforme o laudo técnico. Exceções vão na ficha da pessoa.</p>
+          <label className="flex items-start gap-2.5 text-sm cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
+            <input type="checkbox" checked={batePonto} onChange={(e) => setBatePonto(e.target.checked)} className="mt-0.5 w-4 h-4 shrink-0" style={{ accentColor: 'var(--color-brand)' }} />
+            <span>
+              <span className="font-medium">Registra ponto</span>
+              <span className="block text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Quem ocupa o cargo vê Bater ponto e Meu ponto na página inicial. Desmarque para cargos de gestão sem controle de jornada (art. 62 da CLT).</span>
+            </span>
+          </label>
           <Rodape salvando={salvando} onCancelar={onClose} rotulo={cargo ? 'Salvar' : 'Criar cargo'} />
         </form>
       )}

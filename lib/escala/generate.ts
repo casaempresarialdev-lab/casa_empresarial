@@ -1,4 +1,4 @@
-import { getFeriado } from './feriados'
+import { feriadoDoDia, type FeriadoEmpresa } from './feriados'
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -138,6 +138,12 @@ function calcTipo(rule: ScheduleRule, dateStr: string): DayTipo {
   return 'trabalho'
 }
 
+/** O que o padrão da pessoa define para o dia, sem contar as trocas avulsas */
+export function tipoDaRegra(regrasDaPessoa: ScheduleRule[], dateStr: string): DayTipo {
+  const rule = getActiveRule(regrasDaPessoa, dateStr)
+  return rule ? calcTipo(rule, dateStr) : 'sem_regra'
+}
+
 // ── Função principal ──────────────────────────────────────────────────────────
 
 export function generateMonth(
@@ -146,6 +152,7 @@ export function generateMonth(
   mes: number,
   ano: number,
   employeeId: string,
+  feriados: FeriadoEmpresa[] = [],
 ): DayResult[] {
   const empRules = rules.filter(r => r.employee_id === employeeId)
   const excMap   = new Map<string, ScheduleException>(
@@ -159,7 +166,7 @@ export function generateMonth(
 
   for (let d = 1; d <= totalDias; d++) {
     const dateStr = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const ferInfo = getFeriado(dateStr)
+    const ferInfo = feriadoDoDia(dateStr, feriados)
     const date    = dateFromStr(dateStr)
     const domingo = date.getDay() === 0
 
@@ -181,10 +188,11 @@ export function generateMonth(
     results.push({
       date:               dateStr,
       tipo,
-      hora_entrada:       rule && tipo === 'trabalho' && !exc ? rule.hora_entrada : null,
-      hora_saida:         rule && tipo === 'trabalho' && !exc ? rule.hora_saida   : null,
-      hora_almoco_inicio: rule && tipo === 'trabalho' && !exc ? rule.hora_almoco_inicio : null,
-      hora_almoco_fim:    rule && tipo === 'trabalho' && !exc ? rule.hora_almoco_fim    : null,
+      // Folga trocada por trabalho segue a jornada normal da pessoa
+      hora_entrada:       rule && tipo === 'trabalho' ? rule.hora_entrada : null,
+      hora_saida:         rule && tipo === 'trabalho' ? rule.hora_saida   : null,
+      hora_almoco_inicio: rule && tipo === 'trabalho' ? rule.hora_almoco_inicio : null,
+      hora_almoco_fim:    rule && tipo === 'trabalho' ? rule.hora_almoco_fim    : null,
       feriado:            !!ferInfo,
       feriado_nome:       ferInfo?.nome ?? null,
       domingo,
@@ -193,6 +201,26 @@ export function generateMonth(
     })
   }
 
+  return results
+}
+
+/** Os dias entre duas datas, mesmo atravessando meses */
+export function generateRange(
+  rules: ScheduleRule[],
+  exceptions: ScheduleException[],
+  inicio: string,
+  fim: string,
+  employeeId: string,
+  feriados: FeriadoEmpresa[] = [],
+): DayResult[] {
+  const results: DayResult[] = []
+  let [ano, mes] = inicio.split('-').map(Number)
+  const [anoFim, mesFim] = fim.split('-').map(Number)
+  while (ano < anoFim || (ano === anoFim && mes <= mesFim)) {
+    results.push(...generateMonth(rules, exceptions, mes, ano, employeeId, feriados).filter((d) => d.date >= inicio && d.date <= fim))
+    mes++
+    if (mes > 12) { mes = 1; ano++ }
+  }
   return results
 }
 

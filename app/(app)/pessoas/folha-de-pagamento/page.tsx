@@ -1,10 +1,13 @@
 import { cookies } from 'next/headers'
-import { redirect, notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { montarFolha } from './queries'
+import { montarDecimo } from './queries-decimo'
+import { getHoleritesEnviados } from './recibos'
 import { getCompany } from '../../empresa/queries'
 import { FolhaClient } from './components/folha-client'
+import { DecimoClient } from './components/decimo-client'
 import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export default async function FolhaPagamentoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; ano?: string }>
+  searchParams: Promise<{ mes?: string; ano?: string; aba?: string; parcela?: string }>
 }) {
   await exigirAcessoPagina('pessoas.folha-de-pagamento')
 
@@ -27,26 +30,44 @@ export default async function FolhaPagamentoPage({
   const params = await searchParams
   const [anoAtual, mesAtual] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()).split('-')
   const mes = (params.mes ?? mesAtual).padStart(2, '0')
-  const ano = params.ano ?? anoAtual
+  const ano = /^\d{4}$/.test(params.ano ?? '') ? params.ano! : anoAtual
   const mesAno = `${ano}-${mes}`
 
+  // O colaborador acompanha pelo holerite, quando a empresa disponibiliza
   const viewer = await getViewerContext(companyId)
-  if (viewer?.isColaborador && !viewer.myEmployeeId) notFound()
+  if (viewer?.isColaborador) redirect('/meu-holerite')
 
-  const [folha, company] = await Promise.all([montarFolha(companyId, mesAno), getCompany(companyId)])
+  // 13º salário: aba própria, por ano e parcela (a 2ª a partir de dezembro, ou se escolhida)
+  if (params.aba === 'decimo') {
+    const parcela = params.parcela === '2' || (!params.parcela && Number(mesAtual) === 12 && ano === anoAtual) ? 2 : 1
+    const [decimo, company] = await Promise.all([montarDecimo(companyId, Number(ano), parcela), getCompany(companyId)])
+    return (
+      <div className="w-full">
+        <DecimoClient decimo={decimo} company={company} companyId={companyId} />
+      </div>
+    )
+  }
 
-  // Colaborador só recebe a própria linha
-  const linhas = viewer?.isColaborador ? folha.linhas.filter((l) => l.employee.id === viewer.myEmployeeId) : folha.linhas
+  const [folha, company, enviados] = await Promise.all([
+    montarFolha(companyId, mesAno),
+    getCompany(companyId),
+    getHoleritesEnviados(createAdminClient(), companyId, { competencia: mesAno }),
+  ])
 
   return (
     <div className="w-full">
       <FolhaClient
-        linhas={linhas}
+        linhas={folha.linhas}
         fechada={folha.fechada}
         mesAno={mesAno}
         company={company}
         companyId={companyId}
-        readOnly={viewer?.isColaborador ?? false}
+        readOnly={false}
+        periodo={folha.periodo}
+        vencimentos={folha.vencimentos}
+        responsavel={folha.config.responsavel_calculo}
+        holeriteFonte={folha.config.holerite_ativo ? folha.config.holerite_fonte : null}
+        enviados={enviados}
       />
     </div>
   )

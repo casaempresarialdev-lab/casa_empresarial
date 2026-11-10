@@ -91,13 +91,13 @@ export function Aprovacoes({ ajustes, companyId }: { ajustes: AjusteEquipe[]; co
               <div className={emAnalise ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : ''}>
                 {emAnalise && (
                   <div>
-                    <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Batidas atuais</p>
-                    <p className="text-sm tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{faixasDeHorario(a.atual ?? []).join('  ·  ') || 'Sem batidas'}</p>
+                    <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Registros atuais</p>
+                    <p className="text-sm tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{faixasDeHorario(a.atual ?? []).join('  ·  ') || 'Sem registros'}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{emAnalise ? 'Batidas propostas' : 'Batidas pedidas'}</p>
-                  <p className="text-sm font-semibold tabular-nums" style={{ color: emAnalise ? 'var(--color-brand)' : 'var(--color-text-primary)' }}>{faixasDeHorario(a.batidas).join('  ·  ') || 'Sem batidas'}</p>
+                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{emAnalise ? 'Registros propostos' : 'Registros pedidos'}</p>
+                  <p className="text-sm font-semibold tabular-nums" style={{ color: emAnalise ? 'var(--color-brand)' : 'var(--color-text-primary)' }}>{faixasDeHorario(a.batidas).join('  ·  ') || 'Sem registros'}</p>
                 </div>
               </div>
 

@@ -7,6 +7,7 @@ import { Icon, type IconName } from '@/components/ui/icon'
 import { resumoNotificacoesAction, concluirEventoAction, marcarAvisosVistosAction, type ResumoNotificacoes } from '@/app/(app)/calendario/actions'
 import type { Evento, AvisoCalendario } from '@/app/(app)/calendario/queries'
 import type { AvisoCompartilhamento } from '@/app/(app)/cofre-de-senhas/queries'
+import type { AvisoSistema } from '@/lib/notificacoes'
 
 /** Eventos ficam no calendário da página inicial */
 export const LINK_CALENDARIO = '/dashboard'
@@ -110,6 +111,26 @@ function avisosNovos(avisos: Evento[]): Evento[] {
   return novos
 }
 
+const SISTEMA_KEY = 'avisos_sistema_mostrados'
+
+// Avisos de Pessoas (ponto, atestado, férias, folha, saúde) que acabaram de chegar: notificação do navegador, uma vez cada
+function notificarNavegador(avisos: AvisoSistema[]) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+  let mostrados: string[] = []
+  try { mostrados = JSON.parse(localStorage.getItem(SISTEMA_KEY) ?? '[]') } catch {}
+  const limite = Date.now() - 24 * 60 * 60 * 1000
+  for (const a of avisos) {
+    if (a.visto || mostrados.includes(a.id)) continue
+    mostrados.push(a.id)
+    if (new Date(a.em).getTime() < limite) continue
+    try {
+      const n = new Notification(a.titulo, { body: a.mensagem, tag: 'aviso-' + a.id })
+      n.onclick = () => { window.focus(); window.location.href = a.link ?? '/notificacoes'; n.close() }
+    } catch {}
+  }
+  try { localStorage.setItem(SISTEMA_KEY, JSON.stringify(mostrados.slice(-200))) } catch {}
+}
+
 // Cartão de aviso no canto da tela (fica até fechar): Concluir ou Ver
 function CartaoAviso({ l, onFechar, onConcluir }: { l: Evento; onFechar: () => void; onConcluir: () => void }) {
   return (
@@ -158,13 +179,18 @@ type ItemNotificacao =
   | { tipo: 'evento'; data: number; l: Evento }
   | { tipo: 'compartilhamento'; data: number; c: AvisoCompartilhamento }
   | { tipo: 'calendario'; data: number; a: AvisoCalendario }
+  | { tipo: 'sistema'; data: number; s: AvisoSistema }
 
-// Eventos, convites, agendas e compartilhamentos numa lista só, mais recentes primeiro
-function juntarNotificacoes(avisos: Evento[], compartilhamentos: AvisoCompartilhamento[], calendario: AvisoCalendario[]): ItemNotificacao[] {
+/** Ícone de cada assunto de Pessoas */
+export const ICONE_SISTEMA: Record<AvisoSistema['tipo'], IconName> = { ponto: 'alarm', ausencia: 'stethoscope', ferias: 'calendar', folha: 'wallet', saude: 'shield' }
+
+// Eventos, convites, agendas, compartilhamentos e avisos de Pessoas numa lista só, mais recentes primeiro
+function juntarNotificacoes(r: ResumoNotificacoes): ItemNotificacao[] {
   return [
-    ...avisos.map((l) => ({ tipo: 'evento' as const, data: new Date(l.data_hora).getTime() - l.antecedencia_min * 60_000, l })),
-    ...compartilhamentos.map((c) => ({ tipo: 'compartilhamento' as const, data: new Date(c.created_at).getTime(), c })),
-    ...calendario.map((a) => ({ tipo: 'calendario' as const, data: new Date(a.em).getTime(), a })),
+    ...r.avisos.map((l) => ({ tipo: 'evento' as const, data: new Date(l.data_hora).getTime() - l.antecedencia_min * 60_000, l })),
+    ...r.compartilhamentos.map((c) => ({ tipo: 'compartilhamento' as const, data: new Date(c.created_at).getTime(), c })),
+    ...r.calendario.map((a) => ({ tipo: 'calendario' as const, data: new Date(a.em).getTime(), a })),
+    ...r.sistema.map((s) => ({ tipo: 'sistema' as const, data: new Date(s.em).getTime(), s })),
   ].sort((a, b) => b.data - a.data)
 }
 
@@ -184,7 +210,7 @@ export function Toolbar() {
   const [fase, setFase] = useState<Fase>('carregando')
   const barRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
-  const [resumo, setResumo] = useState<ResumoNotificacoes>({ avisos: [], compartilhamentos: [], calendario: [], naoVistos: 0, proximoAvisoEm: null })
+  const [resumo, setResumo] = useState<ResumoNotificacoes>({ avisos: [], compartilhamentos: [], calendario: [], sistema: [], naoVistos: 0, proximoAvisoEm: null })
   // Avisos que acabaram de chegar: cartão no canto da tela até a pessoa fechar
   const [cartoes, setCartoes] = useState<Evento[]>([])
 
@@ -193,6 +219,7 @@ export function Toolbar() {
     try {
       const r = await resumoNotificacoesAction()
       setResumo(r)
+      notificarNavegador(r.sistema)
       const novos = avisosNovos(r.avisos)
       if (novos.length) setCartoes((prev) => [...prev, ...novos.filter((n) => !prev.some((p) => p.id === n.id))])
     } catch { /* sem conexão: tenta de novo na próxima consulta */ }
@@ -264,6 +291,8 @@ export function Toolbar() {
   function abrirNotificacoes() {
     const abrindo = painel !== 'notificacoes'
     alternar('notificacoes')
+    // Primeiro clique no sino: pede para avisar também pelo navegador
+    if (abrindo && typeof Notification !== 'undefined' && Notification.permission === 'default') Notification.requestPermission().catch(() => null)
     if (abrindo && resumo.naoVistos > 0) {
       setResumo((r) => ({ ...r, naoVistos: 0 }))
       marcarAvisosVistosAction()
@@ -310,11 +339,21 @@ export function Toolbar() {
           <ToolButton icon="bell" label="Notificações" onClick={abrirNotificacoes} active={painel === 'notificacoes'} badge={badge} balancar={cartoes.length > 0} />
           {painel === 'notificacoes' && (
             <PainelSuspenso titulo="Notificações" alinhar="right">
-              {resumo.avisos.length + resumo.compartilhamentos.length + resumo.calendario.length === 0
+              {resumo.avisos.length + resumo.compartilhamentos.length + resumo.calendario.length + resumo.sistema.length === 0
                 ? <Vazio icon="bell" texto="Nenhuma notificação por enquanto." />
                 : (
                   <ul className="flex flex-col max-h-72 overflow-y-auto -mx-1.5">
-                    {juntarNotificacoes(resumo.avisos, resumo.compartilhamentos, resumo.calendario).map((n) => n.tipo === 'calendario' ? (
+                    {juntarNotificacoes(resumo).map((n) => n.tipo === 'sistema' ? (
+                      <LinhaNotificacao
+                        key={'s-' + n.s.id}
+                        icon={ICONE_SISTEMA[n.s.tipo]}
+                        titulo={n.s.titulo}
+                        detalhe={n.s.mensagem}
+                        href={n.s.link ?? '/notificacoes'}
+                        onNavegar={() => setPainel(null)}
+                        novo={!n.s.visto}
+                      />
+                    ) : n.tipo === 'calendario' ? (
                       <LinhaNotificacao
                         key={n.a.id}
                         icon={n.a.tipo === 'agenda' ? 'users' : n.a.tipo === 'convite' ? 'mail' : 'calendar'}

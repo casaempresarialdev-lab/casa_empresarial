@@ -8,6 +8,7 @@ import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-
 import { Tabs } from '@/components/ui/form-steps'
 import { ListEmpty, ListItem } from '@/components/ui/list-item'
 import { toast } from '@/lib/toast'
+import { ROTULO_ADICIONAL } from '@/lib/folha/config'
 import { excluirCargoAction, excluirDepartamentoAction } from '../actions'
 import { corDepartamento, faixaSalarial, type Cargo, type Departamento } from '../tipos'
 import { ModalCargo, ModalDepartamento, type AberturaCargo } from './modais-estrutura'
@@ -130,7 +131,7 @@ export function EstruturaClient({ companyId, departamentos, cargos, ativa }: { c
                 key={c.id}
                 media={<Bolinha id={c.department_id} />}
                 title={c.nome}
-                subtitle={[c.departamento, superior ? `Responde a ${superior.nome}` : 'Topo da hierarquia', faixaSalarial(c)].filter(Boolean).join(' · ')}
+                subtitle={[c.departamento, superior ? `Responde a ${superior.nome}` : 'Topo da hierarquia', faixaSalarial(c), c.adicional !== 'nenhum' && ROTULO_ADICIONAL[c.adicional], !c.bate_ponto && 'Sem ponto'].filter(Boolean).join(' · ')}
                 aside={<span className="hidden sm:inline text-xs font-medium whitespace-nowrap" style={{ color: c.ocupantes.length ? 'var(--color-text-muted)' : '#B45309' }}>{c.ocupantes.length ? plural(c.ocupantes.length, 'pessoa', 'pessoas') : 'Vago'}</span>}
                 onClick={() => editarCargo(c)}
                 actionsLabel={c.nome}

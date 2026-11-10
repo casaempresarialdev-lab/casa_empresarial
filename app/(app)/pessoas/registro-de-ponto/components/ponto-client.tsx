@@ -14,10 +14,12 @@ import { Modal } from '@/components/ui/modal'
 import { toast } from '@/lib/toast'
 import { generateMonth } from '@/lib/escala/generate'
 import type { ScheduleRule, ScheduleException, DayResult } from '@/lib/escala/generate'
+import type { FeriadoEmpresa } from '@/lib/escala/feriados'
 import { minutosTrabalhados, rotuloBatida } from '@/lib/ponto'
 import { faixasDeHorario, horaDe } from '@/lib/validations/ponto'
 import { deleteTimeRecordAction } from '../actions'
-import type { AjusteEquipe, TimeRecord } from '../queries'
+import type { AjusteEquipe, AusenciaEquipe, TimeRecord } from '../queries'
+import { AbaAusencias } from './aba-ausencias'
 import { Aprovacoes } from './aprovacoes'
 import { ModalPonto } from './modal-ponto'
 import { LinkMapa, TextoLocal } from './texto-local'
@@ -27,7 +29,9 @@ interface Props {
   employees: { id: string; nome: string; cargo: string | null }[]
   rules: ScheduleRule[]
   exceptions: ScheduleException[]
+  feriados: FeriadoEmpresa[]
   ajustes: AjusteEquipe[]
+  ausencias: AusenciaEquipe[]
   companyId: string
   mes: number
   ano: number
@@ -212,7 +216,7 @@ function OrigemBatidas({ r }: { r: TimeRecord }) {
   if (!r.batidas.length) return null
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>Batidas e origem</p>
+      <p className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>Registros e origem</p>
       {r.batidas.map((b, i) => {
         const o = b.origem
         return (
@@ -227,14 +231,14 @@ function OrigemBatidas({ r }: { r: TimeRecord }) {
                 <span>IP: {o.ip ?? 'não identificado'}</span>
               </div>
             ) : (
-              <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>Sem localização e IP: lançamento manual ou batida anterior a este controle</p>
+              <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>Sem localização e IP: lançamento manual ou registro anterior a este controle</p>
             )}
           </div>
         )
       })}
       {legado?.lat != null && legado.lng != null && (
         <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          Localização da última batida (controle anterior): <LinkMapa lat={legado.lat} lng={legado.lng} texto={legado.endereco} />
+          Localização do último registro (controle anterior): <LinkMapa lat={legado.lat} lng={legado.lng} texto={legado.endereco} />
         </p>
       )}
     </div>
@@ -259,7 +263,7 @@ function ModalDetalhar({ entry, onClose }: { entry: DayEntry; onClose: () => voi
 }
 
 // Registro de ponto da equipe: lista do mês e aprovação dos ajustes pedidos pelos colaboradores
-export function PontoClient({ records, employees, rules, exceptions, ajustes, companyId, mes, ano, abaInicial }: Props) {
+export function PontoClient({ records, employees, rules, exceptions, feriados, ajustes, ausencias, companyId, mes, ano, abaInicial }: Props) {
   const router = useRouter()
 
   const [aba, setAba] = useState(abaInicial)
@@ -276,10 +280,10 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
   const scheduleMap = useMemo(() => {
     const map = new Map<string, DayResult>()
     for (const emp of employees) {
-      for (const d of generateMonth(rules, exceptions, mes, ano, emp.id)) map.set(`${emp.id}|${d.date}`, d)
+      for (const d of generateMonth(rules, exceptions, mes, ano, emp.id, feriados)) map.set(`${emp.id}|${d.date}`, d)
     }
     return map
-  }, [employees, rules, exceptions, mes, ano])
+  }, [employees, rules, exceptions, feriados, mes, ano])
 
   const recordsMap = useMemo(() => {
     const map = new Map<string, TimeRecord>()
@@ -329,6 +333,7 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
 
   const visiveis = filterSituacao === 'todas' ? dayEntries : dayEntries.filter(e => e.sit.status === filterSituacao)
   const pendentes = ajustes.filter(a => a.status === 'pendente').length
+  const ausenciasPendentes = ausencias.filter(a => a.status === 'pendente').length
 
   function navMes(delta: number) {
     let m = mes + delta, a = ano
@@ -372,7 +377,7 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
     const hasFuncCol = !filterEmployee
     const headers = [
       ...(hasFuncCol ? ['Funcionário'] : []),
-      'Data', 'Previsto', 'Batidas', 'Horas', 'Situação',
+      'Data', 'Previsto', 'Registros', 'Horas', 'Situação',
     ]
     const rows = visiveis.map(e => [
       ...(hasFuncCol ? [e.empNome] : []),
@@ -409,7 +414,7 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
     const hasFuncCol = !filterEmployee
     const headers = [
       ...(hasFuncCol ? ['Funcionário'] : []),
-      'Data', 'Dia', 'Previsto', 'Batidas', 'Horas', 'Situação',
+      'Data', 'Dia', 'Previsto', 'Registros', 'Horas', 'Situação',
     ]
     const rows = visiveis.map(e => [
       ...(hasFuncCol ? [e.empNome] : []),
@@ -436,10 +441,14 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
         <Breadcrumb />
       </div>
 
-      <Tabs labels={['Registros', pendentes ? `Aprovações (${pendentes})` : 'Aprovações']} step={aba} onSelect={setAba} />
+      <Tabs
+        labels={['Registros', pendentes ? `Aprovações (${pendentes})` : 'Aprovações', ausenciasPendentes ? `Atestados e ausências (${ausenciasPendentes})` : 'Atestados e ausências']}
+        step={aba}
+        onSelect={setAba}
+      />
 
       {aba === 1 && <Aprovacoes ajustes={ajustes} companyId={companyId} />}
-
+      {aba === 2 && <AbaAusencias ausencias={ausencias} employees={employees} companyId={companyId} />}
       {aba === 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
           <SummaryCard icon="star" title="Presença" value={`${metrics.rate}%`} caption="dos dias esperados" accent={metrics.rate < 75 ? 'red' : metrics.rate < 90 ? 'yellow' : undefined} />
@@ -498,7 +507,7 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
                 key={`${e.empId}|${e.date}`}
                 media={<Dia date={e.date} hoje={e.isToday} />}
                 title={e.empNome}
-                subtitle={<><span className="lg:hidden">{faixas.join(' · ') || 'Sem batidas'}</span><span className="hidden lg:inline">{previsto}</span></>}
+                subtitle={<><span className="lg:hidden">{faixas.join(' · ') || 'Sem registros'}</span><span className="hidden lg:inline">{previsto}</span></>}
                 aside={
                   <>
                     <span className="hidden lg:flex flex-wrap justify-end gap-x-4 gap-y-0.5 w-80 text-sm font-semibold tabular-nums" style={{ color: faixas.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
@@ -528,6 +537,7 @@ export function PontoClient({ records, employees, rules, exceptions, ajustes, co
         employees={employees}
         rules={rules}
         exceptions={exceptions}
+        feriados={feriados}
         defaultMes={mes}
         defaultAno={ano}
         defaultEmployeeId={modal?.empId ?? null}

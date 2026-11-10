@@ -8,7 +8,8 @@ import { ListItem, ListEmpty } from '@/components/ui/list-item'
 import { toast } from '@/lib/toast'
 import { concluirEventoAction, marcarAvisosVistosAction } from '../../calendario/actions'
 import type { Evento, AvisoCalendario } from '../../calendario/queries'
-import { linkAvisoCalendario } from '@/components/layout/toolbar'
+import { ICONE_SISTEMA, linkAvisoCalendario } from '@/components/layout/toolbar'
+import type { AvisoSistema } from '@/lib/notificacoes'
 import type { AvisoCompartilhamento } from '../../cofre-de-senhas/queries'
 
 const quandoFormat = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -26,13 +27,30 @@ const Nova = () => (
 
 // Página de notificações: avisos de eventos do calendário e credenciais do cofre compartilhadas com o usuário.
 // Cada item é um link: evento → calendário da página inicial; compartilhamento → Cofre de senhas (Compartilhadas comigo).
-export function NotificacoesClient({ notificacoes, compartilhamentos, calendario }: { notificacoes: Evento[]; compartilhamentos: AvisoCompartilhamento[]; calendario: AvisoCalendario[] }) {
+export function NotificacoesClient({ notificacoes, compartilhamentos, calendario, sistema }: { notificacoes: Evento[]; compartilhamentos: AvisoCompartilhamento[]; calendario: AvisoCalendario[]; sistema: AvisoSistema[] }) {
   const router = useRouter()
 
   // Abrir a página conta como "visto": zera o contador do sino
   useEffect(() => {
-    if (notificacoes.some((n) => !n.aviso_visto_em) || compartilhamentos.some((c) => !c.aviso_visto_em) || calendario.some((a) => !a.visto)) marcarAvisosVistosAction()
-  }, [notificacoes, compartilhamentos, calendario])
+    if (notificacoes.some((n) => !n.aviso_visto_em) || compartilhamentos.some((c) => !c.aviso_visto_em) || calendario.some((a) => !a.visto) || sistema.some((s) => !s.visto)) marcarAvisosVistosAction()
+  }, [notificacoes, compartilhamentos, calendario, sistema])
+
+  // Pedidos e decisões de ponto, atestados e férias
+  const itemSistema = (s: AvisoSistema) => (
+    <ListItem
+      key={s.id}
+      icon={ICONE_SISTEMA[s.tipo]}
+      title={
+        <Link href={s.link ?? '/notificacoes'} className="flex items-center gap-2 hover:underline">
+          <span>{s.titulo}</span>
+          {!s.visto && <Nova />}
+        </Link>
+      }
+      subtitle={<span>{s.mensagem} · {quando(s.em)}</span>}
+      actionsLabel={s.titulo}
+      actions={s.link ? [{ icon: ICONE_SISTEMA[s.tipo], label: 'Abrir', onClick: () => router.push(s.link as string) }] : []}
+    />
+  )
 
   const pendentes = notificacoes.filter((n) => !n.concluido)
   const concluidas = notificacoes.filter((n) => n.concluido)
@@ -108,7 +126,7 @@ export function NotificacoesClient({ notificacoes, compartilhamentos, calendario
       </div>
 
       <div className="app-card p-5 flex flex-col gap-5">
-        {notificacoes.length + compartilhamentos.length + calendario.length === 0 && (
+        {notificacoes.length + compartilhamentos.length + calendario.length + sistema.length === 0 && (
           <ListEmpty>
             Nenhuma notificação por enquanto. Os avisos dos seus <Link href={LINK_CALENDARIO} className="font-medium hover:underline" style={{ color: 'var(--color-brand)' }}>eventos do calendário</Link> e as senhas compartilhadas com você aparecem aqui.
           </ListEmpty>
@@ -118,6 +136,13 @@ export function NotificacoesClient({ notificacoes, compartilhamentos, calendario
           <section className="flex flex-col gap-3">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Pendentes ({pendentes.length})</p>
             <ul className="flex flex-col gap-3">{pendentes.map(item)}</ul>
+          </section>
+        )}
+
+        {sistema.length > 0 && (
+          <section className="flex flex-col gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Pessoas: ponto, atestados e férias ({sistema.length})</p>
+            <ul className="flex flex-col gap-3">{sistema.map(itemSistema)}</ul>
           </section>
         )}
 

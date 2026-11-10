@@ -36,7 +36,7 @@ export const MODULOS: ModuloAcesso[] = [
     itens: [
       { key: 'visao-geral.sua-casa', label: 'Sua casa hoje', href: VISAO_GERAL },
       { key: 'visao-geral.calendario', label: 'Calendário', href: VISAO_GERAL },
-      { key: 'visao-geral.bater-ponto', label: 'Ferramentas: Bater ponto e Meu ponto', href: VISAO_GERAL },
+      { key: 'visao-geral.bater-ponto', label: 'Ferramentas: Bater ponto, Meu ponto, Meu holerite, Minhas férias e Minha saúde', href: VISAO_GERAL },
     ],
   },
   {
@@ -70,12 +70,14 @@ export const MODULOS: ModuloAcesso[] = [
     label: 'Pessoas',
     icon: 'users',
     itens: [
+      { key: 'pessoas.dashboard', label: 'Dashboard', href: '/pessoas', exato: true, dashboard: true },
       { key: 'pessoas.funcionarios', label: 'Equipe', href: '/pessoas/funcionarios', rotas: ['/pessoas/prestadores'] },
       { key: 'pessoas.vagas', label: 'Vagas', href: '/pessoas/vagas' },
       { key: 'pessoas.admissao', label: 'Admissão', href: '/pessoas/admissao' },
       { key: 'pessoas.rescisao', label: 'Rescisão', href: '/pessoas/rescisao' },
       { key: 'pessoas.registro-de-ponto', label: 'Registro de Ponto', href: '/pessoas/registro-de-ponto' },
       { key: 'pessoas.escala-de-trabalho', label: 'Escala de Trabalho', href: '/pessoas/escala-de-trabalho' },
+      { key: 'pessoas.ferias', label: 'Férias', href: '/pessoas/ferias' },
       { key: 'pessoas.folha-de-pagamento', label: 'Folha de Pagamento', href: '/pessoas/folha-de-pagamento' },
       { key: 'pessoas.beneficios', label: 'Benefícios', href: '/pessoas/beneficios' },
       { key: 'pessoas.encargos', label: 'Encargos', href: '/pessoas/encargos' },

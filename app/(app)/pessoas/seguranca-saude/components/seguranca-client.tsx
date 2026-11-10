@@ -1,303 +1,169 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-select'
+import type { IconName } from '@/components/ui/icon'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
 import { ModalSeguranca } from './modal-seguranca'
 import { deleteHealthSafetyAction } from '../actions'
 import type { HealthSafetyRecord, EmployeeForSS } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
 
-interface Props {
-  records: HealthSafetyRecord[]
-  employees: EmployeeForSS[]
-  companyId: string
+const TIPOS: Record<HealthSafetyRecord['tipo'], { label: string; icon: IconName }> = {
+  aso: { label: 'ASO', icon: 'stethoscope' },
+  treinamento: { label: 'Treinamento', icon: 'star' },
+  epi: { label: 'EPI', icon: 'shield' },
+  incidente: { label: 'Incidente', icon: 'info' },
+  vacina: { label: 'Vacinação', icon: 'check' },
 }
 
-function ThreeDotMenu({ onEdit, onDelete, loading }: {
-  onEdit: () => void
-  onDelete: () => void
-  loading: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, right: 0 })
-  const menuRef = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
+const RESULTADO: Record<string, string> = { apto: 'Apto', apto_com_restricoes: 'Apto com restrições', inapto: 'Inapto' }
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false)
-    }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
+const FILTRO_TIPO = [{ value: 'todos', label: 'Todos os tipos' }, ...Object.entries(TIPOS).map(([value, t]) => ({ value, label: t.label }))]
+const FILTRO_SITUACAO = [
+  { value: 'todas', label: 'Todas as situações' },
+  { value: 'vencidos', label: 'Vencidos' },
+  { value: 'vencendo', label: 'Vencendo em 30 dias' },
+  { value: 'em_dia', label: 'Em dia' },
+]
 
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const openUp = rect.bottom + 92 > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - 88, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen((v) => !v)
-  }
+const VENCENDO_DIAS = 30
+const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
+const fmt = (d: string | null) => (d ? d.split('-').reverse().join('/') : null)
+const hojeBrasil = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+const diasAte = (de: string, ate: string) => Math.round((Date.parse(ate) - Date.parse(de)) / 86400000)
 
-  return (
-    <div>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={handleOpen}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
-        style={{ color: 'var(--color-text-muted)' }}
-        aria-label="Opções"
-      >
-        ···
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
-          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}
-        >
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
-            onClick={() => { setOpen(false); onEdit() }}
-          >
-            Editar
-          </button>
-          <button
-            type="button"
-            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
-            style={{ color: 'var(--color-error)' }}
-            onClick={() => { setOpen(false); onDelete() }}
-            disabled={loading}
-          >
-            {loading ? 'Excluindo…' : 'Excluir'}
-          </button>
-        </div>
-      )}
-    </div>
-  )
+type Situacao = 'vencido' | 'vencendo' | 'em_dia' | 'sem_validade'
+
+function situacao(r: HealthSafetyRecord, hoje: string): Situacao {
+  if (!r.data_vencimento) return 'sem_validade'
+  const dias = diasAte(hoje, r.data_vencimento)
+  return dias < 0 ? 'vencido' : dias <= VENCENDO_DIAS ? 'vencendo' : 'em_dia'
 }
 
-const TIPO_CONFIG: Record<string, { label: string; icon: string; bg: string; text: string }> = {
-  aso:        { label: 'ASO',          icon: '🩺', bg: '#EBF5FB', text: '#2471A3' },
-  treinamento:{ label: 'Treinamento',  icon: '📚', bg: '#E9F7EF', text: '#1E8449' },
-  epi:        { label: 'EPI',          icon: '🦺', bg: '#FEF9E7', text: '#D4AC0D' },
-  incidente:  { label: 'Incidente',    icon: '⚠️', bg: '#FDEDEC', text: '#C0392B' },
-  vacina:     { label: 'Vacinação',    icon: '💉', bg: '#F4ECF7', text: '#8E44AD' },
+function SeloValidade({ r, hoje }: { r: HealthSafetyRecord; hoje: string }) {
+  const s = situacao(r, hoje)
+  if (s === 'sem_validade') return null
+  const dias = diasAte(hoje, r.data_vencimento!)
+  const [texto, fundo, cor] = s === 'vencido'
+    ? ['Vencido', '#FEE2E2', '#B91C1C']
+    : s === 'vencendo'
+      ? [dias === 0 ? 'Vence hoje' : `Vence em ${plural(dias, 'dia', 'dias')}`, '#FEF3C7', '#B45309']
+      : [`Válido até ${fmt(r.data_vencimento)}`, '#DCFCE7', '#15803D']
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: fundo, color: cor }}>{texto}</span>
 }
 
-const RESULTADO_LABELS: Record<string, string> = {
-  apto: 'Apto',
-  apto_com_restricoes: 'Apto c/ restrições',
-  inapto: 'Inapto',
-}
-
-function formatDate(d: string | null) {
-  if (!d) return '—'
-  return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
-}
-
-function isExpiring(d: string | null) {
-  if (!d) return false
-  const diff = new Date(d).getTime() - Date.now()
-  return diff > 0 && diff < 30 * 24 * 60 * 60 * 1000
-}
-
-function isExpired(d: string | null) {
-  if (!d) return false
-  return new Date(d).getTime() < Date.now()
-}
-
-export function SegurancaClient({ records, employees, companyId }: Props) {
+// Segurança e saúde do trabalho: ASOs, treinamentos, EPIs, incidentes e vacinas, com o controle de validade
+export function SegurancaClient({ records, employees, companyId }: { records: HealthSafetyRecord[]; employees: EmployeeForSS[]; companyId: string }) {
   const router = useRouter()
+  const hoje = hojeBrasil()
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingRecord, setEditingRecord] = useState<HealthSafetyRecord | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [filterTipo, setFilterTipo] = useState('')
-  const [search, setSearch] = useState('')
+  const [editando, setEditando] = useState<HealthSafetyRecord | null>(null)
+  const [excluir, setExcluir] = useState<HealthSafetyRecord | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
+  const [tipo, setTipo] = useState('todos')
+  const [sit, setSit] = useState('todas')
+  const [busca, setBusca] = useState('')
 
-  const filtered = records.filter(r => {
-    const matchTipo = filterTipo ? r.tipo === filterTipo : true
-    const q = search.toLowerCase()
-    const matchSearch = q
-      ? r.titulo.toLowerCase().includes(q) || (r.employee?.nome ?? '').toLowerCase().includes(q)
-      : true
-    return matchTipo && matchSearch
-  })
+  const vencidos = records.filter((r) => situacao(r, hoje) === 'vencido').length
+  const vencendo = records.filter((r) => situacao(r, hoje) === 'vencendo').length
+  const ano = hoje.slice(0, 4)
+  const incidentesAno = records.filter((r) => r.tipo === 'incidente' && r.data?.startsWith(ano)).length
 
-  const vencendoBreve = records.filter(r => isExpiring(r.data_vencimento)).length
-  const vencidos = records.filter(r => isExpired(r.data_vencimento)).length
+  const q = busca.trim().toLowerCase()
+  const visiveis = records
+    .filter((r) => tipo === 'todos' || r.tipo === tipo)
+    .filter((r) => {
+      if (sit === 'todas') return true
+      const s = situacao(r, hoje)
+      return sit === 'vencidos' ? s === 'vencido' : sit === 'vencendo' ? s === 'vencendo' : s === 'em_dia'
+    })
+    .filter((r) => !q || r.titulo.toLowerCase().includes(q) || (r.employee?.nome ?? '').toLowerCase().includes(q))
 
-  function openAdd() { setEditingRecord(null); setModalOpen(true) }
-  function openEdit(r: HealthSafetyRecord) { setEditingRecord(r); setModalOpen(true) }
+  function abrirNovo() { setEditando(null); setModalOpen(true) }
+  function abrirEdicao(r: HealthSafetyRecord) { setEditando(r); setModalOpen(true) }
 
-  async function handleDelete(r: HealthSafetyRecord) {
-    if (!confirm(`Excluir o registro "${r.titulo}"?`)) return
-    setDeletingId(r.id)
-    const result = await deleteHealthSafetyAction(r.id)
-    setDeletingId(null)
-    if ('error' in result) alert(result.error)
-    else router.refresh()
+  async function confirmarExclusao() {
+    if (!excluir) return
+    setExcluindo(true)
+    try {
+      await toast.promise(deleteHealthSafetyAction(excluir.id), { loading: 'Excluindo…', success: 'Registro excluído.', error: 'Não foi possível excluir.' })
+      router.refresh()
+    } catch {
+      // A mensagem de erro já apareceu
+    }
+    setExcluindo(false)
+    setExcluir(null)
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Segurança e Saúde
-            </h1>
-            <Breadcrumb />
-          </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Segurança e Saúde</h1>
+        <Breadcrumb />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="shield" title="Registros" value={records.length} caption={plural(records.filter((r) => r.tipo === 'aso').length, 'ASO', 'ASOs')} />
+        <SummaryCard icon="alarm" title="Vencidos" value={vencidos} caption="renovar o quanto antes" accent={vencidos ? 'red' : undefined} delay={60} />
+        <SummaryCard icon="calendar" title="Vencendo em 30 dias" value={vencendo} caption="programar a renovação" accent={vencendo ? 'yellow' : undefined} delay={120} />
+        <SummaryCard icon="info" title={`Incidentes em ${ano}`} value={incidentesAno} caption="registrados no ano" accent={incidentesAno ? 'yellow' : undefined} delay={180} />
+      </div>
+
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-semibold" style={{ color: 'var(--color-sidebar-text)' }}>
+            {records.length === 0 ? 'Nenhum registro ainda' : plural(records.length, 'registro', 'registros')}
+          </p>
+          <AddButton onClick={abrirNovo} label="Novo registro" />
         </div>
-        <Button onClick={openAdd}>Adicionar</Button>
-      </div>
 
-      {/* Alertas */}
-      {(vencendoBreve > 0 || vencidos > 0) && (
-        <div className="mb-4 space-y-2">
-          {vencidos > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: '#FDEDEC', color: '#C0392B' }}>
-              ⚠️ {vencidos} registro{vencidos > 1 ? 's' : ''} com vencimento expirado
-            </div>
-          )}
-          {vencendoBreve > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm" style={{ backgroundColor: '#FEF9E7', color: '#D4AC0D' }}>
-              🔔 {vencendoBreve} registro{vencendoBreve > 1 ? 's' : ''} vencendo nos próximos 30 dias
-            </div>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterSelect value={tipo} onChange={setTipo} label="Filtrar por tipo" options={FILTRO_TIPO} />
+          <FilterSelect value={sit} onChange={setSit} label="Filtrar por situação" options={FILTRO_SITUACAO} />
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por título ou funcionário..." />
+          {(tipo !== 'todos' || sit !== 'todas' || busca) && <FilterResult total={visiveis.length} onClear={() => { setTipo('todos'); setSit('todas'); setBusca('') }} />}
         </div>
-      )}
 
-      {/* Filtro por tipo */}
-      <div className="flex gap-2 flex-wrap mb-4">
-        <button
-          onClick={() => setFilterTipo('')}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-          style={{
-            backgroundColor: filterTipo === '' ? 'var(--color-primary)' : 'white',
-            color: filterTipo === '' ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
-            border: `1px solid ${filterTipo === '' ? 'transparent' : 'var(--color-bg-surface)'}`,
-          }}
-        >
-          Todos ({records.length})
-        </button>
-        {Object.entries(TIPO_CONFIG).map(([key, cfg]) => {
-          const count = records.filter(r => r.tipo === key).length
-          if (count === 0) return null
-          const isActive = filterTipo === key
-          return (
-            <button
-              key={key}
-              onClick={() => setFilterTipo(isActive ? '' : key)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              style={{
-                backgroundColor: isActive ? cfg.bg : 'white',
-                color: isActive ? cfg.text : 'var(--color-text-secondary)',
-                border: `1px solid ${isActive ? cfg.text : 'var(--color-bg-surface)'}`,
-              }}
-            >
-              {cfg.icon} {cfg.label} ({count})
-            </button>
-          )
-        })}
+        <ul className="flex flex-col gap-3">
+          {visiveis.length === 0 && (
+            <ListEmpty>{records.length === 0 ? 'Registre os ASOs, treinamentos, EPIs, incidentes e vacinas da equipe para acompanhar as validades.' : 'Nenhum registro encontrado.'}</ListEmpty>
+          )}
+          {visiveis.map((r) => {
+            const t = TIPOS[r.tipo] ?? { label: r.tipo, icon: 'file' as IconName }
+            return (
+              <ListItem
+                key={r.id}
+                icon={t.icon}
+                title={r.titulo}
+                subtitle={[t.label, r.employee?.nome ?? 'Empresa', fmt(r.data), r.resultado ? RESULTADO[r.resultado] ?? r.resultado : null, r.observacao].filter(Boolean).join(' · ')}
+                aside={<SeloValidade r={r} hoje={hoje} />}
+                onClick={() => abrirEdicao(r)}
+                actionsLabel={r.titulo}
+                actions={[
+                  { icon: 'pencil', label: 'Editar', onClick: () => abrirEdicao(r) },
+                  { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir(r) },
+                ]}
+              />
+            )
+          })}
+        </ul>
       </div>
 
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Buscar por título ou funcionário..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full px-4 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-        />
-      </div>
+      <ModalSeguranca open={modalOpen} onClose={() => setModalOpen(false)} companyId={companyId} record={editando} employees={employees} />
 
-      <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[700px] text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Tipo</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Título</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Funcionário</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Data</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Vencimento</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Resultado</th>
-              <th className="px-4 py-3 w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  {search || filterTipo ? 'Nenhum resultado.' : 'Nenhum registro cadastrado.'}
-                </td>
-              </tr>
-            )}
-            {filtered.map(r => {
-              const cfg = TIPO_CONFIG[r.tipo]
-              const expired = isExpired(r.data_vencimento)
-              const expiring = isExpiring(r.data_vencimento)
-              return (
-                <tr key={r.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: cfg.bg, color: cfg.text }}>
-                      {cfg.icon} {cfg.label}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                    {r.titulo}
-                    {r.observacao && <div className="text-xs font-normal truncate max-w-xs" style={{ color: 'var(--color-text-muted)' }}>{r.observacao}</div>}
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    {r.employee?.nome ?? <span style={{ color: 'var(--color-text-muted)' }}>Empresa</span>}
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(r.data)}</td>
-                  <td className="px-4 py-3">
-                    <span style={{ color: expired ? '#C0392B' : expiring ? '#D4AC0D' : 'var(--color-text-secondary)' }}>
-                      {expired && '⚠️ '}{expiring && !expired && '🔔 '}
-                      {formatDate(r.data_vencimento)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                    {r.resultado ? RESULTADO_LABELS[r.resultado] ?? r.resultado : '—'}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex justify-end">
-                      <ThreeDotMenu
-                        onEdit={() => openEdit(r)}
-                        onDelete={() => handleDelete(r)}
-                        loading={deletingId === r.id}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <ModalSeguranca
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        record={editingRecord}
-        employees={employees}
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title="Excluir registro"
+        message={<p>Excluir <strong>{excluir?.titulo}</strong>{excluir?.employee ? ` de ${excluir.employee.nome}` : ''}?</p>}
       />
     </>
   )

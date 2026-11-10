@@ -1,11 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
 import { semAcesso } from '@/lib/auth/acesso'
 import { CAMPOS_FOLHA, calcularFolha, type AjustesFolha } from '@/lib/folha/calculo'
 import { conferenciaFolhaSchema } from '@/lib/validations/folha'
+import { notificarFuncionario } from '@/lib/notificacoes'
 import { montarFolha } from './queries'
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -64,17 +65,21 @@ export async function salvarConferenciaAction(companyId: string, employeeId: str
   return { success: true as const }
 }
 
-/** Congela a base do mês e lança salários e benefícios no fluxo de caixa como pendentes */
+/** Congela a base do mês e lança no fluxo de caixa, como pendentes e com vencimento: salários, adiantamentos, benefícios e guias */
 export async function fecharFolhaAction(companyId: string, mesAno: string) {
   const negado = await bloqueado(companyId)
   if (negado) return negado
   if (!RE_MES_ANO.test(mesAno)) return { error: 'Mês inválido.' }
 
-  const { linhas, fechada } = await montarFolha(companyId, mesAno)
+  const { linhas, fechada, vencimentos, config } = await montarFolha(companyId, mesAno)
   if (fechada) return { error: 'A folha deste mês já está fechada.' }
   if (linhas.length === 0) return { error: 'Não há funcionários nesta folha.' }
 
   const admin = createAdminClient()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: perfil } = user ? await admin.from('profiles').select('name').eq('id', user.id).maybeSingle() : { data: null }
+  const fechamento = { fechado_em: new Date().toISOString(), fechado_por_nome: (perfil?.name as string | undefined) ?? 'Usuário' }
   const calculadas = linhas.map((l) => ({ linha: l, r: calcularFolha(l.insumos, l.ponto, l.ajustes) }))
 
   const { data: gravados, error } = await admin.from('payroll_entries').upsert(
@@ -100,6 +105,7 @@ export async function fecharFolhaAction(companyId: string, mesAno: string) {
       salario_liquido: r.liquido,
       dias_trabalhados: l.ponto.motivo ? null : l.ponto.diasTrabalhados,
       status: 'fechado',
+      ...fechamento,
       ajustes: l.ajustes,
       observacao: l.observacao,
       apuracao: { insumos: l.insumos, ponto: l.ponto },
@@ -111,14 +117,21 @@ export async function fecharFolhaAction(companyId: string, mesAno: string) {
   const idDe = new Map(gravados.map((g) => [g.employee_id as string, g.id as string]))
   const competencia = `${mesAno}-01`
   const rotulo = mesAnoLabel(mesAno)
+  const comum = { company_id: companyId, tipo: 'pagamento', data_competencia: competencia, status: 'pendente', recorrente: false }
   const contas = calculadas.flatMap(({ linha: l, r }) => {
     const ref = `payroll_entry:${idDe.get(l.employee.id)}`
-    const comum = { company_id: companyId, tipo: 'pagamento', data_competencia: competencia, status: 'pendente', recorrente: false }
     return [
-      ...(r.liquido > 0 ? [{ ...comum, descricao: `Salário — ${l.employee.nome} — ${rotulo}`, valor: r.liquido, detalhes: `${ref}:salary` }] : []),
-      ...(r.custoBeneficios > 0 ? [{ ...comum, descricao: `Benefícios (patronal) — ${l.employee.nome} — ${rotulo}`, valor: r.custoBeneficios, detalhes: `${ref}:benefits` }] : []),
+      ...(r.liquido > 0 ? [{ ...comum, descricao: `Salário — ${l.employee.nome} — ${rotulo}`, valor: r.liquido, data_vencimento: vencimentos.salario, detalhes: `${ref}:salary` }] : []),
+      ...(r.valores.desconto_adiantamento > 0 ? [{ ...comum, descricao: `Adiantamento — ${l.employee.nome} — ${rotulo}`, valor: r.valores.desconto_adiantamento, data_vencimento: vencimentos.adiantamento, detalhes: `${ref}:advance` }] : []),
+      ...(r.custoBeneficios > 0 ? [{ ...comum, descricao: `Benefícios (patronal) — ${l.employee.nome} — ${rotulo}`, valor: r.custoBeneficios, data_vencimento: vencimentos.beneficios, detalhes: `${ref}:benefits` }] : []),
     ]
   })
+
+  // Guias da empresa: uma de cada, com o total do mês. INSS patronal não entra, pois depende do regime tributário.
+  const fgts = Math.round(calculadas.reduce((t, { r }) => t + r.fgts, 0) * 100) / 100
+  const retidos = Math.round(calculadas.reduce((t, { r }) => t + r.inss + r.irrf, 0) * 100) / 100
+  if (fgts > 0) contas.push({ ...comum, descricao: `FGTS — ${rotulo}`, valor: fgts, data_vencimento: vencimentos.guias, detalhes: `payroll_month:${mesAno}:fgts` })
+  if (retidos > 0) contas.push({ ...comum, descricao: `INSS e IRRF retidos — ${rotulo}`, valor: retidos, data_vencimento: vencimentos.guias, detalhes: `payroll_month:${mesAno}:retidos` })
 
   if (contas.length > 0) {
     const { error: erroContas } = await admin.from('transactions').insert(contas)
@@ -128,7 +141,16 @@ export async function fecharFolhaAction(companyId: string, mesAno: string) {
     }
   }
 
+  // O holerite do mês aparece em Meu holerite, quando a empresa disponibiliza o do sistema
+  if (config.holerite_ativo && config.holerite_fonte === 'sistema') {
+    await Promise.all(linhas.map((l) => notificarFuncionario(admin, {
+      companyId, employeeId: l.employee.id, autorId: user?.id, tipo: 'folha',
+      titulo: 'Holerite disponível', mensagem: `O holerite de ${rotulo} já está em Meu holerite.`, link: '/meu-holerite',
+    })))
+  }
+
   revalidarFolha()
+  revalidatePath('/meu-holerite')
   return { success: true as const }
 }
 
@@ -149,7 +171,7 @@ export async function reabrirFolhaAction(companyId: string, mesAno: string) {
   if (!lancamentos?.length) return { error: 'A folha deste mês não está fechada.' }
   if (lancamentos.some((l) => l.status === 'pago')) return { error: 'Esta folha já foi paga e não pode ser reaberta.' }
 
-  const filtroContas = lancamentos.map((l) => `detalhes.like.payroll_entry:${l.id}:*`).join(',')
+  const filtroContas = [...lancamentos.map((l) => `detalhes.like.payroll_entry:${l.id}:*`), `detalhes.like.payroll_month:${mesAno}:*`].join(',')
   const { data: contas, error: erroContas } = await admin.from('transactions').select('id, status').eq('company_id', companyId).or(filtroContas)
   if (erroContas) return { error: erroContas.message }
   if (contas?.some((c) => c.status !== 'pendente')) {
@@ -163,7 +185,7 @@ export async function reabrirFolhaAction(companyId: string, mesAno: string) {
 
   const { error: erroReabrir } = await admin
     .from('payroll_entries')
-    .update({ status: 'rascunho', apuracao: null })
+    .update({ status: 'rascunho', apuracao: null, fechado_em: null, fechado_por_nome: null })
     .in('id', lancamentos.map((l) => l.id))
   if (erroReabrir) return { error: erroReabrir.message }
 

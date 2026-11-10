@@ -3,8 +3,8 @@ import { z } from 'zod'
 /** Horários digitados de um dia ("08:00", "12:00"...), em ordem */
 export const horariosSchema = z
   .array(z.string().regex(/^\d{2}:\d{2}$/, 'Hora inválida'))
-  .max(100, 'Use até 100 batidas por dia')
-  .refine((h) => h.every((v, i) => i === 0 || v > h[i - 1]), 'Cada batida precisa ser depois da anterior')
+  .max(100, 'Use até 100 registros por dia')
+  .refine((h) => h.every((v, i) => i === 0 || v > h[i - 1]), 'Cada registro precisa ser depois do anterior')
 
 export const ajustePontoSchema = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida'),

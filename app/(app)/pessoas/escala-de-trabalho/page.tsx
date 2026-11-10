@@ -2,7 +2,9 @@ import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
-import { getScheduleRules, getScheduleExceptions, getActiveEmployees } from './queries'
+import { periodoDoMes } from '@/lib/escala/periodo'
+import { getFeriadosEmpresa, getScheduleRules, getScheduleExceptionsEntre, getActiveEmployees } from './queries'
+import { getCompany } from '../../empresa/queries'
 import { EscalaClient } from './components/escala-client'
 import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
@@ -11,7 +13,7 @@ export const dynamic = 'force-dynamic'
 export default async function EscalaDeTrabalhoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; ano?: string }>
+  searchParams: Promise<{ data?: string }>
 }) {
   await exigirAcessoPagina('pessoas.escala-de-trabalho')
 
@@ -24,17 +26,19 @@ export default async function EscalaDeTrabalhoPage({
   if (!companyId) redirect('/empresa')
 
   const params = await searchParams
-  const now = new Date()
-  const mes = parseInt(params.mes ?? String(now.getMonth() + 1))
-  const ano = parseInt(params.ano ?? String(now.getFullYear()))
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(params.data ?? '') && !Number.isNaN(Date.parse(params.data as string)) ? (params.data as string) : hoje
+  const periodo = periodoDoMes(data)
 
   const viewer = await getViewerContext(companyId)
   if (viewer?.isColaborador && !viewer.myEmployeeId) notFound()
 
-  const [rulesAll, exceptionsAll, employeesAll] = await Promise.all([
+  const [rulesAll, exceptionsAll, employeesAll, feriados, company] = await Promise.all([
     getScheduleRules(companyId),
-    getScheduleExceptions(companyId, mes, ano),
+    getScheduleExceptionsEntre(companyId, periodo.inicio, periodo.fim),
     getActiveEmployees(companyId),
+    getFeriadosEmpresa(companyId),
+    getCompany(companyId),
   ])
 
   const myId       = viewer?.myEmployeeId
@@ -48,9 +52,10 @@ export default async function EscalaDeTrabalhoPage({
         rules={rules}
         exceptions={exceptions}
         employees={employees}
+        feriados={feriados}
+        company={company}
         companyId={companyId}
-        mes={mes}
-        ano={ano}
+        data={data}
         readOnly={viewer?.isColaborador ?? false}
       />
     </div>

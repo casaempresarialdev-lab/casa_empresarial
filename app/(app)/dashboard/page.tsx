@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/icon'
 import { getAccountBalances } from '@/lib/finance/balances'
 import { CalendarioHome } from '../calendario/components/calendario-home'
 import { getEventos, getAgendas } from '../calendario/queries'
+import { getConfigFolha } from '../pessoas/folha-de-pagamento/queries'
 import { Welcome } from '@/components/modules/dashboard/welcome'
 import { Ferramentas } from '@/components/modules/dashboard/ferramentas'
 import { IntroProvider } from '@/components/modules/dashboard/intro'
@@ -76,6 +77,44 @@ async function carregarResumo(admin: ReturnType<typeof createAdminClient>, compa
   }
 }
 
+/**
+ * Os lançadores são de quem ocupa um cargo da Estrutura: pela ficha da Equipe ou, sem ficha, pelo cargo do usuário
+ * ('*': position_id vem das migrations 20261108000090/91)
+ */
+async function cargoDoUsuario(admin: ReturnType<typeof createAdminClient>, companyId: string, profileId: string) {
+  const [{ data: fichas }, { data: membro }] = await Promise.all([
+    admin.from('employees').select('*').eq('company_id', companyId).eq('profile_id', profileId).not('status', 'in', '(inativo,demitido)'),
+    admin.from('company_members').select('*').eq('company_id', companyId).eq('profile_id', profileId).eq('status', 'active').maybeSingle(),
+  ])
+  const ids = [
+    ...((fichas ?? []) as { position_id?: string | null }[]).map((f) => f.position_id),
+    (membro as { position_id?: string | null } | null)?.position_id,
+  ].filter((id): id is string => !!id)
+  if (!ids.length) return { temCargo: false, batePonto: false }
+  // '*': bate_ponto vem da migration 20261110000105; sem ela, todo cargo registra ponto
+  const { data: cargos } = await admin.from('job_positions').select('*').in('id', ids)
+  return { temCargo: true, batePonto: ((cargos ?? []) as { bate_ponto?: boolean | null }[]).some((c) => c.bate_ponto !== false) }
+}
+
+/**
+ * Pesquisas ativas (no período) para quem tem ficha na Equipe e ainda não respondeu.
+ * Sem a tabela de participação (migration 20261110000104), mostra todas as ativas.
+ */
+async function pesquisasParaResponder(admin: ReturnType<typeof createAdminClient>, companyId: string, profileId: string) {
+  const { data: ficha } = await admin.from('employees').select('id').eq('company_id', companyId).eq('profile_id', profileId).not('status', 'in', '(inativo,demitido,admissao)').limit(1).maybeSingle()
+  if (!ficha) return []
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const [{ data: ativas }, { data: respondidas }] = await Promise.all([
+    admin.from('surveys').select('id, titulo, data_inicio, data_fim').eq('company_id', companyId).eq('status', 'ativo').order('created_at', { ascending: false }),
+    admin.from('survey_participations').select('survey_id').eq('profile_id', profileId),
+  ])
+  const feitas = new Set(((respondidas ?? []) as { survey_id: string }[]).map((r) => r.survey_id))
+  type Pesquisa = { id: string; titulo: string; data_inicio: string | null; data_fim: string | null }
+  return ((ativas ?? []) as Pesquisa[])
+    .filter((s) => !feitas.has(s.id) && (!s.data_inicio || s.data_inicio <= hoje) && (!s.data_fim || s.data_fim >= hoje))
+    .map((s) => ({ id: s.id, titulo: s.titulo, fim: s.data_fim }))
+}
+
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ evento?: string; agendas?: string }> }) {
   // ?evento=<id>: vindo de uma notificação, abre o evento no calendário; ?agendas=1 abre o painel de agendas
   const { evento: eventoAbertoId, agendas: abrirAgendas } = await searchParams
@@ -140,10 +179,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const verBaterPonto = colaborador || pode(permissoes, 'visao-geral.bater-ponto')
 
   // Calendário: meus eventos, convites e agendas que acompanho
-  const [resumo, eventos, agendas] = await Promise.all([
+  const [configFolha, resumo, eventos, agendas, pesquisas, cargo] = await Promise.all([
+    verBaterPonto ? getConfigFolha(companyId) : null,
     verSuaCasa ? carregarResumo(admin, companyId) : null,
     verCalendario ? getEventos(user.id) : [],
     verCalendario ? getAgendas(user.id) : null,
+    pesquisasParaResponder(admin, companyId, user.id),
+    cargoDoUsuario(admin, companyId, user.id),
   ])
   const { atencao, docsVencidos, saldoTotal, empAtivos, emAndamento, publicacoes } = resumo ?? {
     atencao: 0, docsVencidos: 0, saldoTotal: 0, empAtivos: 0, emAndamento: 0, publicacoes: 0,
@@ -153,7 +195,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <IntroProvider play={cookieStore.get('play_intro')?.value === '1'}>
       <Welcome firstName={firstName} />
 
-      <Ferramentas baterPonto={verBaterPonto} />
+      {cargo.temCargo && <Ferramentas baterPonto={verBaterPonto} ponto={cargo.batePonto} holerite={!!configFolha?.holerite_ativo} pesquisas={pesquisas} />}
 
       {verSuaCasa && <section>
         <h2

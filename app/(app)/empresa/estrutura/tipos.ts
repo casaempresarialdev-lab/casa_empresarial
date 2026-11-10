@@ -1,5 +1,7 @@
 // Tipos e regras puras da Estrutura: usados no servidor e na tela.
 
+import type { AdicionalCargo } from '@/lib/folha/config'
+
 export type Departamento = { id: string; nome: string }
 
 export type Ocupante = { id: string; nome: string; foto: string | null }
@@ -12,6 +14,10 @@ export type Cargo = {
   superior_id: string | null
   salario_min: number | null
   salario_max: number | null
+  /** Adicional de risco de quem ocupa o cargo (a ficha pode ter exceção) */
+  adicional: AdicionalCargo
+  /** Quem ocupa o cargo registra ponto (lançadores Bater ponto e Meu ponto) */
+  bate_ponto: boolean
   ocupantes: Ocupante[]
 }
 
@@ -22,6 +28,7 @@ export type CargoOpcao = {
   departamento: string
   salario_min: number | null
   salario_max: number | null
+  adicional: AdicionalCargo
 }
 
 /** Ids de todos os cargos abaixo deste na hierarquia */

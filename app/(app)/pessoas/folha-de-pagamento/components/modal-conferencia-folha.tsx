@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { toast } from '@/lib/toast'
-import { CAMPOS_FOLHA, calcularFolha, horas, type AjustesFolha, type CampoFolha } from '@/lib/folha/calculo'
+import { CAMPOS_FOLHA, calcularFolha, horas, horasNoturnasPagas, type AjustesFolha, type CampoFolha } from '@/lib/folha/calculo'
 import { maskMoeda, normalizarValor } from '../../funcionarios/components/ficha/ficha-config'
 import { salvarConferenciaAction } from '../actions'
 import type { LinhaFolha } from '../queries'
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const CAMPOS_DIAS: CampoFolha[] = ['desconto_faltas', 'atestados']
+const CAMPOS_DIAS: CampoFolha[] = ['desconto_faltas', 'atestados', 'dsr_perdido']
 const ehDias = (c: CampoFolha) => CAMPOS_DIAS.includes(c)
 
 const paraTexto = (campo: CampoFolha, v: number) =>
@@ -23,7 +23,8 @@ const fmtData = (d: string) => `${d.slice(8)}/${d.slice(5, 7)}`
 const AVISO: Record<string, string> = {
   sem_controle: 'Esta pessoa não registra ponto: faltas, atrasos e horas extras devem ser informados aqui.',
   sem_escala: 'Sem escala de trabalho neste mês: não foi possível apurar faltas, atrasos e horas extras.',
-  sem_registros: 'Nenhuma batida de ponto neste mês: nada foi apurado automaticamente.',
+  sem_registros: 'Nenhum registro de ponto neste mês: nada foi apurado automaticamente.',
+  afastado: 'Pessoa afastada: confira os dias pagos pela empresa (até 15) e informe em Faltas os dias a cargo do INSS.',
 }
 
 function Dado({ rotulo, valor }: { rotulo: string; valor: string }) {
@@ -126,6 +127,12 @@ export function ModalConferenciaFolha({ linha, companyId, mesAno, somenteLeitura
                 <Dado rotulo="Atrasos" valor={horas(ponto.atrasoMin)} />
                 <Dado rotulo="Horas extras" valor={horas(ponto.he50Min + ponto.heFeriadoMin + ponto.heDomingoMin)} />
               </div>
+              {(ponto.noturnoMin ?? 0) > 0 && (
+                <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  Horário noturno: <strong>{horas(ponto.noturnoMin ?? 0)}</strong> de relógio
+                  {insumos.noturno?.reduzida ? <>, pagas como <strong>{horas(Math.round(horasNoturnasPagas(ponto.noturnoMin ?? 0, true) * 60))}</strong> pela hora reduzida</> : null}.
+                </p>
+              )}
               {ponto.ocorrencias.length > 0 && (
                 <ul className="max-h-28 overflow-y-auto rounded-lg border px-3 py-2 flex flex-col gap-1" style={{ borderColor: 'var(--color-card-border)' }}>
                   {ponto.ocorrencias.map((o, i) => (
@@ -141,21 +148,42 @@ export function ModalConferenciaFolha({ linha, companyId, mesAno, somenteLeitura
 
         <section className="flex flex-col gap-3">
           <h3 className={titulo} style={{ color: 'var(--color-text-muted)' }}>Proventos</h3>
+          {r.feriasNoRecibo ? (
+            <p className="text-sm rounded-lg px-3 py-2" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-text-secondary)' }}>
+              Férias: {r.feriasNoRecibo.dias} dias neste mês, pagos no recibo de férias em {fmtData(r.feriasNoRecibo.pagamentoEm)}. Saem do salário, mas {moeda(r.feriasNoRecibo.valor + r.feriasNoRecibo.terco)} entram na base do INSS e do FGTS.
+            </p>
+          ) : r.diasFerias + (insumos.diasAbono ?? 0) > 0 && (
+            <p className="text-sm rounded-lg px-3 py-2" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-text-secondary)' }}>
+              Férias: {r.diasFerias} dias, {moeda(r.valorFerias)} + 1/3 de {moeda(r.tercoFerias)}{r.abonoFerias > 0 ? ` · abono de ${moeda(r.abonoFerias)}` : ''}.
+            </p>
+          )}
+          {(r.periculosidade > 0 || r.insalubridade > 0) && (
+            <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              {r.periculosidade > 0 ? `Adicional de periculosidade (30%): ${moeda(r.periculosidade)}` : `Adicional de insalubridade (${insumos.insalubridade?.pct ?? 0}%): ${moeda(r.insalubridade)}`}, pelo cargo.
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {Campo({ campo: 'horas_extras', rotulo: 'Hora extra 50%', apurado: `${horas(ponto.he50Min)} apuradas` })}
-            {Campo({ campo: 'horas_extras_feriado', rotulo: 'Hora extra feriado 100%', apurado: `${horas(ponto.heFeriadoMin)} apuradas` })}
-            {Campo({ campo: 'horas_extras_domingo', rotulo: 'Hora extra domingo 100%', apurado: `${horas(ponto.heDomingoMin)} apuradas` })}
+            {Campo({ campo: 'horas_extras', rotulo: `Hora extra ${Math.round(((insumos.fatorHe?.normal ?? 1.5) - 1) * 100)}%`, apurado: `${horas(ponto.he50Min)} apuradas` })}
+            {Campo({ campo: 'horas_extras_feriado', rotulo: `Hora extra feriado ${Math.round(((insumos.fatorHe?.feriado ?? 2) - 1) * 100)}%`, apurado: `${horas(ponto.heFeriadoMin)} apuradas` })}
+            {Campo({ campo: 'horas_extras_domingo', rotulo: `Hora extra domingo ${Math.round(((insumos.fatorHe?.domingo ?? 2) - 1) * 100)}%`, apurado: `${horas(ponto.heDomingoMin)} apuradas` })}
+            {Campo({ campo: 'adicional_noturno', rotulo: `Adicional noturno ${insumos.noturno?.pct ?? 20}%`, apurado: insumos.noturno ? `${horas(ponto.noturnoMin ?? 0)} apuradas` : 'Desligado nas configurações' })}
             {Campo({ campo: 'bonus', rotulo: 'Comissão', apurado: 'Informado na conferência' })}
           </div>
+          {insumos.dsr?.reflexo && (
+            <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              DSR sobre horas extras e adicional noturno: <strong>{moeda(r.dsr)}</strong> ({insumos.dsr.descansos} domingos e feriados para {insumos.dsr.diasUteis} dias úteis no período). Acompanha os valores acima.
+            </p>
+          )}
         </section>
 
         <section className="flex flex-col gap-3">
           <h3 className={titulo} style={{ color: 'var(--color-text-muted)' }}>Descontos e ausências</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {Campo({ campo: 'desconto_faltas', rotulo: 'Faltas', apurado: `Desconta ${moeda(r.valorFaltas)}` })}
+            {Campo({ campo: 'dsr_perdido', rotulo: 'DSR perdido por falta', apurado: insumos.dsr?.descontaFalta ? `Desconta ${moeda(r.valorDsrPerdido)} · 1 por semana com falta` : 'Desligado nas configurações' })}
             {Campo({ campo: 'atestados', rotulo: 'Atestados', apurado: 'Não desconta do salário' })}
             {Campo({ campo: 'desconto_atrasos', rotulo: 'Atrasos', apurado: `${horas(ponto.atrasoMin)} apuradas` })}
-            {Campo({ campo: 'desconto_adiantamento', rotulo: 'Adiantamento', apurado: 'Informado na conferência' })}
+            {Campo({ campo: 'desconto_adiantamento', rotulo: 'Adiantamento', apurado: insumos.adiantamentoPct ? `${insumos.adiantamentoPct}% do salário` : 'Informado na conferência' })}
             {Campo({ campo: 'desconto_vt', rotulo: 'Vale-transporte', apurado: 'Pela regra do benefício' })}
             {Campo({ campo: 'desconto_vr', rotulo: 'Vale-alimentação/refeição', apurado: 'Pela regra do benefício' })}
             {Campo({ campo: 'desconto_outros', rotulo: 'Outros benefícios', apurado: 'Pela regra do benefício' })}

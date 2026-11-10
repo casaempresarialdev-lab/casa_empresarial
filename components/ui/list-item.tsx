@@ -48,7 +48,7 @@ export function ListItem({ icon, media, title, subtitle, aside, actions, actions
         </button>
       ) : body}
       {aside && <div className="flex items-center gap-3 shrink-0">{aside}</div>}
-      <ActionMenu label={`Ações de ${actionsLabel}`} items={actions} />
+      {actions.length > 0 && <ActionMenu label={`Ações de ${actionsLabel}`} items={actions} />}
     </li>
   )
 }

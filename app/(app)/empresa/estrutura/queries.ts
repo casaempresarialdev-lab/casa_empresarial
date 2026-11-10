@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import type { AdicionalCargo } from '@/lib/folha/config'
 import type { Cargo, CargoOpcao, Departamento } from './tipos'
 
 type LinhaCargo = {
@@ -8,10 +9,13 @@ type LinhaCargo = {
   superior_id: string | null
   salario_min: number | null
   salario_max: number | null
+  adicional?: AdicionalCargo | null
+  bate_ponto?: boolean | null
   departments: { nome: string } | null
 }
 
-const COLS = 'id, nome, department_id, superior_id, salario_min, salario_max, departments(nome)'
+// '*': a coluna "adicional" vem da migration 20261110000102
+const COLS = '*, departments(nome)'
 
 /** Lista dos formulários (sem a migration 20261108000090: vazia) */
 export async function getCargosOpcoes(companyId: string): Promise<CargoOpcao[]> {
@@ -23,6 +27,7 @@ export async function getCargosOpcoes(companyId: string): Promise<CargoOpcao[]> 
     departamento: c.departments?.nome ?? '',
     salario_min: c.salario_min,
     salario_max: c.salario_max,
+    adicional: c.adicional ?? 'nenhum',
   }))
 }
 
@@ -60,7 +65,14 @@ export async function getEstrutura(companyId: string): Promise<{ departamentos: 
   return {
     departamentos: (deps ?? []) as Departamento[],
     cargos: (linhas as unknown as LinhaCargo[]).map(({ departments, ...c }) => ({
-      ...c,
+      id: c.id,
+      nome: c.nome,
+      department_id: c.department_id,
+      superior_id: c.superior_id,
+      salario_min: c.salario_min,
+      salario_max: c.salario_max,
+      adicional: c.adicional ?? 'nenhum',
+      bate_ponto: c.bate_ponto !== false,
       departamento: departments?.nome ?? '',
       ocupantes: [
         ...ocupantes.filter((p) => p.position_id === c.id).map((p) => ({ id: p.id, nome: p.nome, foto: fotos.get(p.id) ?? null })),

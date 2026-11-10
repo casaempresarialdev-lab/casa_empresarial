@@ -1,264 +1,276 @@
 'use client'
 
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
 import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { ActionMenu } from '@/components/ui/action-menu'
 import { AddButton } from '@/components/ui/add-button'
-import { FilterResult, FilterSelect } from '@/components/ui/filter-select'
-import { Tabs } from '@/components/ui/form-steps'
+import { FilterResult, SearchField } from '@/components/ui/filter-select'
 import { Icon } from '@/components/ui/icon'
-import { iniciais } from '../../funcionarios/components/ficha/ficha-config'
-import { ModalRegraEscala } from './modal-regra-escala'
-import { ModalExcecao } from './modal-excecao'
-import { deleteRuleAction } from '../actions'
-import { generateMonth } from '@/lib/escala/generate'
-import type { ScheduleRule, ScheduleException, DayResult } from '@/lib/escala/generate'
-import { exportCalendarioPDF, exportExcel } from '@/lib/export/escala-export'
+import { generateRange, tipoDaRegra } from '@/lib/escala/generate'
+import type { DayResult, ScheduleException, ScheduleRule } from '@/lib/escala/generate'
+import type { FeriadoEmpresa } from '@/lib/escala/feriados'
+import { periodoDoMes } from '@/lib/escala/periodo'
+import { baixarArquivo, exportarExcel as gerarExcel, type QuadroExport } from '@/lib/export/escala-export'
+import { DEFAULT_BRAND_COLOR } from '@/lib/theme'
+import { toast } from '@/lib/toast'
+import type { Company } from '../../../empresa/queries'
+import { definirDiasAction } from '../actions'
+import { ModalFeriados } from './modal-feriados'
+import { ModalPadrao } from './modal-padrao'
+import { ModalRemoverEscala } from './modal-remover-escala'
 
 interface Props {
   rules: ScheduleRule[]
   exceptions: ScheduleException[]
   employees: { id: string; nome: string; cargo: string | null }[]
+  feriados: FeriadoEmpresa[]
+  company: Company | null
   companyId: string
-  mes: number
-  ano: number
+  /** Uma data dentro do mês exibido */
+  data: string
   readOnly?: boolean
 }
 
-const MESES       = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-const DIAS_SEMANA = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+type TipoDia = 'folga' | 'trabalho'
+type Arraste = { empId: string; tipo: TipoDia; datas: string[] }
+type Celula = { dia: DayResult; tipo: DayResult['tipo']; foraDaEscala: boolean; editavel: boolean }
 
-function formatTime(t: string | null) {
-  if (!t) return ''
-  return t.slice(0, 5)
+const INICIAIS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
+const NOMES_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+const FERIADO_FUNDO = '#EBF5FB'
+const DOMINGO_FUNDO = '#F7F7F7'
+const ESTILO_FORA_DA_ESCALA: React.CSSProperties = { backgroundColor: '#FEF3C7', color: '#B45309', boxShadow: 'inset 0 0 0 1.5px #B45309' }
+
+const diaDaSemana = (data: string) => new Date(`${data}T00:00:00`).getDay()
+const fmtDia = (data: string) => `${data.slice(8)}/${data.slice(5, 7)}`
+const chave = (empId: string, data: string) => `${empId}|${data}`
+
+/** Padrão em vigor no período: as regras chegam ordenadas pelo início */
+function regraDoPeriodo(regras: ScheduleRule[], inicio: string, fim: string) {
+  return regras.filter((r) => r.data_inicio <= fim && (!r.data_fim || r.data_fim >= inicio)).at(-1) ?? null
 }
 
-function getDaysInMonth(ano: number, mes: number) { return new Date(ano, mes, 0).getDate() }
-function getFirstDayOfWeek(ano: number, mes: number) { return new Date(ano, mes - 1, 1).getDay() }
+function descricaoPadrao(r: ScheduleRule | null) {
+  if (!r) return 'Sem padrão definido'
+  const horario = `${r.hora_entrada.slice(0, 5)}–${r.hora_saida.slice(0, 5)}`
+  return r.data_fim ? `${horario} · até ${r.data_fim.split('-').reverse().join('/')}` : horario
+}
 
-function getWeeksOfMonth(mes: number, ano: number): Date[][] {
-  const firstDay = new Date(ano, mes - 1, 1)
-  const sun = new Date(firstDay)
-  sun.setDate(firstDay.getDate() - firstDay.getDay())
-  sun.setHours(0, 0, 0, 0)
-  const lastDay = new Date(ano, mes, 0)
-  const weeks: Date[][] = []
-  const d = new Date(sun)
-  while (d <= lastDay) {
-    weeks.push(Array.from({ length: 7 }, (_, i) => {
-      const day = new Date(d)
-      day.setDate(d.getDate() + i)
-      return day
-    }))
-    d.setDate(d.getDate() + 7)
+/** Nome da escala: quem tem o mesmo nome fica no mesmo grupo do quadro */
+function nomeEscala(r: ScheduleRule | null) {
+  if (!r) return 'Sem escala'
+  if (r.tipo_escala === 'ciclo') return r.ciclo_trabalho_dias === 1 && r.ciclo_folga_dias === 1 ? '12x36' : `${r.ciclo_trabalho_dias}x${r.ciclo_folga_dias}`
+  const folgas = [1, 2, 3, 4, 5, 6, 0].filter((d) => r.dias_folga.includes(d)).map((d) => NOMES_SEMANA[d])
+  return folgas.length ? `Folga ${folgas.join(', ')}` : 'Sem folga fixa'
+}
+
+function descricaoCelula(c: Celula) {
+  if (c.tipo === 'sem_regra') return 'Sem padrão'
+  const base = c.tipo === 'folga' ? 'Folga' : 'Trabalho'
+  return c.foraDaEscala ? `${base} fora da escala` : base
+}
+
+function estiloCelula(c: Celula): { texto: string; estilo: React.CSSProperties } {
+  if (c.tipo === 'sem_regra') return { texto: '—', estilo: { color: 'var(--color-text-muted)' } }
+  if (c.tipo === 'folga') {
+    return c.foraDaEscala
+      ? { texto: 'F', estilo: ESTILO_FORA_DA_ESCALA }
+      : { texto: 'F', estilo: { backgroundColor: 'var(--color-brand)', color: '#fff' } }
   }
-  return weeks
+  if (c.foraDaEscala) return { texto: 'T', estilo: ESTILO_FORA_DA_ESCALA }
+  return { texto: '·', estilo: { color: 'var(--color-text-muted)' } }
 }
 
-function weekTabLabel(week: Date[], mes: number): string {
-  const inMonth = week.filter(d => d.getMonth() + 1 === mes)
-  if (!inMonth.length) return ''
-  const min = inMonth[0].getDate()
-  const max = inMonth[inMonth.length - 1].getDate()
-  return `${String(min).padStart(2, '0')} – ${String(max).padStart(2, '0')}`
-}
-
-// ── ThreeDotMenu ──────────────────────────────────────────────────────────────
-
-function ThreeDotMenu({ onEdit, onDelete, loading }: { onEdit: () => void; onDelete: () => void; loading: boolean }) {
-  const [open, setOpen] = useState(false)
-  const [pos,  setPos]  = useState({ top: 0, right: 0 })
-  const menuRef = useRef<HTMLDivElement>(null)
-  const btnRef  = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        btnRef.current  && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false)
-    }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  function handleOpen() {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) {
-      const openUp = rect.bottom + 130 > window.innerHeight - 8
-      setPos(openUp
-        ? { top: rect.top - 134, right: window.innerWidth - rect.right }
-        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-      )
-    }
-    setOpen(v => !v)
-  }
-
+function Legenda() {
+  const itens: [string, React.CSSProperties, string][] = [
+    ['·', { color: 'var(--color-text-muted)' }, 'Trabalho'],
+    ['F', { backgroundColor: 'var(--color-brand)', color: '#fff' }, 'Folga'],
+    ['F', ESTILO_FORA_DA_ESCALA, 'Folga fora da escala'],
+    ['T', ESTILO_FORA_DA_ESCALA, 'Trabalho fora da escala'],
+    ['', { backgroundColor: FERIADO_FUNDO }, 'Feriado'],
+  ]
   return (
-    <div>
-      <button ref={btnRef} type="button" onClick={handleOpen}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-lg hover:bg-gray-100 transition-colors"
-        style={{ color: 'var(--color-text-muted)' }} aria-label="Opções">
-        ···
-      </button>
-      {open && (
-        <div ref={menuRef} className="fixed w-36 rounded-xl border shadow-lg py-1 z-50"
-          style={{ backgroundColor: 'white', borderColor: 'var(--color-bg-surface)', top: pos.top, right: pos.right }}>
-          <button type="button" onClick={() => { setOpen(false); onEdit() }}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
-            style={{ color: 'var(--color-text-secondary)' }}>Editar</button>
-          <button type="button" onClick={() => { setOpen(false); onDelete() }} disabled={loading}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50"
-            style={{ color: 'var(--color-error)' }}>
-            {loading ? 'Excluindo…' : 'Excluir'}
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Legenda ───────────────────────────────────────────────────────────────────
-
-function Legenda({ itens, className = '' }: { itens: [string, string][]; className?: string }) {
-  return (
-    <div className={`flex flex-wrap items-center gap-4 text-xs ${className}`} style={{ color: 'var(--color-text-muted)' }}>
-      {itens.map(([cor, rotulo]) => (
-        <span key={rotulo} className="flex items-center gap-1">
-          <span className="inline-block w-2.5 h-2.5 rounded-sm border" style={{ backgroundColor: cor, borderColor: 'var(--color-card-border)' }} />
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+      {itens.map(([marca, estilo, rotulo]) => (
+        <span key={rotulo} className="flex items-center gap-1.5">
+          <span className="w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold" style={estilo}>{marca}</span>
           {rotulo}
         </span>
       ))}
-      <span>* = exceção manual</span>
     </div>
   )
 }
 
-
-// ── Main component ────────────────────────────────────────────────────────────
-
-type ListRow = { emp: { id: string; nome: string; cargo: string | null }; day: DayResult }
-
-export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano, readOnly = false }: Props) {
+// Quadro de folgas: pessoas nas linhas e dias nas colunas. Marca-se a folga; o resto é trabalho.
+export function EscalaClient({ rules, exceptions, employees, feriados, company, companyId, data, readOnly = false }: Props) {
   const router = useRouter()
+  const [busca, setBusca] = useState('')
+  // Modal da escala: adicionar pessoas (sem `pessoa`) ou editar quem já está no quadro
+  const [editor, setEditor] = useState<{ pessoa?: { id: string; nome: string } } | null>(null)
+  const [remover, setRemover] = useState<{ id: string; nome: string } | null>(null)
+  const [gerirFeriados, setGerirFeriados] = useState(false)
+  const [arraste, setArrasteState] = useState<Arraste | null>(null)
+  const [otimista, setOtimista] = useState<Record<string, TipoDia>>({})
+  const arrasteRef = useRef<Arraste | null>(null)
+  const emAndamento = useRef(0)
+  const ultimoFoiMouse = useRef(false)
+  const [exportando, setExportando] = useState(false)
 
-  const [view,           setView]        = useState<'calendario' | 'cronograma'>('calendario')
-  const [weekIdx,        setWeekIdx]     = useState(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    if (today.getMonth() + 1 === mes && today.getFullYear() === ano) {
-      const idx = getWeeksOfMonth(mes, ano).findIndex(w => w[0] <= today && today <= w[6])
-      return idx >= 0 ? idx : 0
-    }
-    return 0
-  })
-  const [filterEmployee, setFilter]      = useState('')
-  const [modalRegra,     setModalRegra]  = useState(false)
-  const [editingRule,    setEditingRule] = useState<ScheduleRule | null>(null)
-  const [deletingId,     setDeletingId] = useState<string | null>(null)
-  const [excOpen,        setExcOpen]    = useState(false)
-  const [excDate,        setExcDate]    = useState<string | null>(null)
-  const [excEmpId,       setExcEmpId]   = useState<string | null>(null)
-  const calendarRef = useRef<HTMLDivElement>(null)
-
-  const filteredEmps = filterEmployee ? employees.filter(e => e.id === filterEmployee) : employees
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const periodo = useMemo(() => periodoDoMes(data), [data])
+  const { inicio, fim } = periodo
 
-  // Os dias do mês de cada pessoa
-  const porPessoa = useMemo(
-    () => (filterEmployee ? employees.filter(e => e.id === filterEmployee) : employees).map(emp => ({ emp, days: generateMonth(rules, exceptions, mes, ano, emp.id) })),
-    [employees, filterEmployee, rules, exceptions, mes, ano],
-  )
+  // Dias do período com feriados e domingos, independente de pessoa
+  const colunas = useMemo(() => generateRange([], [], inicio, fim, '', feriados), [inicio, fim, feriados])
 
-  // Mapa data → [{emp, day}] para o calendário
-  const byDate: Record<string, ListRow[]> = {}
-  // Dias de trabalho, para o Excel
-  const listaRows: ListRow[] = []
-  for (const { emp, days } of porPessoa) {
-    for (const day of days) {
-      if (!byDate[day.date]) byDate[day.date] = []
-      byDate[day.date].push({ emp, day })
-      if (day.tipo === 'trabalho') listaRows.push({ emp, day })
-    }
+  // No quadro fica quem tem escala no período; quem foi removido hoje já some da tela do período atual
+  const noPeriodoAtual = hoje >= inicio && hoje <= fim
+  const noQuadro = useMemo(() => {
+    const limite = noPeriodoAtual ? hoje : inicio
+    return employees.filter((e) => rules.some((r) => r.employee_id === e.id && r.data_inicio <= fim && (!r.data_fim || r.data_fim >= limite)))
+  }, [employees, rules, noPeriodoAtual, hoje, inicio, fim])
+
+  const q = busca.trim().toLowerCase()
+  const visiveis = useMemo(() => noQuadro.filter((e) => !q || e.nome.toLowerCase().includes(q) || (e.cargo ?? '').toLowerCase().includes(q)), [noQuadro, q])
+
+  const porPessoa = useMemo(() => visiveis.map((emp) => ({
+    emp,
+    regras: rules.filter((r) => r.employee_id === emp.id),
+    dias: generateRange(rules, exceptions, inicio, fim, emp.id, feriados),
+  })), [visiveis, rules, exceptions, feriados, inicio, fim])
+
+  // O servidor já respondeu: o que veio dele substitui o que estava só na tela
+  useEffect(() => {
+    if (emAndamento.current === 0) setOtimista({})
+  }, [rules, exceptions])
+
+  const tipoNaTela = (empId: string, d: DayResult): DayResult['tipo'] => {
+    if (arraste?.empId === empId && arraste.datas.includes(d.date)) return arraste.tipo
+    return otimista[chave(empId, d.date)] ?? d.tipo
   }
-  listaRows.sort((a, b) => a.day.date.localeCompare(b.day.date) || a.emp.nome.localeCompare(b.emp.nome))
 
-  const todosOsDias = porPessoa.flatMap(p => p.days)
-  const indicadores = {
-    comEscala: porPessoa.filter(p => p.days.some(d => d.tipo !== 'sem_regra')).length,
-    trabalho: todosOsDias.filter(d => d.tipo === 'trabalho').length,
-    folgas: todosOsDias.filter(d => d.tipo === 'folga').length,
-    feriados: new Set(todosOsDias.filter(d => d.feriado).map(d => d.date)).size,
-    excecoes: todosOsDias.filter(d => d.excecao).length,
-  }
-
-  // Cronograma semanal
-  const weeksOfMonth = getWeeksOfMonth(mes, ano)
-  const weekDates    = weeksOfMonth[Math.min(weekIdx, weeksOfMonth.length - 1)]
-  const cronogramaData = filteredEmps.map(emp => {
-    const cache: Record<string, DayResult[]> = {}
-    const days = weekDates.map(date => {
-      const m = date.getMonth() + 1
-      const y = date.getFullYear()
-      const key = `${y}-${m}`
-      if (!cache[key]) cache[key] = generateMonth(rules, exceptions, m, y, emp.id)
-      const ds = `${y}-${String(m).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-      return cache[key].find(d => d.date === ds) ?? null
+  const linhas = porPessoa.map(({ emp, regras, dias }) => {
+    const regra = regraDoPeriodo(regras, inicio, fim)
+    const celulas: Celula[] = dias.map((dia) => {
+      const tipo = tipoNaTela(emp.id, dia)
+      const base = tipoDaRegra(regras, dia.date)
+      return { dia, tipo, foraDaEscala: base !== 'sem_regra' && tipo !== base, editavel: !readOnly && base !== 'sem_regra' }
     })
-    return { emp, days }
+    return { emp, regras, celulas, regra, grupo: nomeEscala(regra), folgas: celulas.filter((c) => c.tipo === 'folga').length }
+  }).sort((a, b) => a.grupo.localeCompare(b.grupo, 'pt-BR', { numeric: true }) || a.emp.nome.localeCompare(b.emp.nome, 'pt-BR'))
+
+  const indicadores = {
+    folgas: linhas.reduce((s, l) => s + l.folgas, 0),
+    foraDaEscala: linhas.reduce((s, l) => s + l.celulas.filter((c) => c.foraDaEscala).length, 0),
+  }
+
+  const setArraste = (a: Arraste | null) => { arrasteRef.current = a; setArrasteState(a) }
+
+  async function salvar({ empId, tipo, datas }: Arraste) {
+    setOtimista((o) => ({ ...o, ...Object.fromEntries(datas.map((d) => [chave(empId, d), tipo])) }))
+    emAndamento.current++
+    let erro: string | null = null
+    try {
+      const r = await definirDiasAction(companyId, empId, datas, tipo)
+      if ('error' in r) erro = r.error ?? 'Não foi possível salvar.'
+    } catch {
+      erro = 'Não foi possível salvar. Verifique sua conexão.'
+    }
+    emAndamento.current--
+    if (erro) {
+      toast.error(erro)
+      setOtimista((o) => Object.fromEntries(Object.entries(o).filter(([k]) => !datas.some((d) => k === chave(empId, d)))))
+    }
+    if (emAndamento.current === 0) router.refresh()
+  }
+
+  // Arrastando com o mouse: ao soltar, em qualquer lugar da tela, grava os dias marcados
+  const arrastando = !!arraste
+  useEffect(() => {
+    if (!arrastando) return
+    const soltar = () => {
+      const a = arrasteRef.current
+      setArraste(null)
+      if (a) salvar(a)
+    }
+    window.addEventListener('pointerup', soltar)
+    return () => window.removeEventListener('pointerup', soltar)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arrastando])
+
+  const oposto = (c: Celula): TipoDia => (c.tipo === 'folga' ? 'trabalho' : 'folga')
+
+  function iniciarArraste(e: React.PointerEvent, empId: string, c: Celula) {
+    ultimoFoiMouse.current = e.pointerType === 'mouse'
+    if (!c.editavel || e.pointerType !== 'mouse' || e.button !== 0) return
+    setArraste({ empId, tipo: oposto(c), datas: [c.dia.date] })
+  }
+
+  function continuarArraste(empId: string, c: Celula) {
+    const a = arrasteRef.current
+    if (!a || a.empId !== empId || !c.editavel || a.datas.includes(c.dia.date)) return
+    setArraste({ ...a, datas: [...a.datas, c.dia.date] })
+  }
+
+  /** Toque e teclado; o mouse já foi tratado no arraste */
+  function clicar(e: React.MouseEvent, empId: string, c: Celula) {
+    if (!c.editavel || (e.detail !== 0 && ultimoFoiMouse.current)) return
+    salvar({ empId, tipo: oposto(c), datas: [c.dia.date] })
+  }
+
+  function irPara(novaData: string) {
+    router.push(`/pessoas/escala-de-trabalho?data=${novaData}`, { scroll: false })
+  }
+
+
+  const foraDoQuadro = employees.filter((e) => !noQuadro.some((n) => n.id === e.id))
+
+  function adicionar() {
+    if (!foraDoQuadro.length) { toast.error(employees.length ? 'Todos os colaboradores já estão no quadro.' : 'Nenhum colaborador ativo para adicionar.'); return }
+    setEditor({})
+  }
+
+  /** O que está na tela agora, pronto para os arquivos */
+  const dadosExportacao = (): QuadroExport => ({
+    empresa: company?.nome_fantasia || company?.razao_social || 'Empresa',
+    rotulo: periodo.rotulo,
+    corMarca: company?.cor_primaria || DEFAULT_BRAND_COLOR,
+    geradoEm: new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date()),
+    colunas,
+    linhas: linhas.map((l) => ({ nome: l.emp.nome, cargo: l.emp.cargo, grupo: l.grupo, escala: descricaoPadrao(l.regra), folgas: l.folgas, celulas: l.celulas })),
+  })
+  const nomeArquivo = `escala-${inicio}-a-${fim}`
+
+  async function exportar(tipo: string, gerar: () => Promise<void>) {
+    setExportando(true)
+    try {
+      await toast.promise(gerar(), { loading: `Gerando o ${tipo}…`, success: `${tipo} baixado.`, error: `Não foi possível gerar o ${tipo}.` })
+    } catch {
+      // A mensagem de erro já apareceu
+    }
+    setExportando(false)
+  }
+
+  const exportarPDF = () => exportar('PDF', async () => {
+    const [{ pdf }, { QuadroEscalaPdf }] = await Promise.all([import('@react-pdf/renderer'), import('./quadro-escala-pdf')])
+    baixarArquivo(await pdf(<QuadroEscalaPdf company={company} q={dadosExportacao()} />).toBlob(), `${nomeArquivo}.pdf`)
   })
 
-  // Células do calendário
-  const totalDias = getDaysInMonth(ano, mes)
-  const firstDay  = getFirstDayOfWeek(ano, mes)
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: totalDias }, (_, i) => i + 1),
-  ]
-  while (cells.length % 7 !== 0) cells.push(null)
+  const exportarExcel = () => exportar('Excel', () => gerarExcel(dadosExportacao(), nomeArquivo))
 
-  function navMes(delta: number) {
-    let m = mes + delta, a = ano
-    if (m < 1)  { m = 12; a-- }
-    if (m > 12) { m = 1;  a++ }
-    router.push(`/pessoas/escala-de-trabalho?mes=${m}&ano=${a}`)
-  }
-
-  function openExcecao(dateStr: string, empId: string) {
-    if (readOnly) return
-    setExcDate(dateStr); setExcEmpId(empId); setExcOpen(true)
-  }
-
-  async function handleDeleteRule(ruleId: string) {
-    if (!confirm('Excluir esta regra de escala?')) return
-    setDeletingId(ruleId)
-    const result = await deleteRuleAction(ruleId, companyId)
-    setDeletingId(null)
-    if ('error' in result) alert(result.error)
-    else router.refresh()
-  }
-
-  async function handleExportPDF() {
-    if (calendarRef.current) {
-      await exportCalendarioPDF(calendarRef.current, mes, ano)
-    }
-  }
-
-  async function handleExportExcel() {
-    await exportExcel(listaRows.map(r => ({ ...r.day, employeeName: r.emp.nome })), mes, ano)
-  }
-
-  const excExistente = excDate && excEmpId
-    ? exceptions.find(e => e.data === excDate && e.employee_id === excEmpId) ?? null
-    : null
-  const excEmpName = excEmpId ? employees.find(e => e.id === excEmpId)?.nome ?? null : null
-  const filteredRules = filterEmployee ? rules.filter(r => r.employee_id === filterEmployee) : rules
+  const regrasDe = (id: string) => rules.filter((r) => r.employee_id === id)
+  const escalaAtual = editor?.pessoa ? regraDoPeriodo(regrasDe(editor.pessoa.id), inicio, fim) : null
+  const inicioSugerido = noPeriodoAtual ? hoje : inicio
+  const inicioEscalaDe = (id: string) => regrasDe(id)[0]?.data_inicio ?? hoje
 
   const seta = 'w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-gray-100'
   const botao = 'inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-50 shrink-0'
   const estiloBotao = { borderColor: 'var(--color-card-border)', color: 'var(--color-text-secondary)' }
   const borda = { borderColor: 'var(--color-card-border)' }
-  const cursorDia = readOnly ? 'cursor-default' : 'cursor-pointer'
+  const fundoColuna = (d: DayResult) => (d.feriado ? FERIADO_FUNDO : d.domingo ? DOMINGO_FUNDO : undefined)
 
   return (
     <>
@@ -267,235 +279,176 @@ export function EscalaClient({ rules, exceptions, employees, companyId, mes, ano
         <Breadcrumb />
       </div>
 
-      <Tabs labels={['Calendário', 'Cronograma']} step={view === 'calendario' ? 0 : 1} onSelect={(i) => setView(i === 0 ? 'calendario' : 'cronograma')} />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-        <SummaryCard icon="users" title="Pessoas com escala" value={indicadores.comEscala} caption={`de ${porPessoa.length} ${porPessoa.length === 1 ? 'funcionário' : 'funcionários'}`} accent={indicadores.comEscala < porPessoa.length ? 'yellow' : undefined} />
-        <SummaryCard icon="briefcase" title="Dias de trabalho" value={indicadores.trabalho} caption={`em ${MESES[mes - 1].toLowerCase()}`} delay={60} />
-        <SummaryCard icon="star" title="Folgas" value={indicadores.folgas} caption="dias no mês" delay={120} />
-        <SummaryCard icon="calendar" title="Feriados" value={indicadores.feriados} caption="no mês" delay={180} />
-        <SummaryCard icon="pencil" title="Exceções" value={indicadores.excecoes} caption="ajustes manuais" delay={240} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <SummaryCard icon="users" title="No quadro" value={noQuadro.length} caption={`de ${employees.length} ${employees.length === 1 ? 'colaborador' : 'colaboradores'}`} />
+        <SummaryCard icon="calendar" title="Folgas" value={indicadores.folgas} caption="no mês" delay={60} />
+        <SummaryCard icon="info" title="Fora da escala" value={indicadores.foraDaEscala} caption="dias diferentes do padrão" accent={indicadores.foraDaEscala > 0 ? 'yellow' : undefined} delay={120} />
       </div>
 
       <div className="app-card p-5 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-1" style={{ color: 'var(--color-sidebar-text)' }}>
-            <button type="button" onClick={() => navMes(-1)} aria-label="Mês anterior" className={seta}><Icon name="chevron-left" size={18} /></button>
-            <span className="w-36 text-center text-sm font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{MESES[mes - 1]} {ano}</span>
-            <button type="button" onClick={() => navMes(1)} aria-label="Próximo mês" className={seta}><Icon name="chevron-right" size={18} /></button>
+            <button type="button" onClick={() => irPara(periodo.anterior)} aria-label="Mês anterior" className={seta}><Icon name="chevron-left" size={18} /></button>
+            <span className="min-w-36 px-1 text-center text-sm font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{periodo.rotulo}</span>
+            <button type="button" onClick={() => irPara(periodo.proximo)} aria-label="Próximo mês" className={seta}><Icon name="chevron-right" size={18} /></button>
+            {!noPeriodoAtual && (
+              <button type="button" onClick={() => irPara(hoje)} className="ml-1 text-sm font-semibold cursor-pointer hover:underline" style={{ color: 'var(--color-brand)' }}>Hoje</button>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {view === 'calendario' && (
-              <>
-                <button type="button" onClick={handleExportPDF} className={botao} style={estiloBotao}><Icon name="download" size={16} /> PDF</button>
-                <button type="button" onClick={handleExportExcel} className={botao} style={estiloBotao}><Icon name="download" size={16} /> Excel</button>
-              </>
-            )}
-            {!readOnly && <AddButton onClick={() => router.push('/pessoas/escala-de-trabalho/nova')} />}
+            {!readOnly && <button type="button" onClick={() => setGerirFeriados(true)} className={botao} style={estiloBotao}><Icon name="calendar" size={16} /> Feriados</button>}
+            <button type="button" onClick={exportarPDF} disabled={exportando} className={`${botao} disabled:opacity-50`} style={estiloBotao}><Icon name="download" size={16} /> PDF</button>
+            <button type="button" onClick={exportarExcel} disabled={exportando} className={`${botao} disabled:opacity-50`} style={estiloBotao}><Icon name="download" size={16} /> Excel</button>
+            {!readOnly && <AddButton onClick={adicionar} label="Adicionar colaborador" />}
           </div>
         </div>
 
-        {(employees.length > 1 || view === 'cronograma') && (
+        {noQuadro.length > 1 && (
           <div className="flex flex-wrap items-center gap-2">
-            {employees.length > 1 && (
-              <FilterSelect
-                value={filterEmployee}
-                onChange={setFilter}
-                label="Filtrar por funcionário"
-                options={[{ value: '', label: 'Todos os funcionários' }, ...employees.map(e => ({ value: e.id, label: e.nome }))]}
-              />
-            )}
-            {view === 'cronograma' && weeksOfMonth.map((week, i) => {
-              const ativa = i === weekIdx
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setWeekIdx(i)}
-                  aria-pressed={ativa}
-                  className={`h-9 px-3 rounded-lg border text-sm tabular-nums transition-colors cursor-pointer ${ativa ? 'font-semibold' : 'hover:bg-gray-50'}`}
-                  style={ativa
-                    ? { borderColor: 'var(--color-brand)', backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }
-                    : estiloBotao}
-                >
-                  {weekTabLabel(week, mes)}
-                </button>
-              )
-            })}
-            {filterEmployee && <FilterResult total={porPessoa.length} onClear={() => setFilter('')} />}
+            <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome ou cargo..." />
+            {busca && <FilterResult total={visiveis.length} onClear={() => setBusca('')} />}
           </div>
         )}
 
-        {/* ── Calendário ───────────────────────────────────────────────────── */}
-        {view === 'calendario' && (
-          <div className="rounded-xl border overflow-x-auto" style={borda}>
-            {/* O PDF é uma imagem deste bloco */}
-            <div ref={calendarRef} className="min-w-[720px] bg-white">
-              <div className="grid grid-cols-7 border-b" style={{ ...borda, backgroundColor: 'var(--color-bg-surface)' }}>
-                {DIAS_SEMANA.map(d => (
-                  <div key={d} className="text-center py-2 text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>{d}</div>
+        <div className="rounded-xl border overflow-x-auto" style={borda}>
+          <table className="w-full border-collapse text-sm select-none bg-white">
+            <thead>
+              <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                <th className="sticky left-0 z-10 text-left px-3 py-2 min-w-56" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                  <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Pessoa</span>
+                </th>
+                {colunas.map((d) => (
+                  <th key={d.date} title={d.feriado_nome ?? undefined} className="py-1.5 text-center min-w-8" style={{ backgroundColor: fundoColuna(d) }}>
+                    <span className="block text-[10px] font-medium" style={{ color: 'var(--color-text-muted)' }}>{INICIAIS_SEMANA[diaDaSemana(d.date)]}</span>
+                    <span
+                      className="mx-auto w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold tabular-nums"
+                      style={d.date === hoje ? { backgroundColor: 'var(--color-brand)', color: '#fff' } : { color: 'var(--color-text-secondary)' }}
+                    >
+                      {Number(d.date.slice(8))}
+                    </span>
+                  </th>
                 ))}
-              </div>
+                <th className="px-3 py-2 text-xs font-semibold text-center" style={{ color: 'var(--color-text-secondary)' }}>Folgas</th>
+                {!readOnly && <th className="w-10" />}
+              </tr>
+            </thead>
 
-              <div className="grid grid-cols-7">
-                {cells.map((day, idx) => {
-                  const dateStr = day
-                    ? `${ano}-${String(mes).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                    : ''
-                  const entries   = dateStr ? (byDate[dateStr] ?? []) : []
-                  const isToday   = dateStr === hoje
-                  const firstDay2 = entries[0]?.day
-                  const isFeriado = firstDay2?.feriado ?? false
-                  const isDomingo = firstDay2?.domingo ?? false
-
-                  let cellBg = day ? 'white' : '#FAFAFA'
-                  if (day && isDomingo) cellBg = '#F5F5F5'
-                  if (day && isFeriado) cellBg = '#EBF5FB'
-
-                  return (
-                    <div key={idx} className="min-h-[96px] border-r border-b p-1.5" style={{ ...borda, backgroundColor: cellBg }}>
-                      {day && (
-                        <>
-                          <div className="flex items-center justify-between gap-1 mb-1">
-                            <span
-                              className="text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full shrink-0"
-                              style={{
-                                backgroundColor: isToday ? 'var(--color-brand)' : 'transparent',
-                                color: isToday ? '#fff' : isDomingo ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
-                              }}
-                            >
-                              {day}
-                            </span>
-                            {isFeriado && firstDay2?.feriado_nome && (
-                              <span title={firstDay2.feriado_nome} className="text-[10px] truncate" style={{ color: '#2471A3' }}>{firstDay2.feriado_nome}</span>
-                            )}
-                          </div>
-
-                          {entries.map(({ emp, day: d }) => {
-                            if (d.tipo === 'sem_regra') return null
-                            const isFolga = d.tipo === 'folga'
-                            return (
-                              <button
-                                key={emp.id}
-                                type="button"
-                                onClick={() => openExcecao(dateStr, emp.id)}
-                                className={`w-full text-left mb-0.5 px-1.5 py-0.5 rounded ${cursorDia}`}
-                                style={{ backgroundColor: isFolga ? '#F4F6F7' : '#E9F7EF', color: isFolga ? '#888' : '#1E8449' }}
-                                title={`${emp.nome} — ${isFolga ? 'Folga' : `${formatTime(d.hora_entrada)}–${formatTime(d.hora_saida)}`}${d.excecao ? ' (exceção)' : ''}`}
-                              >
-                                <span className="block text-xs font-medium truncate">{emp.nome.split(' ')[0]}{d.excecao ? ' *' : ''}</span>
-                                {!isFolga && <span className="block text-[10px] tabular-nums opacity-80">{formatTime(d.hora_entrada)}–{formatTime(d.hora_saida)}</span>}
-                              </button>
-                            )
-                          })}
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              <Legenda itens={[['#E9F7EF', 'Trabalho'], ['#F4F6F7', 'Folga'], ['#EBF5FB', 'Feriado'], ['#F5F5F5', 'Domingo']]} className="px-4 py-2" />
-            </div>
-          </div>
-        )}
-
-        {/* ── Cronograma ───────────────────────────────────────────────────── */}
-        {view === 'cronograma' && (
-          <>
-            <div className="rounded-xl border overflow-x-auto" style={borda}>
-              <table className="w-full border-collapse text-sm" style={{ minWidth: 860 }}>
-                <thead>
-                  <tr style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                    <th className="text-left px-3 py-2 text-xs font-semibold w-44" style={{ color: 'var(--color-text-secondary)' }}>Pessoa</th>
-                    {weekDates.map((d, i) => (
-                      <th
-                        key={i}
-                        className="text-center px-1 py-2 text-xs font-semibold"
-                        style={{
-                          minWidth: 88,
-                          color: d.getDay() === 0 ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
-                          backgroundColor: d.toISOString().slice(0, 10) === hoje ? 'var(--color-brand-light)' : undefined,
-                        }}
-                      >
-                        <span className="block">{DIAS_SEMANA[d.getDay()]}</span>
-                        <span className="block font-normal text-[11px] tabular-nums">{String(d.getDate()).padStart(2, '0')}/{String(d.getMonth() + 1).padStart(2, '0')}</span>
-                      </th>
-                    ))}
+            <tbody>
+              {linhas.length === 0 && (
+                <tr><td colSpan={colunas.length + 3} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
+                  {noQuadro.length ? 'Nenhuma pessoa encontrada.' : readOnly ? 'Você ainda não tem escala neste mês.' : 'Ninguém no quadro neste mês. Use Adicionar colaborador para começar.'}
+                </td></tr>
+              )}
+              {linhas.map(({ emp, celulas, regra, folgas, grupo }, n) => (
+                <Fragment key={emp.id}>
+                {grupo !== linhas[n - 1]?.grupo && (
+                  <tr className="border-t" style={{ ...borda, backgroundColor: 'var(--color-brand-light)' }}>
+                    <td colSpan={colunas.length + 3} className="px-3 py-1.5">
+                      <span className="sticky left-3 text-xs font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
+                        {grupo}
+                        <span className="font-medium ml-2">{linhas.filter((l) => l.grupo === grupo).length} {linhas.filter((l) => l.grupo === grupo).length === 1 ? 'pessoa' : 'pessoas'}</span>
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {cronogramaData.length === 0 && (
-                    <tr><td colSpan={8} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>Nenhum funcionário com escala cadastrada.</td></tr>
-                  )}
-                  {cronogramaData.map(({ emp, days }) => (
-                    <tr key={emp.id} className="border-t bg-white" style={borda}>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ backgroundColor: 'var(--color-brand-light)', color: 'var(--color-brand)' }}>
-                            {iniciais(emp.nome)}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold truncate" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{emp.nome.split(' ').slice(0, 2).join(' ')}</p>
-                            {emp.cargo && <p className="text-[11px] truncate" style={{ color: 'var(--color-text-muted)' }}>{emp.cargo}</p>}
-                          </div>
-                        </div>
+                )}
+                <tr className="border-t" style={borda}>
+                  <td className="sticky left-0 z-10 bg-white px-3 py-1.5">
+                    <button
+                      type="button"
+                      disabled={readOnly}
+                      onClick={() => setEditor({ pessoa: { id: emp.id, nome: emp.nome } })}
+                      className={`min-w-0 text-left ${readOnly ? 'cursor-default' : 'cursor-pointer group'}`}
+                    >
+                      <span className="block text-sm font-bold truncate max-w-48 group-hover:underline" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{emp.nome}</span>
+                      <span className="block text-[11px] truncate max-w-48" style={{ color: 'var(--color-text-muted)' }}>{descricaoPadrao(regra)}</span>
+                    </button>
+                  </td>
+                  {celulas.map((c) => {
+                    const { texto, estilo } = estiloCelula(c)
+                    const descricao = `${fmtDia(c.dia.date)}: ${descricaoCelula(c)}${c.dia.feriado_nome ? ` (${c.dia.feriado_nome})` : ''}`
+                    return (
+                      <td key={c.dia.date} className="p-0.5 text-center" style={{ backgroundColor: fundoColuna(c.dia) }}>
+                        <button
+                          type="button"
+                          disabled={!c.editavel}
+                          title={descricao}
+                          aria-label={`${emp.nome}, ${descricao}`}
+                          onPointerDown={(e) => iniciarArraste(e, emp.id, c)}
+                          onPointerEnter={() => continuarArraste(emp.id, c)}
+                          onClick={(e) => clicar(e, emp.id, c)}
+                          className={`w-full rounded flex flex-col items-center justify-center font-bold transition-colors h-8 text-xs ${c.editavel ? 'cursor-pointer hover:ring-1 hover:ring-[var(--color-brand)]' : 'cursor-default'}`}
+                          style={estilo}
+                        >
+                          {texto}
+                        </button>
                       </td>
-                      {days.map((day, dayIdx) => {
-                        const dateStr = weekDates[dayIdx].toISOString().slice(0, 10)
-                        const fimDeSemana = weekDates[dayIdx].getDay() === 0 || weekDates[dayIdx].getDay() === 6
+                    )
+                  })}
+                  <td className="px-3 text-center text-sm font-semibold tabular-nums" style={{ color: 'var(--color-text-primary)' }}>{folgas}</td>
+                  {!readOnly && (
+                    <td className="px-1">
+                      <ActionMenu
+                        label={`Ações de ${emp.nome}`}
+                        items={[
+                          { icon: 'pencil', label: 'Editar escala', onClick: () => setEditor({ pessoa: { id: emp.id, nome: emp.nome } }) },
+                          { icon: 'trash', label: 'Remover do quadro', tone: 'danger', onClick: () => setRemover({ id: emp.id, nome: emp.nome }) },
+                        ]}
+                      />
+                    </td>
+                  )}
+                </tr>
+                </Fragment>
+              ))}
+            </tbody>
 
-                        if (!day || day.tipo === 'sem_regra') {
-                          return <td key={dayIdx} className="text-center px-1 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>—</td>
-                        }
-                        const isFolga = day.tipo === 'folga'
-                        return (
-                          <td
-                            key={dayIdx}
-                            onClick={() => openExcecao(dateStr, emp.id)}
-                            className={`text-center px-1 py-2 border-l ${cursorDia}`}
-                            style={{ ...borda, backgroundColor: isFolga ? (fimDeSemana ? '#F0F0F0' : '#F4F6F7') : day.feriado ? '#EBF5FB' : '#E9F7EF' }}
-                            title={`${emp.nome} — ${isFolga ? 'Folga' : `${formatTime(day.hora_entrada)}–${formatTime(day.hora_saida)}`}${day.excecao ? ' (exceção)' : ''}`}
-                          >
-                            {isFolga ? (
-                              <span className="text-xs font-medium" style={{ color: '#888' }}>Folga{day.excecao ? ' *' : ''}</span>
-                            ) : (
-                              <>
-                                <span className="block text-xs font-semibold tabular-nums" style={{ color: '#1E8449' }}>{formatTime(day.hora_entrada)}{day.excecao ? ' *' : ''}</span>
-                                <span className="block text-[11px] tabular-nums" style={{ color: '#1E8449', opacity: 0.8 }}>{formatTime(day.hora_saida)}</span>
-                              </>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {linhas.length > 1 && (
+              <tfoot>
+                <tr className="border-t" style={{ ...borda, backgroundColor: 'var(--color-bg-surface)' }}>
+                  <td className="sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold" style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}>Trabalhando</td>
+                  {colunas.map((d, i) => {
+                    const total = linhas.filter((l) => l.celulas[i]?.tipo === 'trabalho').length
+                    return <td key={d.date} className="text-center text-xs font-semibold tabular-nums" style={{ color: total === 0 ? 'var(--color-error)' : 'var(--color-text-secondary)' }}>{total}</td>
+                  })}
+                  <td />
+                  {!readOnly && <td />}
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
 
-            <Legenda itens={[['#E9F7EF', 'Trabalho'], ['#F4F6F7', 'Folga'], ['#EBF5FB', 'Feriado'], ['#F0F0F0', 'Fim de semana']]} />
-          </>
+        <Legenda />
+        {!readOnly && (
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            Clique em um dia para alternar entre folga e trabalho, ou arraste para marcar vários. Clique no nome da pessoa para editar a escala.
+          </p>
         )}
       </div>
 
-      <ModalRegraEscala
-        open={modalRegra}
-        onClose={() => { setModalRegra(false); setEditingRule(null) }}
-        companyId={companyId}
-        employees={employees}
-        rule={editingRule}
-      />
+      {editor && (
+        <ModalPadrao
+          companyId={companyId}
+          disponiveis={editor.pessoa ? undefined : foraDoQuadro}
+          pessoa={editor.pessoa}
+          atual={escalaAtual}
+          inicioSugerido={inicioSugerido}
+          onClose={() => setEditor(null)}
+          onSalvo={() => { setEditor(null); setOtimista({}) }}
+        />
+      )}
 
-      <ModalExcecao
-        open={excOpen}
-        onClose={() => setExcOpen(false)}
-        companyId={companyId}
-        date={excDate}
-        employeeId={excEmpId}
-        employeeName={excEmpName}
-        existingException={excExistente}
-      />
+      {gerirFeriados && <ModalFeriados companyId={companyId} feriados={feriados} anoInicial={Number(inicio.slice(0, 4))} onClose={() => setGerirFeriados(false)} />}
+
+      {remover && (
+        <ModalRemoverEscala
+          companyId={companyId}
+          pessoa={remover}
+          inicioEscala={inicioEscalaDe(remover.id)}
+          hoje={hoje}
+          onClose={() => setRemover(null)}
+          onRemovida={() => { setRemover(null); setOtimista({}) }}
+        />
+      )}
     </>
   )
 }

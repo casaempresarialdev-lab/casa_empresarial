@@ -58,6 +58,23 @@ export function buildFeriadoMap(year: number): Map<string, FeriadoInfo> {
   return map
 }
 
+/** Ajuste da empresa: feriado acrescentado ou nacional que ela não considera */
+export type FeriadoEmpresa = {
+  id: string
+  data: string
+  nome: string
+  tipo: 'adicionado' | 'removido'
+  recorrente: boolean
+}
+
+/** O feriado do dia para a empresa: os dela vêm primeiro, depois os nacionais que ela não desconsiderou */
+export function feriadoDoDia(dateStr: string, empresa: FeriadoEmpresa[]): FeriadoInfo | null {
+  const proprio = empresa.find((f) => f.tipo === 'adicionado' && (f.data === dateStr || (f.recorrente && f.data.slice(5) === dateStr.slice(5) && f.data <= dateStr)))
+  if (proprio) return { nome: proprio.nome }
+  if (empresa.some((f) => f.tipo === 'removido' && f.data === dateStr)) return null
+  return getFeriado(dateStr)
+}
+
 // Cache por ano para não recalcular a cada célula
 const cache = new Map<number, Map<string, FeriadoInfo>>()
 

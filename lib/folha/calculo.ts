@@ -63,7 +63,7 @@ export type RegistroPonto = {
   tipo: string
 }
 
-export type MotivoSemApuracao = 'sem_controle' | 'sem_escala' | 'sem_registros'
+export type MotivoSemApuracao = 'sem_controle' | 'sem_escala' | 'sem_registros' | 'afastado'
 
 export type ApuracaoPonto = {
   /** Por que o ponto não foi usado; sem motivo, os números abaixo são automáticos */
@@ -80,6 +80,38 @@ export type ApuracaoPonto = {
   /** Dias já passados com número ímpar de batidas (entrada sem saída): não entram no cálculo */
   incompletos: number
   ocorrencias: { data: string; texto: string }[]
+  /** Minutos de relógio trabalhados no horário noturno (sem a hora reduzida). Ausente nas folhas antigas. */
+  noturnoMin?: number
+  /** Semanas (domingo a sábado) com falta sem justificativa: cada uma perde o descanso remunerado */
+  semanasComFalta?: number
+}
+
+// Horário de Brasília (sem horário de verão desde 2019)
+const OFFSET_BRASILIA_MIN = 180
+
+/** Minutos dos pares entrada/saída que caem na faixa noturna (ex.: 22:00 às 05:00) */
+export function minutosNoturnos(horarios: string[], inicio: string, fim: string) {
+  const ini = paraMin(inicio)
+  const fimMin = paraMin(fim)
+  const duracao = fimMin > ini ? fimMin - ini : fimMin + 1440 - ini
+  let total = 0
+  for (let i = 0; i + 1 < horarios.length; i += 2) {
+    const a = Date.parse(horarios[i]) / 60000 - OFFSET_BRASILIA_MIN
+    const b = Date.parse(horarios[i + 1]) / 60000 - OFFSET_BRASILIA_MIN
+    if (!(b > a)) continue
+    for (let dia = Math.floor(a / 1440) - 1; dia <= Math.floor(b / 1440); dia++) {
+      const faixaIni = dia * 1440 + ini
+      total += Math.max(0, Math.min(b, faixaIni + duracao) - Math.max(a, faixaIni))
+    }
+  }
+  return Math.round(total)
+}
+
+/** Domingo que abre a semana do dia */
+const inicioDaSemana = (iso: string) => {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay())
+  return d.toISOString().slice(0, 10)
 }
 
 const paraMin = (hora: string) => {
@@ -105,19 +137,36 @@ function previsto(d: DayResult) {
 export function apurarPonto(
   dias: DayResult[],
   registros: RegistroPonto[],
-  { hoje, admissao, controlaPonto }: { hoje: string; admissao: string | null; controlaPonto: boolean },
+  { hoje, admissao, controlaPonto, tolerancia = TOLERANCIA_DIARIA_MIN, feriadoCompensado = false, afastado = false, noturno = null }: {
+    hoje: string
+    admissao: string | null
+    controlaPonto: boolean
+    tolerancia?: number
+    /** 12x36 (art. 59-A da CLT): feriado trabalhado é dia normal, sem adicional */
+    feriadoCompensado?: boolean
+    afastado?: boolean
+    /** Faixa do adicional noturno; sem ela, não apura */
+    noturno?: { inicio: string; fim: string } | null
+  },
 ): ApuracaoPonto {
   const a: ApuracaoPonto = {
     motivo: null, diasEscala: 0, diasTrabalhados: 0, faltas: 0, atestados: 0, ferias: 0,
     atrasoMin: 0, he50Min: 0, heFeriadoMin: 0, heDomingoMin: 0, incompletos: 0, ocorrencias: [],
+    noturnoMin: 0, semanasComFalta: 0,
   }
+  if (afastado) return { ...a, motivo: 'afastado' }
   if (!controlaPonto) return { ...a, motivo: 'sem_controle' }
   if (!dias.some((d) => d.tipo !== 'sem_regra')) return { ...a, motivo: 'sem_escala' }
   // Mês sem nenhuma batida: é falta de uso do ponto, não o mês inteiro de faltas
   if (registros.length === 0 && dias.some((d) => d.date < hoje)) return { ...a, motivo: 'sem_registros' }
 
   const porData = new Map(registros.map((r) => [r.data, r]))
-  const anotar = (data: string, texto: string) => a.ocorrencias.push({ data, texto })
+  const semanas = new Set<string>()
+  const anotar = (data: string, texto: string) => {
+    a.ocorrencias.push({ data, texto })
+    if (texto === 'Falta') semanas.add(inicioDaSemana(data))
+  }
+  const fecharApuracao = () => ({ ...a, semanasComFalta: semanas.size })
 
   for (const d of dias) {
     if (d.tipo === 'sem_regra' || (admissao && d.date < admissao)) continue
@@ -144,7 +193,11 @@ export function apurarPonto(
     }
 
     const feito = minutosTrabalhados(r.batidas.map((b) => b.em))
-    if (d.feriado) { a.heFeriadoMin += feito; anotar(d.date, `Feriado trabalhado: ${horas(feito)}`); continue }
+    if (noturno) {
+      const noite = minutosNoturnos(r.batidas.map((b) => b.em), noturno.inicio, noturno.fim)
+      if (noite > 0) { a.noturnoMin = (a.noturnoMin ?? 0) + noite; anotar(d.date, `Horário noturno: ${horas(noite)}`) }
+    }
+    if (d.feriado && !feriadoCompensado) { a.heFeriadoMin += feito; anotar(d.date, `Feriado trabalhado: ${horas(feito)}`); continue }
     if (!trabalho) {
       if (d.domingo) { a.heDomingoMin += feito; anotar(d.date, `Domingo de folga trabalhado: ${horas(feito)}`) }
       else { a.he50Min += feito; anotar(d.date, `Folga trabalhada: ${horas(feito)}`) }
@@ -152,11 +205,11 @@ export function apurarPonto(
     }
 
     const saldo = feito - previsto(d)
-    if (Math.abs(saldo) <= TOLERANCIA_DIARIA_MIN) continue
+    if (Math.abs(saldo) <= tolerancia) continue
     if (saldo > 0) { a.he50Min += saldo; anotar(d.date, `Hora extra: ${horas(saldo)}`) }
     else { a.atrasoMin -= saldo; anotar(d.date, `Atraso ou saída antecipada: ${horas(-saldo)}`) }
   }
-  return a
+  return fecharApuracao()
 }
 
 /** Horas do mês pela jornada da escala (44h semanais → 220). Sem escala, 220. */
@@ -177,12 +230,32 @@ export function divisorHoras(regra: ScheduleRule | null | undefined) {
 export const CAMPOS_FOLHA = [
   'desconto_faltas', 'atestados', 'horas_extras', 'horas_extras_feriado', 'horas_extras_domingo', 'bonus',
   'desconto_atrasos', 'desconto_vt', 'desconto_vr', 'desconto_outros', 'desconto_adiantamento',
+  'adicional_noturno', 'dsr_perdido',
 ] as const
 export type CampoFolha = (typeof CAMPOS_FOLHA)[number]
 export type AjustesFolha = Partial<Record<CampoFolha, number>>
 export type ValoresFolha = Record<CampoFolha, number>
 
 export type InsumosFolha = {
+  /** Multiplicadores das horas extras (ex.: 1,5 para 50%); sem eles, 50% e 100% */
+  fatorHe?: { normal: number; feriado: number; domingo: number }
+  /** Percentual do salário pago como adiantamento e descontado no fechamento */
+  adiantamentoPct?: number
+  /** Dias de férias que caem na competência, sem recibo próprio (folhas antigas): pagos dentro da folha */
+  diasFerias?: number
+  /** Dias vendidos (abono pecuniário), no mês em que as férias começam, sem recibo próprio */
+  diasAbono?: number
+  /**
+   * Férias pagas no recibo próprio: a parte destes dias na competência. Saem do salário e não entram no líquido,
+   * mas somam na base do INSS e do FGTS do mês (o INSS já retido no recibo é abatido).
+   */
+  feriasRecibo?: { dias: number; valor: number; terco: number; inss: number; pagamentoEm: string }
+  /** Insalubridade do cargo, já no valor do mês */
+  insalubridade?: { pct: number; valor: number }
+  /** Adicional noturno sobre o valor da hora */
+  noturno?: { pct: number; reduzida: boolean }
+  /** Descanso semanal remunerado: dias úteis e de descanso (domingos e feriados) do período */
+  dsr?: { diasUteis: number; descansos: number; reflexo: boolean; descontaFalta: boolean }
   salario: number
   tipoContrato: string | null
   temPericulosidade: boolean
@@ -199,9 +272,22 @@ const RE_VA = /aliment|refei|\bva\b|\bvr\b|v\.?[ar]\b/i
 /** PJ, autônomo e estagiário não têm INSS, IRRF nem encargos na folha */
 export const temEncargos = (tipo: string | null) => !tipo || tipo === 'clt' || tipo === 'menor_aprendiz'
 
+/** Salário com os adicionais de risco. A CLT (art. 193, §2º) não deixa acumular: vale o maior. */
+export function remuneracaoComAdicionais(salario: number, temPericulosidade: boolean, insalubridade = 0) {
+  let periculosidade = temPericulosidade ? centavos(salario * ADICIONAL_PERICULOSIDADE) : 0
+  let insal = centavos(insalubridade)
+  if (periculosidade > 0 && insal > 0) {
+    if (periculosidade >= insal) insal = 0
+    else periculosidade = 0
+  }
+  return { periculosidade, insalubridade: insal, remuneracao: centavos(salario + periculosidade + insal) }
+}
+
+/** Horas noturnas pagas: com a hora reduzida, cada 52min30s de relógio vale uma hora */
+export const horasNoturnasPagas = (minutos: number, reduzida: boolean) => (reduzida ? (minutos * 60) / 52.5 : minutos) / 60
+
 export function calcularFolha(i: InsumosFolha, ponto: ApuracaoPonto, ajustes: AjustesFolha = {}) {
-  const periculosidade = i.temPericulosidade ? centavos(i.salario * ADICIONAL_PERICULOSIDADE) : 0
-  const remuneracao = i.salario + periculosidade
+  const { periculosidade, insalubridade, remuneracao } = remuneracaoComAdicionais(i.salario, i.temPericulosidade, i.insalubridade?.valor)
   const valorHora = remuneracao / i.divisor
   const diasBeneficio = ponto.motivo ? DIAS_UTEIS_MES : Math.max(0, ponto.diasEscala - ponto.faltas - ponto.atestados - ponto.ferias)
 
@@ -218,29 +304,48 @@ export function calcularFolha(i: InsumosFolha, ponto: ApuracaoPonto, ajustes: Aj
   const automaticos: ValoresFolha = {
     desconto_faltas: ponto.faltas,
     atestados: ponto.atestados,
-    horas_extras: centavos((ponto.he50Min / 60) * valorHora * 1.5),
-    horas_extras_feriado: centavos((ponto.heFeriadoMin / 60) * valorHora * 2),
-    horas_extras_domingo: centavos((ponto.heDomingoMin / 60) * valorHora * 2),
+    horas_extras: centavos((ponto.he50Min / 60) * valorHora * (i.fatorHe?.normal ?? 1.5)),
+    horas_extras_feriado: centavos((ponto.heFeriadoMin / 60) * valorHora * (i.fatorHe?.feriado ?? 2)),
+    horas_extras_domingo: centavos((ponto.heDomingoMin / 60) * valorHora * (i.fatorHe?.domingo ?? 2)),
     bonus: 0,
     desconto_atrasos: centavos((ponto.atrasoMin / 60) * valorHora),
     desconto_vt: soma(vt, 'desconto'),
     desconto_vr: soma(va, 'desconto'),
     desconto_outros: soma(demais, 'desconto'),
-    desconto_adiantamento: 0,
+    desconto_adiantamento: temEncargos(i.tipoContrato) && i.adiantamentoPct ? centavos(i.salario * (i.adiantamentoPct / 100)) : 0,
+    adicional_noturno: i.noturno ? centavos(horasNoturnasPagas(ponto.noturnoMin ?? 0, i.noturno.reduzida) * valorHora * (i.noturno.pct / 100)) : 0,
+    dsr_perdido: i.dsr?.descontaFalta ? (ponto.semanasComFalta ?? 0) : 0,
   }
   const valores: ValoresFolha = { ...automaticos, ...ajustes }
 
+  // DSR: as horas extras e o adicional noturno refletem no descanso (Súmula 172 do TST)
+  const variaveis = centavos(valores.horas_extras + valores.horas_extras_feriado + valores.horas_extras_domingo + valores.adicional_noturno)
+  const dsr = i.dsr?.reflexo && i.dsr.diasUteis > 0 ? centavos((variaveis / i.dsr.diasUteis) * i.dsr.descansos) : 0
+
+  // Férias com recibo próprio: os dias saem do salário; o valor foi pago no recibo, mas compõe a base do INSS e do FGTS do mês.
+  // Sem recibo (folhas antigas): as férias entram na própria folha, com o 1/3. O abono vendido não tem INSS, IRRF nem FGTS.
+  const recibo = i.feriasRecibo
+  const diasLegado = i.diasFerias ?? 0
+  const diasFerias = diasLegado + (recibo?.dias ?? 0)
+  const valorDiasFerias = centavos((remuneracao / 30) * diasFerias)
+  const valorFeriasLegado = centavos((remuneracao / 30) * diasLegado)
+  const tercoFerias = centavos(valorFeriasLegado / 3)
+  const abonoFerias = centavos((remuneracao / 30) * (i.diasAbono ?? 0) * (4 / 3))
+  const valorFerias = centavos(valorFeriasLegado + (recibo?.valor ?? 0))
+
   const valorFaltas = centavos(valores.desconto_faltas * (remuneracao / 30))
-  const proventos = centavos(remuneracao + valores.horas_extras + valores.horas_extras_feriado + valores.horas_extras_domingo + valores.bonus)
-  const bruto = Math.max(0, centavos(proventos - valorFaltas - valores.desconto_atrasos))
+  const valorDsrPerdido = centavos(valores.dsr_perdido * (remuneracao / 30))
+  const proventos = centavos(remuneracao - valorDiasFerias + valorFeriasLegado + tercoFerias + variaveis + dsr + valores.bonus)
+  const bruto = Math.max(0, centavos(proventos - valorFaltas - valorDsrPerdido - valores.desconto_atrasos))
+  const baseInss = centavos(bruto + (recibo ? recibo.valor + recibo.terco : 0))
 
   const clt = temEncargos(i.tipoContrato)
-  const inss = clt ? calcInss(bruto) : 0
+  const inss = clt ? Math.max(0, centavos(calcInss(baseInss) - (recibo?.inss ?? 0))) : 0
   const irrf = clt ? calcIrrf(bruto, inss, i.dependentes) : 0
   const descontosBeneficios = centavos(valores.desconto_vt + valores.desconto_vr + valores.desconto_outros)
-  const liquido = Math.max(0, centavos(bruto - inss - irrf - descontosBeneficios - valores.desconto_adiantamento))
-  const fgts = clt ? centavos(bruto * (i.fgtsPct / 100)) : 0
-  const outrosEncargos = clt ? centavos(bruto * (i.outrosEncargosPct / 100)) : 0
+  const liquido = Math.max(0, centavos(bruto + abonoFerias - inss - irrf - descontosBeneficios - valores.desconto_adiantamento))
+  const fgts = clt ? centavos(baseInss * (i.fgtsPct / 100)) : 0
+  const outrosEncargos = clt ? centavos(baseInss * (i.outrosEncargosPct / 100)) : 0
 
   const oferecido = soma(ofertas, 'oferecido')
   const custoBeneficios = Math.max(0, centavos(oferecido - descontosBeneficios))
@@ -249,9 +354,20 @@ export function calcularFolha(i: InsumosFolha, ponto: ApuracaoPonto, ajustes: Aj
     automaticos,
     valores,
     periculosidade,
+    insalubridade,
+    remuneracao,
+    diasFerias,
+    valorDiasFerias,
+    valorFerias,
+    tercoFerias,
+    abonoFerias,
+    feriasNoRecibo: recibo ?? null,
     valorFaltas,
+    valorDsrPerdido,
+    dsr,
     proventos,
     bruto,
+    baseInss,
     inss,
     irrf,
     descontos: centavos(inss + irrf + descontosBeneficios + valores.desconto_adiantamento),
@@ -261,7 +377,7 @@ export function calcularFolha(i: InsumosFolha, ponto: ApuracaoPonto, ajustes: Aj
     transporte: soma(vt, 'oferecido'),
     alimentacao: soma(va, 'oferecido'),
     custoBeneficios,
-    custoTotal: centavos(bruto + fgts + outrosEncargos + custoBeneficios),
+    custoTotal: centavos(baseInss + abonoFerias + fgts + outrosEncargos + custoBeneficios),
   }
 }
 

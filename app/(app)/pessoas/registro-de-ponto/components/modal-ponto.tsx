@@ -11,6 +11,7 @@ import { generateMonth } from '@/lib/escala/generate'
 import { horaDe as extractTime } from '@/lib/validations/ponto'
 import type { TimeRecord } from '../queries'
 import type { ScheduleRule, ScheduleException } from '@/lib/escala/generate'
+import type { FeriadoEmpresa } from '@/lib/escala/feriados'
 
 interface Props {
   open: boolean
@@ -20,6 +21,7 @@ interface Props {
   employees: { id: string; nome: string; cargo: string | null }[]
   rules: ScheduleRule[]
   exceptions: ScheduleException[]
+  feriados: FeriadoEmpresa[]
   defaultMes: number
   defaultAno: number
   defaultEmployeeId?: string | null
@@ -36,7 +38,7 @@ function todayStr(mes: number, ano: number) {
 }
 
 export function ModalPonto({
-  open, onClose, companyId, record, employees, rules, exceptions,
+  open, onClose, companyId, record, employees, rules, exceptions, feriados,
   defaultMes, defaultAno,
   defaultEmployeeId, defaultDate, defaultEntrada, defaultSaida, defaultTipo,
 }: Props) {
@@ -74,9 +76,9 @@ export function ModalPonto({
   const scheduleDay = useMemo(() => {
     if (!employeeId || !data || !rules.length) return null
     const [y, m] = data.split('-').map(Number)
-    const days = generateMonth(rules, exceptions, m, y, employeeId)
+    const days = generateMonth(rules, exceptions, m, y, employeeId, feriados)
     return days.find(d => d.date === data) ?? null
-  }, [employeeId, data, rules, exceptions])
+  }, [employeeId, data, rules, exceptions, feriados])
 
   const semHorario = tipo === 'folga' || tipo === 'ferias' || tipo === 'falta' || tipo === 'atestado'
 

@@ -37,7 +37,9 @@ const COLABORADOR_NAV_ITEMS: NavItem[] = [
     children: [
       { label: 'Meu ponto',            href: '/meu-ponto' },
       { label: 'Escala de Trabalho',   href: '/pessoas/escala-de-trabalho' },
-      { label: 'Folha de Pagamento',   href: '/pessoas/folha-de-pagamento' },
+      { label: 'Meu holerite',         href: '/meu-holerite' },
+      { label: 'Minhas férias',        href: '/minhas-ferias' },
+      { label: 'Minha saúde e segurança', href: '/minha-saude' },
       { label: 'Benefícios',           href: '/pessoas/beneficios' },
     ],
   },

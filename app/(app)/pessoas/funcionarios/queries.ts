@@ -13,6 +13,8 @@ export type Employee = {
   departamento: string | null
   /** Cargo da Estrutura (migration 20261108000090); cargo e departamento são cópia dele */
   position_id?: string | null
+  /** Exceção do laudo (migration 20261110000103); vazio segue o adicional do cargo */
+  adicional_risco?: string | null
   local_trabalho: string | null
   salario: number | null
   plano_saude: boolean

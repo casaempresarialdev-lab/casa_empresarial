@@ -10,6 +10,8 @@ import { FotoPicker } from '@/components/ui/foto-picker'
 import { Stepper, Tabs } from '@/components/ui/form-steps'
 import { FileViewer, triggerDownload, type ViewerFile } from '@/components/ui/file-viewer'
 import { toast } from '@/lib/toast'
+import { ROTULO_ADICIONAL } from '@/lib/folha/config'
+import { ADICIONAIS_CARGO } from '@/lib/validations/folha'
 import {
   createEmployeeAction, updateEmployeeAction, generateOnboardingTokenAction, grantSystemAccessAction,
   getEmployeeDocUrlAction,
@@ -424,6 +426,21 @@ export function FuncionarioFicha({
             <Campo label="Salário bruto (R$)" valor={fmtMoney(v.salario)}>
               <Input label="Salário bruto (R$)" value={v.salario} onChange={(e) => set('salario')(maskMoeda(e.target.value))} placeholder="0,00" inputMode="numeric" disabled={travado('salario')} />
             </Campo>
+            {!pj && (() => {
+              const doCargo = cargos.find((c) => c.id === v.position_id)?.adicional ?? 'nenhum'
+              const opcoes = [
+                { value: '', label: `Igual ao cargo (${ROTULO_ADICIONAL[doCargo]})` },
+                ...ADICIONAIS_CARGO.map((a) => ({ value: a, label: ROTULO_ADICIONAL[a] })),
+              ]
+              return (
+                <Campo label="Adicional de risco" valor={labelDe(opcoes, v.adicional_risco)}>
+                  <div className="flex flex-col gap-1">
+                    <Select label="Adicional de risco" options={opcoes} value={v.adicional_risco} onChange={txt('adicional_risco')} />
+                    <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Mude só se o laudo apontar algo diferente do cargo.</span>
+                  </div>
+                </Campo>
+              )
+            })()}
             <Campo label="Plano de saúde" valor={v.plano_saude ? 'Sim' : 'Não'}>
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Plano de saúde</span>

@@ -2,8 +2,8 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getViewerContext } from '@/lib/auth/viewer'
-import { getAjustes, getTimeRecords, getActiveEmployees } from './queries'
-import { getScheduleRules, getScheduleExceptions } from '../escala-de-trabalho/queries'
+import { getAjustes, getAusencias, getTimeRecords, getActiveEmployees } from './queries'
+import { getFeriadosEmpresa, getScheduleRules, getScheduleExceptions } from '../escala-de-trabalho/queries'
 import { PontoClient } from './components/ponto-client'
 import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
@@ -33,12 +33,14 @@ export default async function RegistroDePontoPage({
   const viewer = await getViewerContext(companyId)
   if (viewer?.isColaborador) redirect('/meu-ponto')
 
-  const [records, employees, rules, exceptions, ajustes] = await Promise.all([
+  const [records, employees, rules, exceptions, ajustes, feriados, ausencias] = await Promise.all([
     getTimeRecords(companyId, ano, mes),
     getActiveEmployees(companyId),
     getScheduleRules(companyId),
     getScheduleExceptions(companyId, mes, ano),
     getAjustes(companyId),
+    getFeriadosEmpresa(companyId),
+    getAusencias(companyId),
   ])
 
   return (
@@ -48,11 +50,13 @@ export default async function RegistroDePontoPage({
         employees={employees}
         rules={rules}
         exceptions={exceptions}
+        feriados={feriados}
         companyId={companyId}
         mes={mes}
         ano={ano}
         ajustes={ajustes}
-        abaInicial={params.aba === 'aprovacoes' ? 1 : 0}
+        ausencias={ausencias}
+        abaInicial={params.aba === 'aprovacoes' ? 1 : params.aba === 'ausencias' ? 2 : 0}
       />
     </div>
   )
