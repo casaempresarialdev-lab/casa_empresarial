@@ -112,10 +112,10 @@ export function BeneficiosClient({ companyId, benefits, employees, photoUrls }: 
         <Breadcrumb />
       </div>
 
-      <Tabs labels={['Catálogo', 'Por funcionário']} step={aba} onSelect={setAba} />
+      <Tabs labels={['Por funcionário', 'Catálogo']} step={aba} onSelect={setAba} />
 
       {/* Por funcionário */}
-      <div className={aba === 1 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+      <div className={aba === 0 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
         <div>
           <h2 className="text-lg font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
             {moeda(geral.custo)} <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>por mês de custo da empresa</span>
@@ -167,7 +167,7 @@ export function BeneficiosClient({ companyId, benefits, employees, photoUrls }: 
       </div>
 
       {/* Catálogo */}
-      <div className={aba === 0 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+      <div className={aba === 1 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm" style={{ color: 'var(--color-sidebar-text)' }}>
             <span className="font-semibold">{plural(ativos.length, 'benefício ativo', 'benefícios ativos')}</span>
