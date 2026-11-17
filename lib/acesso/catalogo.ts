@@ -104,11 +104,13 @@ export const MODULOS: ModuloAcesso[] = [
     label: 'Marketing',
     icon: 'megaphone',
     itens: [
-      { key: 'marketing.calendario', label: 'Calendário', href: '/marketing/calendario' },
+      { key: 'marketing.dashboard', label: 'Dashboard', href: '/marketing', exato: true, dashboard: true },
+      { key: 'marketing.calendario', label: 'Calendário Editorial', href: '/marketing/calendario' },
+      { key: 'marketing.ideias', label: 'Banco de Ideias', href: '/marketing/ideias' },
+      { key: 'marketing.campanhas', label: 'Campanhas e Promoções', href: '/marketing/campanhas' },
+      { key: 'marketing.metricas', label: 'Métricas de Redes Sociais', href: '/marketing/metricas' },
+      { key: 'marketing.bancomidia', label: 'Banco de Mídia', href: '/marketing/banco-de-midia' },
       { key: 'marketing.depoimentos', label: 'Depoimentos', href: '/marketing/depoimentos' },
-      { key: 'marketing.fotos-videos', label: 'Fotos e Vídeos', href: '/marketing/fotos-videos' },
-      { key: 'marketing.material-grafico', label: 'Material Gráfico', href: '/marketing/material-grafico' },
-      { key: 'marketing.manual-da-marca', label: 'Manual da Marca', href: '/marketing/manual-da-marca' },
     ],
   },
   {

@@ -1,6 +1,6 @@
 // Ícones em linha (estilo Lucide), herdam a cor do texto
 
-export type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user' | 'wallet' | 'card' | 'folder' | 'camera' | 'settings' | 'star' | 'logout' | 'plus' | 'pencil' | 'trash' | 'eye' | 'eye-off' | 'external' | 'info' | 'download' | 'lock' | 'shield' | 'mail' | 'bell' | 'maximize' | 'minimize' | 'calendar' | 'alarm' | 'chevron-left' | 'chevron-right' | 'check' | 'share' | 'stethoscope'
+export type IconName = 'grid' | 'file' | 'dollar' | 'users' | 'briefcase' | 'megaphone' | 'user' | 'wallet' | 'card' | 'folder' | 'camera' | 'settings' | 'star' | 'logout' | 'plus' | 'pencil' | 'trash' | 'eye' | 'eye-off' | 'external' | 'info' | 'download' | 'lock' | 'shield' | 'mail' | 'bell' | 'maximize' | 'minimize' | 'calendar' | 'alarm' | 'chevron-left' | 'chevron-right' | 'check' | 'share' | 'stethoscope' | 'sparkle' | 'flag' | 'chart'
 
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
   grid: (
@@ -81,6 +81,26 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
   ),
   star: (
     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  ),
+  sparkle: (
+    <>
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+      <path d="M12 8a4 4 0 0 0 4 4 4 4 0 0 0-4 4 4 4 0 0 0-4-4 4 4 0 0 0 4-4Z" />
+    </>
+  ),
+  flag: (
+    <>
+      <path d="M5 3v18" />
+      <path d="M5 4h11l-2 4 2 4H5" />
+    </>
+  ),
+  chart: (
+    <>
+      <line x1="4" y1="20" x2="20" y2="20" />
+      <rect x="6" y="12" width="3" height="8" />
+      <rect x="13" y="7" width="3" height="13" />
+      <rect x="18" y="15" width="3" height="5" />
+    </>
   ),
   plus: (
     <>
