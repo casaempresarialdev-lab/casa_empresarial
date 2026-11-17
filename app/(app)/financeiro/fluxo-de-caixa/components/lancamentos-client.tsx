@@ -1,16 +1,23 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
-import { ModalLancamento } from './modal-lancamento'
-import { markAsPaidAction, markAsPendingAction, deleteTransactionAction } from '../actions'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-select'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { Modal } from '@/components/ui/modal'
+import { toast } from '@/lib/toast'
+import { deleteTransactionAction, markAsPaidAction, markAsPendingAction } from '../actions'
 import type { TransactionRow } from '../queries'
 import type { Category } from '../../categorias/queries'
 import type { Contact } from '../../contatos/queries'
 import type { BankAccount, CreditCard } from '../../contas-cartoes/queries'
 import type { CostCenter } from '../../centro-de-custo/queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { ModalLancamento } from './modal-lancamento'
 
 function formatCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -21,39 +28,34 @@ function formatDate(d: string | null) {
   return `${day}/${m}/${y}`
 }
 
-const STATUS_CONFIG = {
-  pendente:   { label: 'Pendente',   bg: '#FEF9E7', text: '#D4AC0D' },
-  pago:       { label: 'Pago',       bg: '#E9F7EF', text: '#1E8449' },
-  cancelado:  { label: 'Cancelado',  bg: '#FDEDEC', text: '#C0392B' },
-  conciliado: { label: 'Conciliado', bg: '#EBF5FB', text: '#2471A3' },
+const STATUS_SELO: Record<TransactionRow['status'], { texto: string; fundo: string; cor: string }> = {
+  pendente: { texto: 'Pendente', fundo: '#FEF3C7', cor: '#B45309' },
+  pago: { texto: 'Pago', fundo: '#DCFCE7', cor: '#15803D' },
+  cancelado: { texto: 'Cancelado', fundo: '#FEE2E2', cor: '#B91C1C' },
+  conciliado: { texto: 'Conciliado', fundo: '#DBEAFE', cor: '#1D4ED8' },
+}
+function Selo({ texto, fundo, cor }: { texto: string; fundo: string; cor: string }) {
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: fundo, color: cor }}>{texto}</span>
 }
 
-interface DeleteDialogProps {
-  open: boolean
-  onClose: () => void
-  onConfirm: (mode: 'single' | 'following' | 'all') => void
-  loading: boolean
-}
-function DeleteDialog({ open, onClose, onConfirm, loading }: DeleteDialogProps) {
-  if (!open) return null
+const FILTRO_STATUS = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'pendente', label: 'Pendente' },
+  { value: 'pago', label: 'Pago' },
+  { value: 'cancelado', label: 'Cancelado' },
+]
+
+function DeleteSerieDialog({ open, onClose, onConfirm, loading }: {
+  open: boolean; onClose: () => void; onConfirm: (mode: 'single' | 'following' | 'all') => void; loading: boolean
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl sm:rounded-xl shadow-xl p-6 w-full sm:max-w-sm flex flex-col gap-4">
-        <h3 className="font-semibold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>
-          Excluir lançamento recorrente
-        </h3>
-        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-          Este lançamento faz parte de uma série. O que deseja excluir?
-        </p>
-        <div className="flex flex-col gap-2">
-          <Button variant="ghost" className="w-full justify-start" loading={loading} onClick={() => onConfirm('single')}>Só este</Button>
-          <Button variant="ghost" className="w-full justify-start" loading={loading} onClick={() => onConfirm('following')}>Este e os seguintes</Button>
-          <Button variant="danger" className="w-full justify-start" loading={loading} onClick={() => onConfirm('all')}>Toda a série</Button>
-        </div>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+    <Modal open={open} onClose={onClose} title="Excluir lançamento recorrente" description="Este lançamento faz parte de uma série. O que deseja excluir?">
+      <div className="flex flex-col gap-2">
+        <Button type="button" variant="secondary" className="w-full justify-start" loading={loading} onClick={() => onConfirm('single')}>Só este lançamento</Button>
+        <Button type="button" variant="secondary" className="w-full justify-start" loading={loading} onClick={() => onConfirm('following')}>Este e os seguintes</Button>
+        <Button type="button" variant="danger" className="w-full justify-start" loading={loading} onClick={() => onConfirm('all')}>Toda a série</Button>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -68,178 +70,134 @@ interface Props {
   costCenters: CostCenter[]
 }
 
+// Todos os lançamentos de um tipo (recebimento ou pagamento), sem filtro de período — o histórico completo
 export function LancamentosClient({ transactions, tipo, companyId, categories, contacts, bankAccounts, creditCards, costCenters }: Props) {
   const router = useRouter()
-  const [, startTransition] = useTransition()
+  const isRec = tipo === 'recebimento'
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<TransactionRow | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
-  const [deleteDialog, setDeleteDialog] = useState<{ tx: TransactionRow } | null>(null)
-  const [search, setSearch] = useState('')
-  const [statusFiltro, setStatusFiltro] = useState('todos')
+  const [excluirSerie, setExcluirSerie] = useState<TransactionRow | null>(null)
+  const [excluirUnico, setExcluirUnico] = useState<TransactionRow | null>(null)
+  const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState('todos')
 
-  const isRec = tipo === 'recebimento'
-  const q = search.toLowerCase()
-  const filtered = transactions.filter(t => {
-    const matchStatus = statusFiltro === 'todos' || t.status === statusFiltro
-    const matchSearch = t.descricao.toLowerCase().includes(q) ||
-      (t.contato?.nome ?? '').toLowerCase().includes(q) ||
-      (t.categoria?.nome ?? '').toLowerCase().includes(q)
-    return matchStatus && matchSearch
-  })
+  const q = busca.trim().toLowerCase()
+  const visiveis = transactions
+    .filter((t) => filtro === 'todos' || t.status === filtro)
+    .filter((t) => !q || t.descricao.toLowerCase().includes(q) || (t.contato?.nome ?? '').toLowerCase().includes(q) || (t.categoria?.nome ?? '').toLowerCase().includes(q))
 
-  const total = filtered.reduce((s, t) => s + t.valor, 0)
-  const pago = filtered.filter(t => t.status === 'pago').reduce((s, t) => s + t.valor, 0)
-  const pendente = filtered.filter(t => t.status === 'pendente').reduce((s, t) => s + t.valor, 0)
+  const total = transactions.reduce((s, t) => s + t.valor, 0)
+  const feito = transactions.filter((t) => t.status === 'pago').reduce((s, t) => s + t.valor, 0)
+  const pendente = transactions.filter((t) => t.status === 'pendente').reduce((s, t) => s + t.valor, 0)
 
   function handleDelete(tx: TransactionRow) {
-    if (tx.recorrente) { setDeleteDialog({ tx }); return }
-    if (!confirm(`Excluir "${tx.descricao}"?`)) return
-    setActionId(tx.id)
-    startTransition(async () => {
-      await deleteTransactionAction(tx.id, 'single')
-      setActionId(null)
-      router.refresh()
-    })
+    if (tx.recorrente) setExcluirSerie(tx)
+    else setExcluirUnico(tx)
   }
 
-  async function confirmDelete(mode: 'single' | 'following' | 'all') {
-    if (!deleteDialog) return
-    const { tx } = deleteDialog
-    setActionId(tx.id)
-    setDeleteDialog(null)
-    await deleteTransactionAction(tx.id, mode)
+  async function confirmarExclusaoUnica() {
+    if (!excluirUnico) return
+    setActionId(excluirUnico.id)
+    const r = await toast.promise(deleteTransactionAction(excluirUnico.id, 'single'), {
+      loading: 'Excluindo…', success: 'Lançamento excluído.', error: 'Não foi possível excluir o lançamento.',
+    })
     setActionId(null)
-    router.refresh()
+    setExcluirUnico(null)
+    if (!('error' in r)) router.refresh()
   }
 
-  function handleTogglePaid(tx: TransactionRow) {
+  async function confirmarExclusaoSerie(mode: 'single' | 'following' | 'all') {
+    if (!excluirSerie) return
+    const tx = excluirSerie
     setActionId(tx.id)
-    startTransition(async () => {
-      if (tx.status === 'pendente') await markAsPaidAction(tx.id)
-      else if (tx.status === 'pago') await markAsPendingAction(tx.id)
-      setActionId(null)
-      router.refresh()
+    setExcluirSerie(null)
+    const r = await toast.promise(deleteTransactionAction(tx.id, mode), {
+      loading: 'Excluindo…',
+      success: mode === 'all' ? 'Série excluída.' : mode === 'following' ? 'Lançamentos excluídos.' : 'Lançamento excluído.',
+      error: 'Não foi possível excluir.',
     })
+    setActionId(null)
+    if (!('error' in r)) router.refresh()
+  }
+
+  async function handleTogglePaid(tx: TransactionRow) {
+    setActionId(tx.id)
+    const acao = tx.status === 'pendente' ? markAsPaidAction(tx.id) : markAsPendingAction(tx.id)
+    const r = await toast.promise(acao, {
+      loading: 'Atualizando…',
+      success: tx.status === 'pendente' ? 'Lançamento marcado como pago.' : 'Pagamento desfeito.',
+      error: 'Não foi possível atualizar o lançamento.',
+    })
+    setActionId(null)
+    if (!('error' in r)) router.refresh()
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              {isRec ? 'Recebimentos' : 'Pagamentos'}
-            </h1>
-            <Breadcrumb />
-          </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>{isRec ? 'Recebimentos' : 'Pagamentos'}</h1>
+        <Breadcrumb />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="dollar" title="Total" value={formatCurrency(total)} caption={`${transactions.length} ${transactions.length === 1 ? 'lançamento' : 'lançamentos'}`} />
+        <SummaryCard icon="check" title={isRec ? 'Recebido' : 'Pago'} value={formatCurrency(feito)} caption="já quitado" delay={60} />
+        <SummaryCard icon="alarm" title="Pendente" value={formatCurrency(pendente)} caption="ainda em aberto" accent={pendente > 0 ? 'yellow' : undefined} delay={120} />
+      </div>
+
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {visiveis.length} {visiveis.length === 1 ? 'lançamento' : 'lançamentos'}
+          </p>
+          <AddButton onClick={() => { setEditing(null); setModalOpen(true) }} label={isRec ? 'Novo recebimento' : 'Novo pagamento'} />
         </div>
-        <Button onClick={() => { setEditing(null); setModalOpen(true) }}>
-          + {isRec ? 'Recebimento' : 'Pagamento'}
-        </Button>
-      </div>
 
-      {/* Métricas rápidas */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        {[
-          { label: 'Total', value: total, color: 'var(--color-text-primary)' },
-          { label: isRec ? 'Recebido' : 'Pago', value: pago, color: '#1E8449' },
-          { label: 'Pendente', value: pendente, color: '#D4AC0D' },
-        ].map(c => (
-          <div key={c.label} className="app-card p-4">
-            <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>{c.label}</p>
-            <p className="text-base font-bold" style={{ color: c.color }}>{formatCurrency(c.value)}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <div className="flex gap-3 mb-4">
-        <input type="text" placeholder="Buscar por descrição, contato ou categoria..."
-          value={search} onChange={e => setSearch(e.target.value)}
-          className="flex-1 px-4 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }} />
-        <div className="flex gap-1 rounded-lg border p-1" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white' }}>
-          {(['todos', 'pendente', 'pago', 'cancelado'] as const).map(s => (
-            <button key={s} onClick={() => setStatusFiltro(s)}
-              className="px-3 py-1 rounded-md text-xs font-medium capitalize transition-colors"
-              style={{
-                backgroundColor: statusFiltro === s ? 'var(--color-primary)' : 'transparent',
-                color: statusFiltro === s ? 'var(--color-primary-darker)' : 'var(--color-text-muted)',
-              }}>
-              {s === 'todos' ? 'Todos' : STATUS_CONFIG[s]?.label ?? s}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por descrição, contato ou categoria..." />
+          <FilterSelect value={filtro} onChange={setFiltro} label="Filtrar por status" options={FILTRO_STATUS} />
+          {(busca || filtro !== 'todos') && (
+            <FilterResult total={visiveis.length} onClear={() => { setBusca(''); setFiltro('todos') }} />
+          )}
         </div>
-      </div>
 
-      <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[620px] text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Descrição</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Competência</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Vencimento</th>
-              <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Valor</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                {search || statusFiltro !== 'todos' ? 'Nenhum resultado.' : `Nenhum ${isRec ? 'recebimento' : 'pagamento'} cadastrado.`}
-              </td></tr>
-            )}
-            {filtered.map(tx => {
-              const isBusy = actionId === tx.id
-              const s = STATUS_CONFIG[tx.status] ?? STATUS_CONFIG.pendente
-              return (
-                <tr key={tx.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                  <td className="px-4 py-3">
-                    <div className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                      {tx.descricao}
-                      {tx.recorrente && <span className="ml-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>🔄</span>}
-                    </div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                      {tx.categoria && `${tx.categoria.icone ?? ''} ${tx.categoria.nome}`}
-                      {tx.contato && ` · ${tx.contato.nome}`}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(tx.data_competencia)}</td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(tx.data_vencimento)}</td>
-                  <td className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(tx.valor)}</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: s.bg, color: s.text }}>{s.label}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      {tx.status === 'pendente' && (
-                        <button onClick={() => handleTogglePaid(tx)} disabled={isBusy}
-                          className="text-xs px-2 py-1 rounded-lg font-medium disabled:opacity-50"
-                          style={{ backgroundColor: '#E9F7EF', color: '#1E8449' }}>
-                          {isBusy ? '...' : '✓ Pagar'}
-                        </button>
-                      )}
-                      {tx.status === 'pago' && (
-                        <button onClick={() => handleTogglePaid(tx)} disabled={isBusy}
-                          className="text-xs px-2 py-1 rounded-lg font-medium disabled:opacity-50"
-                          style={{ backgroundColor: '#F2F3F4', color: '#717D7E' }}>
-                          {isBusy ? '...' : 'Desfazer'}
-                        </button>
-                      )}
-                      <Button variant="ghost" size="sm" onClick={() => { setEditing(tx); setModalOpen(true) }}>Editar</Button>
-                      <Button variant="danger" size="sm" loading={isBusy} onClick={() => handleDelete(tx)}>Excluir</Button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <ul className="flex flex-col gap-3">
+          {visiveis.length === 0 && (
+            <ListEmpty>{transactions.length === 0 ? `Nenhum ${isRec ? 'recebimento' : 'pagamento'} cadastrado.` : 'Nenhum resultado.'}</ListEmpty>
+          )}
+          {visiveis.map((tx) => {
+            const isBusy = actionId === tx.id
+            return (
+              <ListItem
+                key={tx.id}
+                icon={isRec ? 'wallet' : 'card'}
+                title={
+                  <span className="flex items-center gap-1.5">
+                    {tx.descricao}
+                    {tx.recorrente && <span className="text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>🔄</span>}
+                  </span>
+                }
+                subtitle={`Competência ${formatDate(tx.data_competencia)}${tx.data_vencimento ? ` · Vencimento ${formatDate(tx.data_vencimento)}` : ''}${tx.categoria ? ` · ${tx.categoria.icone ?? ''} ${tx.categoria.nome}` : ''}${tx.contato ? ` · ${tx.contato.nome}` : ''}`}
+                aside={
+                  <>
+                    <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(tx.valor)}</span>
+                    <Selo {...STATUS_SELO[tx.status]} />
+                  </>
+                }
+                onClick={() => { setEditing(tx); setModalOpen(true) }}
+                actionsLabel={tx.descricao}
+                actions={[
+                  ...(tx.status === 'pendente' ? [{ icon: 'check' as const, label: 'Marcar como pago', disabled: isBusy, onClick: () => handleTogglePaid(tx) }] : []),
+                  ...(tx.status === 'pago' ? [{ icon: 'logout' as const, label: 'Desfazer pagamento', disabled: isBusy, onClick: () => handleTogglePaid(tx) }] : []),
+                  { icon: 'pencil', label: 'Editar', onClick: () => { setEditing(tx); setModalOpen(true) } },
+                  { icon: 'trash', label: 'Excluir', tone: 'danger', disabled: isBusy, onClick: () => handleDelete(tx) },
+                ]}
+              />
+            )
+          })}
+        </ul>
       </div>
 
       <ModalLancamento
@@ -248,7 +206,18 @@ export function LancamentosClient({ transactions, tipo, companyId, categories, c
         categories={categories} contacts={contacts}
         bankAccounts={bankAccounts} creditCards={creditCards} costCenters={costCenters}
       />
-      <DeleteDialog open={!!deleteDialog} onClose={() => setDeleteDialog(null)} onConfirm={confirmDelete} loading={actionId !== null} />
+
+      <DeleteSerieDialog open={!!excluirSerie} onClose={() => setExcluirSerie(null)} onConfirm={confirmarExclusaoSerie} loading={actionId !== null} />
+
+      <ConfirmDialog
+        open={!!excluirUnico}
+        onClose={() => { if (!actionId) setExcluirUnico(null) }}
+        onConfirm={confirmarExclusaoUnica}
+        loading={!!actionId}
+        title="Excluir lançamento"
+        confirmLabel="Excluir"
+        message={<p>Excluir <strong>{excluirUnico?.descricao}</strong>?</p>}
+      />
     </>
   )
 }

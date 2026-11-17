@@ -55,6 +55,7 @@ export const MODULOS: ModuloAcesso[] = [
     label: 'Financeiro',
     icon: 'dollar',
     itens: [
+      { key: 'financeiro.dashboard', label: 'Dashboard', href: '/financeiro', exato: true, dashboard: true },
       { key: 'financeiro.contatos', label: 'Contatos', href: '/financeiro/contatos' },
       { key: 'financeiro.centro-de-custo', label: 'Centro de Custo', href: '/financeiro/centro-de-custo' },
       { key: 'financeiro.categorias', label: 'Categorias', href: '/financeiro/categorias' },
@@ -90,6 +91,7 @@ export const MODULOS: ModuloAcesso[] = [
     label: 'Operacional',
     icon: 'briefcase',
     itens: [
+      { key: 'operacional.dashboard', label: 'Dashboard', href: '/operacional', exato: true, dashboard: true },
       { key: 'operacional.produtos', label: 'Produtos e Serviços', href: '/operacional/produtos' },
       { key: 'operacional.pedidos-compra', label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
       { key: 'operacional.pedidos-venda', label: 'Pedidos de Venda', href: '/operacional/pedidos-venda' },

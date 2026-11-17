@@ -32,6 +32,7 @@ export function ModalPedidoVenda({ open, onClose, companyId, order, contacts, pr
   const [status, setStatus] = useState('rascunho')
   const [formaPagamento, setFormaPagamento] = useState('')
   const [desconto, setDesconto] = useState('')
+  const [numeroNota, setNumeroNota] = useState('')
   const [observacao, setObservacao] = useState('')
   const [itens, setItens] = useState<PedidoVendaItem[]>([])
 
@@ -58,12 +59,13 @@ export function ModalPedidoVenda({ open, onClose, companyId, order, contacts, pr
       setStatus(order.status)
       setFormaPagamento(order.forma_pagamento ?? '')
       setDesconto(order.desconto > 0 ? String(order.desconto) : '')
+      setNumeroNota(order.numero_nota ?? '')
       setObservacao(order.observacao ?? '')
       setItens(order.itens ?? [])
     } else {
       setClienteId(''); setData(new Date().toISOString().slice(0, 10))
       setDataEntrega(''); setStatus('rascunho'); setFormaPagamento('')
-      setDesconto(''); setObservacao(''); setItens([])
+      setDesconto(''); setNumeroNota(''); setObservacao(''); setItens([])
     }
     resetItemForm()
   }, [open, order])
@@ -119,6 +121,7 @@ export function ModalPedidoVenda({ open, onClose, companyId, order, contacts, pr
     fd.set('status', status)
     fd.set('forma_pagamento', formaPagamento)
     fd.set('desconto', desconto)
+    fd.set('numero_nota', numeroNota)
     fd.set('observacao', observacao)
     fd.set('itens', JSON.stringify(itens))
 
@@ -226,6 +229,10 @@ export function ModalPedidoVenda({ open, onClose, companyId, order, contacts, pr
                 <option value="entregue">Entregue</option>
                 <option value="cancelado">Cancelado</option>
               </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Número da Nota Fiscal</label>
+              <Input value={numeroNota} onChange={e => setNumeroNota(e.target.value)} placeholder="Ex: 12345" />
             </div>
             <div>
               <label style={labelStyle}>Observação</label>

@@ -1,325 +1,168 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ModalProduto } from './modal-produto'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { StatusBadge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-select'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
 import { deleteProductAction, toggleProductAtivoAction } from '../actions'
 import type { Product } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
-
-interface Props {
-  products: Product[]
-  companyId: string
-}
+import { ModalProduto } from './modal-produto'
 
 function formatBRL(val: number | null) {
   if (val === null) return '—'
   return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+const FILTRO_TIPO = [
+  { value: 'todos', label: 'Produto e Serviço' },
+  { value: 'produto', label: 'Produto' },
+  { value: 'servico', label: 'Serviço' },
+]
+const FILTRO_STATUS = [
+  { value: 'todos', label: 'Ativos e Inativos' },
+  { value: 'ativo', label: 'Somente ativos' },
+  { value: 'inativo', label: 'Somente inativos' },
+]
 
-function RowMenu({
-  product,
-  onEdit,
-  onDelete,
-  deletingId,
-}: {
-  product: Product
-  onEdit: () => void
-  onDelete: () => void
-  deletingId: string | null
-}) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, right: 0 })
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handle(e: MouseEvent) {
-      const t = e.target as Node
-      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [open])
-
-  function toggle() {
-    if (!open && btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect()
-      setPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right })
-    }
-    setOpen(v => !v)
-  }
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        onClick={toggle}
-        className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
-        style={{ color: 'var(--color-text-muted)' }}
-        title="Opções"
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="8" cy="3" r="1.5" />
-          <circle cx="8" cy="8" r="1.5" />
-          <circle cx="8" cy="13" r="1.5" />
-        </svg>
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          style={{
-            position: 'fixed',
-            top: pos.top,
-            right: pos.right,
-            zIndex: 9999,
-            backgroundColor: 'white',
-            border: '1px solid var(--color-bg-surface)',
-            borderRadius: '8px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-            minWidth: '140px',
-            padding: '4px 0',
-          }}
-        >
-          <button
-            onClick={() => { setOpen(false); onEdit() }}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-primary)' }}
-          >
-            Editar
-          </button>
-          <button
-            onClick={() => { setOpen(false); onDelete() }}
-            disabled={deletingId === product.id}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors"
-            style={{ color: '#C0392B' }}
-          >
-            {deletingId === product.id ? 'Excluindo...' : 'Excluir'}
-          </button>
-        </div>
-      )}
-    </>
-  )
+interface Props {
+  products: Product[]
+  companyId: string
 }
 
+// Catálogo de produtos e serviços, usado nos Pedidos de Compra/Venda e na Frente de Caixa
 export function ProdutosClient({ products, companyId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [excluir, setExcluir] = useState<Product | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [filterTipo, setFilterTipo] = useState<'todos' | 'produto' | 'servico'>('todos')
-  const [filterAtivo, setFilterAtivo] = useState<'todos' | 'ativo' | 'inativo'>('todos')
+  const [busca, setBusca] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState('todos')
+  const [filtroStatus, setFiltroStatus] = useState('todos')
 
-  const filtered = products.filter(p => {
-    const q = search.toLowerCase()
-    const matchSearch = q
-      ? p.nome.toLowerCase().includes(q) ||
-        (p.sku ?? '').toLowerCase().includes(q) ||
-        (p.categoria ?? '').toLowerCase().includes(q) ||
-        (p.codigo_barras ?? '').includes(q)
-      : true
-    const matchTipo = filterTipo === 'todos' || p.tipo === filterTipo
-    const matchAtivo =
-      filterAtivo === 'todos' ||
-      (filterAtivo === 'ativo' && p.ativo) ||
-      (filterAtivo === 'inativo' && !p.ativo)
-    return matchSearch && matchTipo && matchAtivo
-  })
+  const q = busca.trim().toLowerCase()
+  const visiveis = products
+    .filter((p) => filtroTipo === 'todos' || p.tipo === filtroTipo)
+    .filter((p) => filtroStatus === 'todos' || (filtroStatus === 'ativo' ? p.ativo : !p.ativo))
+    .filter((p) => !q || p.nome.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q) || (p.categoria ?? '').toLowerCase().includes(q) || (p.codigo_barras ?? '').includes(q))
 
-  const totalProdutos = products.filter(p => p.tipo === 'produto').length
-  const totalServicos = products.filter(p => p.tipo === 'servico').length
-  const estoqueBaixo = products.filter(p => p.tipo === 'produto' && p.estoque_atual <= p.estoque_minimo && p.ativo).length
+  const totalProdutos = products.filter((p) => p.tipo === 'produto').length
+  const totalServicos = products.filter((p) => p.tipo === 'servico').length
+  const estoqueBaixo = products.filter((p) => p.tipo === 'produto' && p.estoque_atual <= p.estoque_minimo && p.ativo).length
 
-  function openEdit(p: Product) { setEditingProduct(p); setModalOpen(true) }
+  function abrirNovo() { setEditingProduct(null); setModalOpen(true) }
+  function abrirEdicao(p: Product) { setEditingProduct(p); setModalOpen(true) }
 
   async function handleToggleAtivo(p: Product) {
     setTogglingId(p.id)
-    await toggleProductAtivoAction(p.id, !p.ativo)
+    const r = await toast.promise(toggleProductAtivoAction(p.id, !p.ativo), {
+      loading: p.ativo ? 'Desativando…' : 'Ativando…',
+      success: p.ativo ? `${p.nome} desativado.` : `${p.nome} ativado.`,
+      error: 'Não foi possível atualizar o item.',
+    })
     setTogglingId(null)
-    router.refresh()
+    if (!('error' in r)) router.refresh()
   }
 
-  async function handleDelete(p: Product) {
-    if (!confirm(`Excluir "${p.nome}"? Esta ação não pode ser desfeita.`)) return
-    setDeletingId(p.id)
-    const result = await deleteProductAction(p.id)
-    setDeletingId(null)
-    if ('error' in result) alert(result.error)
-    else router.refresh()
+  async function confirmarExclusao() {
+    if (!excluir) return
+    setExcluindo(true)
+    const r = await toast.promise(deleteProductAction(excluir.id), {
+      loading: `Excluindo ${excluir.nome}…`,
+      success: `${excluir.nome} excluído.`,
+      error: 'Não foi possível excluir o item.',
+    })
+    setExcluindo(false)
+    setExcluir(null)
+    if (!('error' in r)) router.refresh()
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Produtos e Serviços
-            </h1>
-            <Breadcrumb />
-          </div>
-        </div>
-        <Button onClick={() => router.push('/operacional/produtos/novo')}>Adicionar</Button>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Produtos e Serviços</h1>
+        <Breadcrumb />
       </div>
 
-      {/* Métricas */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="p-3 app-card text-center">
-          <div className="text-2xl font-bold" style={{ color: 'var(--color-primary-darker)' }}>{totalProdutos}</div>
-          <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Produtos</div>
-        </div>
-        <div className="p-3 app-card text-center">
-          <div className="text-2xl font-bold" style={{ color: 'var(--color-primary-darker)' }}>{totalServicos}</div>
-          <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Serviços</div>
-        </div>
-        <div
-          className="p-3 rounded-xl border text-center"
-          style={{
-            borderColor: estoqueBaixo > 0 ? '#C0392B' : 'var(--color-bg-surface)',
-            backgroundColor: estoqueBaixo > 0 ? '#FDEDEC' : 'white',
-          }}
-        >
-          <div className="text-2xl font-bold" style={{ color: estoqueBaixo > 0 ? '#C0392B' : 'var(--color-primary-darker)' }}>
-            {estoqueBaixo}
-          </div>
-          <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Estoque baixo</div>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="briefcase" title="Produtos" value={totalProdutos} caption="itens com controle de estoque" />
+        <SummaryCard icon="file" title="Serviços" value={totalServicos} caption="sem controle de estoque" delay={60} />
+        <SummaryCard icon="info" title="Estoque baixo" value={estoqueBaixo} caption="no mínimo ou abaixo" accent={estoqueBaixo ? 'red' : undefined} delay={120} />
       </div>
 
-      {/* Filtros */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        <input
-          type="text"
-          placeholder="Buscar por nome, SKU, categoria ou cód. barras..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="flex-1 min-w-[200px] px-4 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-        />
-        <select
-          value={filterTipo}
-          onChange={e => setFilterTipo(e.target.value as typeof filterTipo)}
-          className="px-3 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-        >
-          <option value="todos">Produto e Serviço</option>
-          <option value="produto">Produto</option>
-          <option value="servico">Serviço</option>
-        </select>
-        <select
-          value={filterAtivo}
-          onChange={e => setFilterAtivo(e.target.value as typeof filterAtivo)}
-          className="px-3 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-        >
-          <option value="todos">Ativos e Inativos</option>
-          <option value="ativo">Somente ativos</option>
-          <option value="inativo">Somente inativos</option>
-        </select>
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {products.length} {products.length === 1 ? 'item cadastrado' : 'itens cadastrados'}
+          </p>
+          <AddButton onClick={abrirNovo} label="Novo item" />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome, SKU, categoria ou cód. barras..." />
+          <FilterSelect value={filtroTipo} onChange={setFiltroTipo} label="Filtrar por tipo" options={FILTRO_TIPO} />
+          <FilterSelect value={filtroStatus} onChange={setFiltroStatus} label="Filtrar por status" options={FILTRO_STATUS} />
+          {(busca || filtroTipo !== 'todos' || filtroStatus !== 'todos') && (
+            <FilterResult total={visiveis.length} onClear={() => { setBusca(''); setFiltroTipo('todos'); setFiltroStatus('todos') }} />
+          )}
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {visiveis.length === 0 && (
+            <ListEmpty>{products.length === 0 ? 'Cadastre o primeiro produto ou serviço.' : 'Nenhum resultado encontrado.'}</ListEmpty>
+          )}
+          {visiveis.map((p) => {
+            const estoqueCritico = p.tipo === 'produto' && p.estoque_atual <= p.estoque_minimo
+            return (
+              <ListItem
+                key={p.id}
+                media={p.foto_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.foto_url} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                ) : undefined}
+                icon={p.foto_url ? undefined : (p.tipo === 'produto' ? 'briefcase' : 'file')}
+                title={p.nome}
+                subtitle={[
+                  p.categoria,
+                  p.sku && `SKU ${p.sku}`,
+                  p.tipo === 'produto' ? `${p.estoque_atual} ${p.unidade_medida} em estoque${estoqueCritico ? ' ⚠️' : ''}` : 'Serviço',
+                ].filter(Boolean).join(' · ')}
+                aside={
+                  <>
+                    <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{formatBRL(p.preco_venda)}</span>
+                    <StatusBadge status={p.ativo ? 'active' : 'inactive'} />
+                  </>
+                }
+                onClick={() => abrirEdicao(p)}
+                actionsLabel={p.nome}
+                actions={[
+                  { icon: p.ativo ? 'eye-off' : 'eye', label: p.ativo ? 'Desativar' : 'Ativar', disabled: togglingId === p.id, onClick: () => handleToggleAtivo(p) },
+                  { icon: 'pencil', label: 'Editar', onClick: () => abrirEdicao(p) },
+                  { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir(p) },
+                ]}
+              />
+            )
+          })}
+        </ul>
       </div>
 
-      <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[800px] text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>SKU</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Tipo</th>
-              <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Preço Venda</th>
-              <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Estoque</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  {search || filterTipo !== 'todos' || filterAtivo !== 'todos'
-                    ? 'Nenhum resultado encontrado.'
-                    : 'Nenhum produto ou serviço cadastrado.'}
-                </td>
-              </tr>
-            )}
-            {filtered.map(p => {
-              const estoqueCritico = p.tipo === 'produto' && p.estoque_atual <= p.estoque_minimo
-              return (
-                <tr key={p.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)', opacity: p.ativo ? 1 : 0.5 }}>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
-                    <div className="font-medium">{p.nome}</div>
-                    {p.categoria && (
-                      <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{p.categoria}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{p.sku ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{
-                        backgroundColor: p.tipo === 'produto' ? '#EAF4F4' : '#F4ECF7',
-                        color: p.tipo === 'produto' ? '#17A589' : '#8E44AD',
-                      }}
-                    >
-                      {p.tipo === 'produto' ? 'Produto' : 'Serviço'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right" style={{ color: 'var(--color-text-primary)' }}>
-                    {formatBRL(p.preco_venda)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {p.tipo === 'produto' ? (
-                      <span
-                        className="font-medium"
-                        style={{ color: estoqueCritico ? '#C0392B' : 'var(--color-text-primary)' }}
-                      >
-                        {p.estoque_atual}
-                        <span className="text-xs ml-1" style={{ color: 'var(--color-text-muted)' }}>{p.unidade_medida}</span>
-                        {estoqueCritico && <span className="ml-1 text-xs">⚠️</span>}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--color-text-muted)' }}>—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => handleToggleAtivo(p)}
-                      disabled={togglingId === p.id}
-                      className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
-                      style={{ backgroundColor: p.ativo ? 'var(--color-primary-dark)' : '#D1D5DB' }}
-                      title={p.ativo ? 'Desativar' : 'Ativar'}
-                    >
-                      <span
-                        className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
-                        style={{ left: p.ativo ? '1.125rem' : '0.125rem' }}
-                      />
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <RowMenu
-                      product={p}
-                      onEdit={() => openEdit(p)}
-                      onDelete={() => handleDelete(p)}
-                      deletingId={deletingId}
-                    />
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <ModalProduto open={modalOpen} onClose={() => setModalOpen(false)} companyId={companyId} product={editingProduct} />
 
-      <ModalProduto
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        product={editingProduct}
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title="Excluir item"
+        confirmLabel="Excluir"
+        message={<p>Excluir <strong>{excluir?.nome}</strong>? Pedidos que já usam este item não são apagados.</p>}
       />
     </>
   )

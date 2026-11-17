@@ -2,142 +2,120 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
 import { updateInvoiceStatusAction } from '../actions'
 import type { CardInvoice } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
 
-function formatCurrency(v: number) {
+function fmtCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function formatMesAno(mesAno: string) {
+function fmtMesAno(mesAno: string) {
   const [ano, mes] = mesAno.split('-')
-  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
   return `${meses[parseInt(mes) - 1]}/${ano}`
 }
 
-const BANDEIRA_EMOJI: Record<string, string> = {
-  visa: '💳', mastercard: '💳', elo: '💳', amex: '💳', hipercard: '💳', outro: '💳',
+function Selo({ texto, fundo, cor }: { texto: string; fundo: string; cor: string }) {
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: fundo, color: cor }}>{texto}</span>
 }
 
-const STATUS_CONFIG = {
-  aberta:  { label: 'Aberta',  bg: '#FEF9E7', text: '#D4AC0D' },
-  fechada: { label: 'Fechada', bg: '#EBF5FB', text: '#2471A3' },
-  paga:    { label: 'Paga',    bg: '#E9F7EF', text: '#1E8449' },
+// aberta = neutro (ainda recebendo lançamentos), fechada = atenção (aguardando pagamento), paga = ok — paleta fixa do guia de design
+const STATUS_SELO: Record<CardInvoice['status'], { texto: string; fundo: string; cor: string }> = {
+  aberta: { texto: 'Aberta', fundo: '#F3F4F6', cor: '#6B7280' },
+  fechada: { texto: 'Aguardando pagamento', fundo: '#FEF3C7', cor: '#B45309' },
+  paga: { texto: 'Paga', fundo: '#DCFCE7', cor: '#15803D' },
+}
+const PROXIMA_ACAO: Record<CardInvoice['status'], { icon: 'check' | 'pencil'; label: string; novoStatus: CardInvoice['status'] } | null> = {
+  aberta: { icon: 'pencil', label: 'Fechar fatura', novoStatus: 'fechada' },
+  fechada: { icon: 'check', label: 'Marcar como paga', novoStatus: 'paga' },
+  paga: { icon: 'pencil', label: 'Reabrir', novoStatus: 'aberta' },
 }
 
 interface Props {
   invoices: CardInvoice[]
 }
 
+// Faturas de cartão de crédito, geradas a partir dos lançamentos com cartão vinculado no Fluxo de Caixa
 export function FaturasClient({ invoices }: Props) {
   const router = useRouter()
-  const [actionId, setActionId] = useState<string | null>(null)
+  const [processando, setProcessando] = useState<string | null>(null)
 
-  async function handleStatus(inv: CardInvoice, status: 'aberta' | 'fechada' | 'paga') {
-    setActionId(inv.id)
-    await updateInvoiceStatusAction(inv.id, status)
-    setActionId(null)
-    router.refresh()
+  async function mudarStatus(inv: CardInvoice) {
+    const proxima = PROXIMA_ACAO[inv.status]
+    if (!proxima) return
+    setProcessando(inv.id)
+    const r = await toast.promise(updateInvoiceStatusAction(inv.id, proxima.novoStatus), {
+      loading: 'Atualizando a fatura…',
+      success: proxima.novoStatus === 'paga' ? 'Fatura marcada como paga.' : proxima.novoStatus === 'fechada' ? 'Fatura fechada.' : 'Fatura reaberta.',
+      error: 'Não foi possível atualizar a fatura.',
+    })
+    setProcessando(null)
+    if (!('error' in r)) router.refresh()
   }
 
-  // Agrupa por cartão
+  const abertas = invoices.filter((i) => i.status === 'aberta')
+  const fechadas = invoices.filter((i) => i.status === 'fechada')
+  const pagas = invoices.filter((i) => i.status === 'paga')
+
   const byCard = invoices.reduce<Record<string, CardInvoice[]>>((acc, inv) => {
-    const key = inv.card_id
-    if (!acc[key]) acc[key] = []
-    acc[key].push(inv)
+    (acc[inv.card_id] ??= []).push(inv)
     return acc
   }, {})
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Faturas de Cartão
-            </h1>
-            <Breadcrumb />
-          </div>
-        </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Faturas de Cartão</h1>
+        <Breadcrumb />
       </div>
 
-      {invoices.length === 0 && (
-        <div className="app-card p-10 text-center">
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="card" title="Faturas em aberto" value={abertas.length} caption="recebendo lançamentos do mês" />
+        <SummaryCard icon="alarm" title="Aguardando pagamento" value={fechadas.length} caption="fechadas, ainda não pagas" accent={fechadas.length ? 'yellow' : undefined} delay={60} />
+        <SummaryCard icon="check" title="Pagas" value={pagas.length} caption="quitadas" delay={120} />
+      </div>
+
+      <div className="app-card p-5 flex flex-col gap-6">
+        {invoices.length === 0 && (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--color-text-muted)' }}>
             Nenhuma fatura encontrada. As faturas são geradas automaticamente quando há lançamentos com cartão de crédito vinculado.
           </p>
-        </div>
-      )}
+        )}
 
-      {Object.entries(byCard).map(([, invs]) => {
-        const first = invs[0]
-        const cardNome = first.cartao?.nome ?? 'Cartão'
-        const bandeira = first.cartao?.bandeira ?? ''
-        return (
-          <div key={first.card_id} className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <span>{BANDEIRA_EMOJI[bandeira] ?? '💳'}</span>
-              <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>{cardNome}</h2>
+        {Object.entries(byCard).map(([cardId, invs]) => {
+          const cardNome = invs[0].cartao?.nome ?? 'Cartão'
+          return (
+            <div key={cardId} className="flex flex-col gap-3">
+              <h2 className="text-base font-bold" style={{ fontFamily: 'Manrope', color: 'var(--color-text-primary)' }}>{cardNome}</h2>
+              <ul className="flex flex-col gap-3">
+                {invs.map((inv) => {
+                  const proxima = PROXIMA_ACAO[inv.status]
+                  return (
+                    <ListItem
+                      key={inv.id}
+                      icon="card"
+                      title={fmtMesAno(inv.mes_ano)}
+                      subtitle={inv.data_pagamento ? `Pago em ${new Date(inv.data_pagamento).toLocaleDateString('pt-BR')}` : undefined}
+                      aside={
+                        <>
+                          <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(inv.valor_total ?? 0)}</span>
+                          <Selo {...STATUS_SELO[inv.status]} />
+                        </>
+                      }
+                      actionsLabel={`fatura de ${fmtMesAno(inv.mes_ano)}`}
+                      actions={proxima ? [{ icon: proxima.icon, label: proxima.label, disabled: processando === inv.id, onClick: () => mudarStatus(inv) }] : []}
+                    />
+                  )
+                })}
+              </ul>
             </div>
-            <div className="app-card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Mês/Ano</th>
-                    <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Total</th>
-                    <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {invs.map(inv => {
-                    const s = STATUS_CONFIG[inv.status]
-                    const isBusy = actionId === inv.id
-                    return (
-                      <tr key={inv.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                        <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                          {formatMesAno(inv.mes_ano)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                          {formatCurrency(inv.valor_total ?? 0)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                            style={{ backgroundColor: s.bg, color: s.text }}>
-                            {s.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 justify-end">
-                            {inv.status === 'aberta' && (
-                              <Button size="sm" variant="ghost" loading={isBusy} onClick={() => handleStatus(inv, 'fechada')}>
-                                Fechar fatura
-                              </Button>
-                            )}
-                            {inv.status === 'fechada' && (
-                              <Button size="sm" loading={isBusy} onClick={() => handleStatus(inv, 'paga')}>
-                                Marcar como paga
-                              </Button>
-                            )}
-                            {inv.status === 'paga' && (
-                              <Button size="sm" variant="ghost" loading={isBusy} onClick={() => handleStatus(inv, 'aberta')}>
-                                Reabrir
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </>
   )
 }

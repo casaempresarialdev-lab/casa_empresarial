@@ -2,11 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ModalCategoria } from './modal-categoria'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { StatusBadge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, SearchField } from '@/components/ui/filter-select'
+import { Tabs } from '@/components/ui/form-steps'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
 import { deleteCategoryAction } from '../actions'
 import type { Category } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { ModalCategoria } from './modal-categoria'
 
 interface Props {
   categories: Category[]
@@ -14,173 +21,115 @@ interface Props {
 }
 
 function buildTree(categories: Category[], tipo: 'receita' | 'despesa') {
-  const roots = categories.filter(c => c.tipo === tipo && c.parent_id === null)
-  const children = categories.filter(c => c.tipo === tipo && c.parent_id !== null)
-  return roots.map(r => ({ ...r, children: children.filter(c => c.parent_id === r.id) }))
+  const roots = categories.filter((c) => c.tipo === tipo && c.parent_id === null)
+  const children = categories.filter((c) => c.tipo === tipo && c.parent_id !== null)
+  return roots.flatMap((r) => [
+    { category: r, indent: false },
+    ...children.filter((c) => c.parent_id === r.id).map((c) => ({ category: c, indent: true })),
+  ])
 }
 
-interface CategoryRowProps {
-  category: Category & { children?: Category[] }
-  indent?: boolean
-  onEdit: (c: Category) => void
-  onDelete: (c: Category) => void
-  deletingId: string | null
-}
-
-function CategoryRow({ category, indent, onEdit, onDelete, deletingId }: CategoryRowProps) {
-  return (
-    <>
-      <tr className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2" style={{ paddingLeft: indent ? '20px' : '0' }}>
-            {indent && <span style={{ color: 'var(--color-text-muted)' }}>└</span>}
-            {category.cor && (
-              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: category.cor }} />
-            )}
-            <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-              {category.icone && <span className="mr-1">{category.icone}</span>}
-              {category.nome}
-            </span>
-          </div>
-        </td>
-        <td className="px-4 py-3">
-          <span
-            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-            style={{
-              backgroundColor: category.ativo ? '#E9F7EF' : '#F2F3F4',
-              color: category.ativo ? '#1E8449' : '#717D7E',
-            }}
-          >
-            {category.ativo ? 'Ativa' : 'Inativa'}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2 justify-end">
-            <Button variant="ghost" size="sm" onClick={() => onEdit(category)}>Editar</Button>
-            <Button variant="danger" size="sm" loading={deletingId === category.id} onClick={() => onDelete(category)}>Excluir</Button>
-          </div>
-        </td>
-      </tr>
-      {category.children?.map(child => (
-        <CategoryRow key={child.id} category={child} indent onEdit={onEdit} onDelete={onDelete} deletingId={deletingId} />
-      ))}
-    </>
-  )
-}
-
-function SectionTable({
-  tipo,
-  tree,
-  onEdit,
-  onDelete,
-  deletingId,
-}: {
-  tipo: 'receita' | 'despesa'
-  tree: (Category & { children?: Category[] })[]
-  onEdit: (c: Category) => void
-  onDelete: (c: Category) => void
-  deletingId: string | null
-}) {
-  return (
-    <div className="app-card overflow-hidden">
-      <div
-        className="px-4 py-3 flex items-center gap-2 border-b"
-        style={{
-          borderColor: 'var(--color-bg-surface)',
-          backgroundColor: tipo === 'receita' ? '#F0FFF4' : '#FFF5F5',
-        }}
-      >
-        <span>{tipo === 'receita' ? '📈' : '📉'}</span>
-        <span className="font-semibold text-sm capitalize" style={{ color: tipo === 'receita' ? '#1E8449' : '#C0392B' }}>
-          {tipo === 'receita' ? 'Receitas' : 'Despesas'}
-        </span>
-        <span className="text-xs ml-1" style={{ color: 'var(--color-text-muted)' }}>
-          ({tree.length} {tree.length === 1 ? 'categoria' : 'categorias'})
-        </span>
-      </div>
-      <table className="w-full text-sm">
-        <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-          <tr>
-            <th className="text-left px-4 py-2 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
-            <th className="text-left px-4 py-2 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-            <th className="px-4 py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {tree.length === 0 && (
-            <tr>
-              <td colSpan={3} className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
-                Nenhuma categoria de {tipo} cadastrada.
-              </td>
-            </tr>
-          )}
-          {tree.map(c => (
-            <CategoryRow key={c.id} category={c} onEdit={onEdit} onDelete={onDelete} deletingId={deletingId} />
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
+// Categorias de receita e despesa, usadas no Fluxo de Caixa e agrupadas no DRE
 export function CategoriasClient({ categories, companyId }: Props) {
   const router = useRouter()
+  const [aba, setAba] = useState(0)
+  const [busca, setBusca] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Category | null>(null)
-  const [defaultTipo, setDefaultTipo] = useState<'receita' | 'despesa'>('despesa')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState('')
+  const [excluir, setExcluir] = useState<Category | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
 
-  const receitaTree = buildTree(categories, 'receita')
-  const despesaTree = buildTree(categories, 'despesa')
+  const tipoAtual: 'receita' | 'despesa' = aba === 0 ? 'receita' : 'despesa'
+  const naoClassificadas = categories.filter((c) => c.dre_grupo === 'nao_classificado').length
 
-  function openAdd(tipo: 'receita' | 'despesa') {
-    setEditing(null)
-    setDefaultTipo(tipo)
-    setModalOpen(true)
-  }
-  function openEdit(c: Category) { setEditing(c); setModalOpen(true) }
+  const q = busca.trim().toLowerCase()
+  const itens = buildTree(categories, tipoAtual).filter(({ category: c }) => !q || c.nome.toLowerCase().includes(q))
 
-  async function handleDelete(c: Category) {
-    const hasChildren = categories.some(cat => cat.parent_id === c.id)
-    if (hasChildren) {
-      setDeleteError(`"${c.nome}" possui subcategorias. Exclua-as primeiro.`)
+  function abrirNovo() { setEditing(null); setModalOpen(true) }
+  function abrirEdicao(c: Category) { setEditing(c); setModalOpen(true) }
+
+  function pedirExclusao(c: Category) {
+    const temFilhos = categories.some((cat) => cat.parent_id === c.id)
+    if (temFilhos) {
+      toast.error(`"${c.nome}" tem subcategorias. Exclua-as primeiro.`)
       return
     }
-    if (!confirm(`Excluir "${c.nome}"? Esta ação não pode ser desfeita.`)) return
-    setDeletingId(c.id)
-    setDeleteError('')
-    const result = await deleteCategoryAction(c.id)
-    setDeletingId(null)
-    if ('error' in result) setDeleteError(result.error ?? 'Erro ao excluir.')
-    else router.refresh()
+    setExcluir(c)
+  }
+
+  async function confirmarExclusao() {
+    if (!excluir) return
+    setExcluindo(true)
+    const r = await toast.promise(deleteCategoryAction(excluir.id), {
+      loading: `Excluindo ${excluir.nome}…`,
+      success: `Categoria ${excluir.nome} excluída.`,
+      error: 'Não foi possível excluir a categoria.',
+    })
+    setExcluindo(false)
+    setExcluir(null)
+    if (!('error' in r)) router.refresh()
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Categorias
-            </h1>
-            <Breadcrumb />
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => openAdd('receita')}>+ Receita</Button>
-          <Button onClick={() => openAdd('despesa')}>+ Despesa</Button>
-        </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Categorias</h1>
+        <Breadcrumb />
       </div>
 
-      {deleteError && (
-        <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{deleteError}</p>
-      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="dollar" title="Categorias cadastradas" value={categories.length} caption={`${categories.filter((c) => c.tipo === 'receita').length} receitas · ${categories.filter((c) => c.tipo === 'despesa').length} despesas`} />
+        <SummaryCard icon="check" title="Ativas" value={categories.filter((c) => c.ativo).length} caption="disponíveis nos lançamentos" delay={60} />
+        <SummaryCard
+          icon="info" title="Sem classificação no DRE" value={naoClassificadas} caption="não entram no relatório"
+          accent={naoClassificadas ? 'yellow' : undefined} delay={120}
+        />
+      </div>
 
-      <div className="flex flex-col gap-4">
-        <SectionTable tipo="receita" tree={receitaTree} onEdit={openEdit} onDelete={handleDelete} deletingId={deletingId} />
-        <SectionTable tipo="despesa" tree={despesaTree} onEdit={openEdit} onDelete={handleDelete} deletingId={deletingId} />
+      <Tabs labels={['Receitas', 'Despesas']} step={aba} onSelect={setAba} />
+
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {itens.length} {itens.length === 1 ? 'categoria' : 'categorias'} de {tipoAtual === 'receita' ? 'receita' : 'despesa'}
+          </p>
+          <AddButton onClick={abrirNovo} label={tipoAtual === 'receita' ? 'Nova receita' : 'Nova despesa'} />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome..." />
+          {busca && <FilterResult total={itens.length} onClear={() => setBusca('')} />}
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {itens.length === 0 && (
+            <ListEmpty>
+              {categories.length === 0
+                ? `Crie a primeira categoria de ${tipoAtual === 'receita' ? 'receita' : 'despesa'}.`
+                : 'Nenhuma categoria encontrada.'}
+            </ListEmpty>
+          )}
+          {itens.map(({ category: c, indent }) => (
+            <ListItem
+              key={c.id}
+              title={
+                <span className="flex items-center gap-1.5">
+                  {indent && <span style={{ color: 'var(--color-text-muted)' }}>↳</span>}
+                  {c.icone && <span>{c.icone}</span>}
+                  {c.nome}
+                </span>
+              }
+              subtitle={c.dre_grupo === 'nao_classificado' ? 'Sem classificação no DRE' : undefined}
+              aside={<StatusBadge status={c.ativo ? 'active' : 'inactive'} />}
+              onClick={() => abrirEdicao(c)}
+              actionsLabel={c.nome}
+              actions={[
+                { icon: 'pencil', label: 'Editar', onClick: () => abrirEdicao(c) },
+                { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => pedirExclusao(c) },
+              ]}
+            />
+          ))}
+        </ul>
       </div>
 
       <ModalCategoria
@@ -189,7 +138,17 @@ export function CategoriasClient({ categories, companyId }: Props) {
         companyId={companyId}
         category={editing}
         allCategories={categories}
-        defaultTipo={defaultTipo}
+        defaultTipo={tipoAtual}
+      />
+
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title="Excluir categoria"
+        confirmLabel="Excluir"
+        message={<p>Excluir <strong>{excluir?.nome}</strong>? Lançamentos que já usam esta categoria não são apagados.</p>}
       />
     </>
   )

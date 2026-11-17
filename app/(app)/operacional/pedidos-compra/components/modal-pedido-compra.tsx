@@ -30,6 +30,7 @@ export function ModalPedidoCompra({ open, onClose, companyId, order, contacts, p
   const [data, setData] = useState('')
   const [dataEntrega, setDataEntrega] = useState('')
   const [status, setStatus] = useState('rascunho')
+  const [numeroNota, setNumeroNota] = useState('')
   const [observacao, setObservacao] = useState('')
   const [itens, setItens] = useState<PedidoItem[]>([])
 
@@ -53,6 +54,7 @@ export function ModalPedidoCompra({ open, onClose, companyId, order, contacts, p
       setData(order.data)
       setDataEntrega(order.data_entrega ?? '')
       setStatus(order.status)
+      setNumeroNota(order.numero_nota ?? '')
       setObservacao(order.observacao ?? '')
       setItens(order.itens ?? [])
     } else {
@@ -60,6 +62,7 @@ export function ModalPedidoCompra({ open, onClose, companyId, order, contacts, p
       setData(new Date().toISOString().slice(0, 10))
       setDataEntrega('')
       setStatus('rascunho')
+      setNumeroNota('')
       setObservacao('')
       setItens([])
     }
@@ -126,6 +129,7 @@ export function ModalPedidoCompra({ open, onClose, companyId, order, contacts, p
     fd.set('data', data)
     fd.set('data_entrega', dataEntrega)
     fd.set('status', status)
+    fd.set('numero_nota', numeroNota)
     fd.set('observacao', observacao)
     fd.set('itens', JSON.stringify(itens))
 
@@ -205,6 +209,10 @@ export function ModalPedidoCompra({ open, onClose, companyId, order, contacts, p
                 <option value="recebido">Recebido</option>
                 <option value="cancelado">Cancelado</option>
               </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Número da Nota Fiscal</label>
+              <Input value={numeroNota} onChange={e => setNumeroNota(e.target.value)} placeholder="Ex: 12345" />
             </div>
             <div>
               <label style={labelStyle}>Observação</label>

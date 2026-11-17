@@ -2,31 +2,28 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ModalConta } from './modal-conta'
-import { ModalCartao } from './modal-cartao'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { StatusBadge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, SearchField } from '@/components/ui/filter-select'
+import { Tabs } from '@/components/ui/form-steps'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
 import { deleteBankAccountAction, deleteCreditCardAction } from '../actions'
 import type { BankAccount, CreditCard } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { ModalCartao } from './modal-cartao'
+import { ModalConta } from './modal-conta'
 
 const TIPO_LABELS: Record<string, string> = {
-  corrente: 'Corrente',
-  poupanca: 'Poupança',
-  pagamento: 'Pagamento',
-  investimento: 'Investimento',
-  caixa: 'Caixa',
+  corrente: 'Corrente', poupanca: 'Poupança', pagamento: 'Pagamento', investimento: 'Investimento', caixa: 'Caixa',
 }
-
 const BANDEIRA_LABELS: Record<string, string> = {
-  visa: 'Visa',
-  mastercard: 'Mastercard',
-  elo: 'Elo',
-  amex: 'Amex',
-  hipercard: 'Hipercard',
-  outro: 'Outro',
+  visa: 'Visa', mastercard: 'Mastercard', elo: 'Elo', amex: 'Amex', hipercard: 'Hipercard', outro: 'Outro',
 }
 
-function formatCurrency(v: number) {
+function fmtCurrency(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
@@ -36,198 +33,154 @@ interface Props {
   companyId: string
 }
 
+type Excluir = { tipo: 'conta'; item: BankAccount } | { tipo: 'cartao'; item: CreditCard } | null
+
+// Contas bancárias e cartões de crédito usados no Fluxo de Caixa e nas Faturas
 export function ContasCartoesClient({ bankAccounts, creditCards, companyId }: Props) {
   const router = useRouter()
+  const [aba, setAba] = useState(0)
+  const [busca, setBusca] = useState('')
 
   const [contaModalOpen, setContaModalOpen] = useState(false)
   const [editingConta, setEditingConta] = useState<BankAccount | null>(null)
-
   const [cartaoModalOpen, setCartaoModalOpen] = useState(false)
   const [editingCartao, setEditingCartao] = useState<CreditCard | null>(null)
 
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState('')
+  const [excluir, setExcluir] = useState<Excluir>(null)
+  const [excluindo, setExcluindo] = useState(false)
 
-  async function handleDeleteConta(a: BankAccount) {
-    if (!confirm(`Excluir a conta "${a.banco}"? Esta ação não pode ser desfeita.`)) return
-    setDeletingId(a.id)
-    setDeleteError('')
-    const result = await deleteBankAccountAction(a.id)
-    setDeletingId(null)
-    if ('error' in result) setDeleteError(result.error ?? 'Erro ao excluir.')
-    else router.refresh()
+  const contasAtivas = bankAccounts.filter((a) => a.ativo)
+  const cartoesAtivos = creditCards.filter((c) => c.ativo)
+  const saldoTotal = contasAtivas.reduce((s, a) => s + (a.saldo_atual ?? 0), 0)
+  const limiteTotal = cartoesAtivos.reduce((s, c) => s + (c.limite ?? 0), 0)
+
+  const q = busca.trim().toLowerCase()
+  const contasVisiveis = bankAccounts.filter((a) => !q || a.banco.toLowerCase().includes(q))
+  const cartoesVisiveis = creditCards.filter((c) => !q || c.nome.toLowerCase().includes(q))
+
+  async function confirmarExclusao() {
+    if (!excluir) return
+    setExcluindo(true)
+    const nome = excluir.tipo === 'conta' ? excluir.item.banco : excluir.item.nome
+    const acao = excluir.tipo === 'conta' ? deleteBankAccountAction(excluir.item.id) : deleteCreditCardAction(excluir.item.id)
+    const r = await toast.promise(acao, {
+      loading: `Excluindo ${nome}…`,
+      success: `${excluir.tipo === 'conta' ? 'Conta' : 'Cartão'} ${nome} excluído.`,
+      error: `Não foi possível excluir ${excluir.tipo === 'conta' ? 'a conta' : 'o cartão'}.`,
+    })
+    setExcluindo(false)
+    setExcluir(null)
+    if (!('error' in r)) router.refresh()
   }
-
-  async function handleDeleteCartao(c: CreditCard) {
-    if (!confirm(`Excluir o cartão "${c.nome}"? Esta ação não pode ser desfeita.`)) return
-    setDeletingId(c.id)
-    setDeleteError('')
-    const result = await deleteCreditCardAction(c.id)
-    setDeletingId(null)
-    if ('error' in result) setDeleteError(result.error ?? 'Erro ao excluir.')
-    else router.refresh()
-  }
-
-  const saldoTotal = bankAccounts.filter(a => a.ativo).reduce((s, a) => s + (a.saldo_atual ?? 0), 0)
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Contas e Cartões
-            </h1>
-            <Breadcrumb />
-          </div>
-        </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Contas e Cartões</h1>
+        <Breadcrumb />
       </div>
 
-      {deleteError && (
-        <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{deleteError}</p>
-      )}
-
-      {/* ── Contas Bancárias ── */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>🏦 Contas Bancárias</h2>
-            {bankAccounts.length > 0 && (
-              <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>
-                Saldo total: <span style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(saldoTotal)}</span>
-              </span>
-            )}
-          </div>
-          <Button size="sm" onClick={() => { setEditingConta(null); setContaModalOpen(true) }}>Adicionar</Button>
-        </div>
-
-        <div className="app-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <tr>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Banco</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Tipo</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Agência / Conta</th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Saldo Atual</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {bankAccounts.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
-                    Nenhuma conta bancária cadastrada.
-                  </td>
-                </tr>
-              )}
-              {bankAccounts.map(a => (
-                <tr key={a.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{a.banco}</td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    {a.tipo ? TIPO_LABELS[a.tipo] ?? a.tipo : '—'}
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    {a.agencia && a.numero ? `${a.agencia} / ${a.numero}${a.digito ? `-${a.digito}` : ''}` : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                    {formatCurrency(a.saldo_atual ?? 0)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: a.ativo ? '#E9F7EF' : '#F2F3F4', color: a.ativo ? '#1E8449' : '#717D7E' }}
-                    >
-                      {a.ativo ? 'Ativa' : 'Inativa'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2 justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingConta(a); setContaModalOpen(true) }}>Editar</Button>
-                      <Button variant="danger" size="sm" loading={deletingId === a.id} onClick={() => handleDeleteConta(a)}>Excluir</Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="wallet" title="Saldo em contas" value={fmtCurrency(saldoTotal)} caption={`${contasAtivas.length} ${contasAtivas.length === 1 ? 'conta ativa' : 'contas ativas'}`} />
+        <SummaryCard icon="card" title="Cartões de crédito" value={cartoesAtivos.length} caption={`de ${creditCards.length} cadastrados`} delay={60} />
+        <SummaryCard icon="dollar" title="Limite total" value={fmtCurrency(limiteTotal)} caption="soma dos cartões ativos" delay={120} />
       </div>
 
-      {/* ── Cartões de Crédito ── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>💳 Cartões de Crédito</h2>
-          <Button size="sm" onClick={() => { setEditingCartao(null); setCartaoModalOpen(true) }}>Adicionar</Button>
+      <Tabs labels={['Contas Bancárias', 'Cartões de Crédito']} step={aba} onSelect={setAba} />
+
+      {/* Contas Bancárias */}
+      <div className={aba === 0 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {bankAccounts.length} {bankAccounts.length === 1 ? 'conta cadastrada' : 'contas cadastradas'}
+          </p>
+          <AddButton onClick={() => { setEditingConta(null); setContaModalOpen(true) }} label="Nova conta" />
         </div>
 
-        <div className="app-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-              <tr>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Bandeira</th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Limite</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Fechamento / Vencimento</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {creditCards.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
-                    Nenhum cartão de crédito cadastrado.
-                  </td>
-                </tr>
-              )}
-              {creditCards.map(c => (
-                <tr key={c.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{c.nome}</td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    {c.bandeira ? BANDEIRA_LABELS[c.bandeira] ?? c.bandeira : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right" style={{ color: 'var(--color-text-secondary)' }}>
-                    {c.limite ? formatCurrency(c.limite) : '—'}
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    {c.dia_fechamento || c.dia_vencimento
-                      ? `Dia ${c.dia_fechamento ?? '?'} / Dia ${c.dia_vencimento ?? '?'}`
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: c.ativo ? '#E9F7EF' : '#F2F3F4', color: c.ativo ? '#1E8449' : '#717D7E' }}
-                    >
-                      {c.ativo ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2 justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingCartao(c); setCartaoModalOpen(true) }}>Editar</Button>
-                      <Button variant="danger" size="sm" loading={deletingId === c.id} onClick={() => handleDeleteCartao(c)}>Excluir</Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por banco..." />
+          {busca && <FilterResult total={contasVisiveis.length} onClear={() => setBusca('')} />}
         </div>
+
+        <ul className="flex flex-col gap-3">
+          {contasVisiveis.length === 0 && (
+            <ListEmpty>{bankAccounts.length === 0 ? 'Cadastre a primeira conta bancária da empresa.' : 'Nenhuma conta encontrada.'}</ListEmpty>
+          )}
+          {contasVisiveis.map((a) => (
+            <ListItem
+              key={a.id}
+              icon="wallet"
+              title={a.banco}
+              subtitle={`${a.tipo ? TIPO_LABELS[a.tipo] ?? a.tipo : 'Sem tipo'}${a.agencia && a.numero ? ` · Ag. ${a.agencia} / Conta ${a.numero}${a.digito ? `-${a.digito}` : ''}` : ''}`}
+              aside={
+                <>
+                  <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{fmtCurrency(a.saldo_atual ?? 0)}</span>
+                  <StatusBadge status={a.ativo ? 'active' : 'inactive'} />
+                </>
+              }
+              onClick={() => { setEditingConta(a); setContaModalOpen(true) }}
+              actionsLabel={a.banco}
+              actions={[
+                { icon: 'pencil', label: 'Editar', onClick: () => { setEditingConta(a); setContaModalOpen(true) } },
+                { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir({ tipo: 'conta', item: a }) },
+              ]}
+            />
+          ))}
+        </ul>
       </div>
 
-      <ModalConta
-        open={contaModalOpen}
-        onClose={() => setContaModalOpen(false)}
-        companyId={companyId}
-        account={editingConta}
-      />
-      <ModalCartao
-        open={cartaoModalOpen}
-        onClose={() => setCartaoModalOpen(false)}
-        companyId={companyId}
-        card={editingCartao}
+      {/* Cartões de Crédito */}
+      <div className={aba === 1 ? 'app-card p-5 flex flex-col gap-4' : 'hidden'}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {creditCards.length} {creditCards.length === 1 ? 'cartão cadastrado' : 'cartões cadastrados'}
+          </p>
+          <AddButton onClick={() => { setEditingCartao(null); setCartaoModalOpen(true) }} label="Novo cartão" />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome do cartão..." />
+          {busca && <FilterResult total={cartoesVisiveis.length} onClear={() => setBusca('')} />}
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {cartoesVisiveis.length === 0 && (
+            <ListEmpty>{creditCards.length === 0 ? 'Cadastre o primeiro cartão de crédito da empresa.' : 'Nenhum cartão encontrado.'}</ListEmpty>
+          )}
+          {cartoesVisiveis.map((c) => (
+            <ListItem
+              key={c.id}
+              icon="card"
+              title={c.nome}
+              subtitle={`${c.bandeira ? BANDEIRA_LABELS[c.bandeira] ?? c.bandeira : 'Sem bandeira'}${c.dia_fechamento || c.dia_vencimento ? ` · Fecha dia ${c.dia_fechamento ?? '?'}, vence dia ${c.dia_vencimento ?? '?'}` : ''}`}
+              aside={
+                <>
+                  <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{c.limite ? fmtCurrency(c.limite) : '—'}</span>
+                  <StatusBadge status={c.ativo ? 'active' : 'inactive'} />
+                </>
+              }
+              onClick={() => { setEditingCartao(c); setCartaoModalOpen(true) }}
+              actionsLabel={c.nome}
+              actions={[
+                { icon: 'pencil', label: 'Editar', onClick: () => { setEditingCartao(c); setCartaoModalOpen(true) } },
+                { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir({ tipo: 'cartao', item: c }) },
+              ]}
+            />
+          ))}
+        </ul>
+      </div>
+
+      <ModalConta open={contaModalOpen} onClose={() => setContaModalOpen(false)} companyId={companyId} account={editingConta} />
+      <ModalCartao open={cartaoModalOpen} onClose={() => setCartaoModalOpen(false)} companyId={companyId} card={editingCartao} />
+
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title={excluir?.tipo === 'conta' ? 'Excluir conta bancária' : 'Excluir cartão de crédito'}
+        confirmLabel="Excluir"
+        message={<p>Excluir <strong>{excluir ? (excluir.tipo === 'conta' ? excluir.item.banco : excluir.item.nome) : ''}</strong>? Lançamentos que já usam {excluir?.tipo === 'conta' ? 'esta conta' : 'este cartão'} não são apagados.</p>}
       />
     </>
   )

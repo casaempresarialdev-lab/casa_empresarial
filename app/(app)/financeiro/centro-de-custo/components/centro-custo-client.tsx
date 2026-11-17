@@ -2,124 +2,128 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ModalCentroCusto } from './modal-centro-custo'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { StatusBadge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-select'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
 import { deleteCostCenterAction } from '../actions'
 import type { CostCenter } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { ModalCentroCusto } from './modal-centro-custo'
 
 interface Props {
   costCenters: CostCenter[]
   companyId: string
 }
 
+const FILTRO_STATUS = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'ativos', label: 'Ativos' },
+  { value: 'inativos', label: 'Inativos' },
+]
+
+// Centros de custo da empresa: cadastro simples, usado pra classificar lançamentos no Fluxo de Caixa
 export function CentroCustoClient({ costCenters, companyId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<CostCenter | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState('')
-  const [search, setSearch] = useState('')
+  const [excluir, setExcluir] = useState<CostCenter | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
+  const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState('todos')
 
-  const q = search.toLowerCase()
-  const filtered = costCenters.filter(c =>
-    c.nome.toLowerCase().includes(q) ||
-    (c.codigo ?? '').toLowerCase().includes(q)
-  )
+  const ativos = costCenters.filter((c) => c.ativo)
+  const inativos = costCenters.filter((c) => !c.ativo)
 
-  function openAdd() { setEditing(null); setModalOpen(true) }
-  function openEdit(c: CostCenter) { setEditing(c); setModalOpen(true) }
+  const q = busca.trim().toLowerCase()
+  const visiveis = costCenters
+    .filter((c) => filtro === 'todos' || (filtro === 'ativos' ? c.ativo : !c.ativo))
+    .filter((c) => !q || c.nome.toLowerCase().includes(q) || (c.codigo ?? '').toLowerCase().includes(q))
 
-  async function handleDelete(c: CostCenter) {
-    if (!confirm(`Excluir "${c.nome}"? Esta ação não pode ser desfeita.`)) return
-    setDeletingId(c.id)
-    setDeleteError('')
-    const result = await deleteCostCenterAction(c.id)
-    setDeletingId(null)
-    if ('error' in result) setDeleteError(result.error ?? 'Erro ao excluir.')
-    else router.refresh()
+  function abrirNovo() { setEditing(null); setModalOpen(true) }
+  function abrirEdicao(c: CostCenter) { setEditing(c); setModalOpen(true) }
+
+  async function confirmarExclusao() {
+    if (!excluir) return
+    setExcluindo(true)
+    const r = await toast.promise(deleteCostCenterAction(excluir.id), {
+      loading: `Excluindo ${excluir.nome}…`,
+      success: `Centro de custo ${excluir.nome} excluído.`,
+      error: 'Não foi possível excluir o centro de custo.',
+    })
+    setExcluindo(false)
+    setExcluir(null)
+    if (!('error' in r)) router.refresh()
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Centro de Custo
-            </h1>
-            <Breadcrumb />
-          </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Centro de Custo</h1>
+        <Breadcrumb />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="briefcase" title="Centros de custo" value={costCenters.length} caption={costCenters.length === 1 ? 'cadastrado' : 'cadastrados'} />
+        <SummaryCard icon="check" title="Ativos" value={ativos.length} caption="disponíveis nos lançamentos" delay={60} />
+        <SummaryCard icon="info" title="Inativos" value={inativos.length} caption="fora dos lançamentos novos" delay={120} />
+      </div>
+
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {costCenters.length} {costCenters.length === 1 ? 'centro de custo' : 'centros de custo'}
+          </p>
+          <AddButton onClick={abrirNovo} label="Novo centro de custo" />
         </div>
-        <Button onClick={openAdd}>Adicionar</Button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome ou código..." />
+          <FilterSelect value={filtro} onChange={setFiltro} label="Filtrar por status" options={FILTRO_STATUS} />
+          {(busca || filtro !== 'todos') && (
+            <FilterResult total={visiveis.length} onClear={() => { setBusca(''); setFiltro('todos') }} />
+          )}
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {visiveis.length === 0 && (
+            <ListEmpty>
+              {costCenters.length === 0
+                ? 'Crie o primeiro centro de custo para classificar os lançamentos do Fluxo de Caixa.'
+                : 'Nenhum centro de custo encontrado.'}
+            </ListEmpty>
+          )}
+          {visiveis.map((c) => (
+            <ListItem
+              key={c.id}
+              icon="briefcase"
+              title={c.nome}
+              subtitle={c.codigo ? `Código ${c.codigo}` : undefined}
+              aside={<StatusBadge status={c.ativo ? 'active' : 'inactive'} />}
+              onClick={() => abrirEdicao(c)}
+              actionsLabel={c.nome}
+              actions={[
+                { icon: 'pencil', label: 'Editar', onClick: () => abrirEdicao(c) },
+                { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir(c) },
+              ]}
+            />
+          ))}
+        </ul>
       </div>
 
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Buscar por nome ou código..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full px-4 py-2 rounded-lg border text-sm"
-          style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
-        />
-      </div>
+      <ModalCentroCusto open={modalOpen} onClose={() => setModalOpen(false)} companyId={companyId} costCenter={editing} />
 
-      {deleteError && (
-        <p className="text-sm mb-4 p-3 rounded-lg bg-red-50" style={{ color: 'var(--color-error)' }}>{deleteError}</p>
-      )}
-
-      <div className="app-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nome</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Código</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={4} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  {search ? 'Nenhum resultado.' : 'Nenhum centro de custo cadastrado.'}
-                </td>
-              </tr>
-            )}
-            {filtered.map(c => (
-              <tr key={c.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{c.nome}</td>
-                <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{c.codigo ?? '—'}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                    style={{
-                      backgroundColor: c.ativo ? '#E9F7EF' : '#F2F3F4',
-                      color: c.ativo ? '#1E8449' : '#717D7E',
-                    }}
-                  >
-                    {c.ativo ? 'Ativo' : 'Inativo'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(c)}>Editar</Button>
-                    <Button variant="danger" size="sm" loading={deletingId === c.id} onClick={() => handleDelete(c)}>Excluir</Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <ModalCentroCusto
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        costCenter={editing}
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title="Excluir centro de custo"
+        confirmLabel="Excluir"
+        message={<p>Excluir <strong>{excluir?.nome}</strong>? Lançamentos que já usam este centro de custo não são apagados, mas ele deixa de aparecer para novos lançamentos.</p>}
       />
     </>
   )

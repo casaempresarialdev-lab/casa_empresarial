@@ -87,6 +87,24 @@ export async function updateProductAction(productId: string, formData: FormData)
   const { error } = await admin.from('products').update(fields).eq('id', productId)
 
   if (error) return { error: error.message }
+
+  const fotoFile = formData.get('foto_file') as File
+  if (fotoFile && fotoFile.size > 0) {
+    const { data: existing } = await admin.from('products').select('company_id').eq('id', productId).single()
+    if (existing) {
+      const ext = fotoFile.name.split('.').pop() || 'jpg'
+      const path = `${existing.company_id}/${productId}.${ext}`
+      const bytes = await fotoFile.arrayBuffer()
+      const { error: uploadErr } = await admin.storage
+        .from('produtos')
+        .upload(path, bytes, { contentType: fotoFile.type, upsert: true })
+      if (!uploadErr) {
+        const { data: urlData } = admin.storage.from('produtos').getPublicUrl(path)
+        await admin.from('products').update({ foto_url: urlData.publicUrl }).eq('id', productId)
+      }
+    }
+  }
+
   revalidatePath('/operacional/produtos')
   return { success: true }
 }

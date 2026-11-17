@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 import type { DREData, DRELinha } from '../queries'
 import type { DreGrupo } from '../../categorias/queries'
 import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { Icon } from '@/components/ui/icon'
 
 function fmt(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -185,18 +187,18 @@ export function DREClient({ dreData, mes, ano }: Props) {
           </div>
           <div className="flex items-center gap-1">
             <button onClick={() => navigate(-1)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm"
-              style={{ color: 'var(--color-text-secondary)' }}>
-              ◀
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              style={{ color: 'var(--color-text-secondary)' }} aria-label="Mês anterior">
+              <Icon name="chevron-left" size={16} />
             </button>
             <span className="text-sm font-semibold px-2 min-w-[120px] text-center"
               style={{ color: 'var(--color-text-primary)' }}>
               {MESES[mes - 1]} {ano}
             </span>
             <button onClick={() => navigate(1)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm"
-              style={{ color: 'var(--color-text-secondary)' }}>
-              ▶
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              style={{ color: 'var(--color-text-secondary)' }} aria-label="Próximo mês">
+              <Icon name="chevron-right" size={16} />
             </button>
           </div>
         </div>
@@ -205,10 +207,17 @@ export function DREClient({ dreData, mes, ano }: Props) {
         </p>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="wallet" title="Receita Líquida" value={fmt(recLiquida)} caption="receita bruta − deduções" />
+        <SummaryCard icon="briefcase" title="Lucro Bruto" value={fmt(lucroBruto)} caption="receita líquida − CMV/CPV" delay={60} />
+        <SummaryCard icon="file" title="Resultado Operacional" value={fmt(resultOp)} caption="antes de impostos e financeiras" delay={120} />
+        <SummaryCard icon="dollar" title="Resultado Líquido" value={fmt(resultLiq)} caption="o que sobra no período" accent={resultLiq < 0 ? 'red' : undefined} delay={180} />
+      </div>
+
       {/* Aviso de dados não classificados */}
       {totalIgnorado > 0 && (
-        <div className="mb-4 px-4 py-3 rounded-xl border text-sm flex items-start gap-2"
-          style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm flex items-start gap-2"
+          style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>
           <span>⚠</span>
           <span>
             {fmt(totalIgnorado)} em transações sem grupo DRE ({sem_categoria > 0 ? `${fmt(sem_categoria)} sem categoria` : ''}

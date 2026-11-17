@@ -2,11 +2,43 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ModalOrdemServico } from './modal-ordem-servico'
+import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { SummaryCard } from '@/components/modules/dashboard/summary-card'
+import { AddButton } from '@/components/ui/add-button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FilterResult, FilterSelect, SearchField } from '@/components/ui/filter-select'
+import { ListEmpty, ListItem } from '@/components/ui/list-item'
+import { toast } from '@/lib/toast'
 import { deleteServiceOrderAction, updateServiceOrderStatusAction } from '../actions'
 import type { ServiceOrder } from '../queries'
-import { Breadcrumb } from '@/components/layout/breadcrumb'
+import { ModalOrdemServico } from './modal-ordem-servico'
+
+const STATUS_SELO: Record<string, { texto: string; fundo: string; cor: string }> = {
+  aberta: { texto: 'Aberta', fundo: '#DBEAFE', cor: '#1D4ED8' },
+  concluida: { texto: 'Concluída', fundo: '#DCFCE7', cor: '#15803D' },
+  cancelada: { texto: 'Cancelada', fundo: '#FEE2E2', cor: '#B91C1C' },
+}
+const FORMA_LABELS: Record<string, string> = {
+  dinheiro: 'Dinheiro', pix: 'Pix', credito: 'Crédito', debito: 'Débito', boleto: 'Boleto', outro: 'Outro',
+}
+const FILTRO_STATUS = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'aberta', label: 'Aberta' },
+  { value: 'concluida', label: 'Concluída' },
+  { value: 'cancelada', label: 'Cancelada' },
+]
+
+function Selo({ texto, fundo, cor }: { texto: string; fundo: string; cor: string }) {
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: fundo, color: cor }}>{texto}</span>
+}
+function formatBRL(val: number) {
+  return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+function formatDate(d: string | null) {
+  if (!d) return '—'
+  const [y, m, day] = d.split('-')
+  return `${day}/${m}/${y}`
+}
 
 interface Props {
   orders: ServiceOrder[]
@@ -14,189 +46,120 @@ interface Props {
   companyId: string
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  aberta: 'Aberta',
-  concluida: 'Concluída',
-  cancelada: 'Cancelada',
-}
-
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  aberta:     { bg: '#EBF5FB', text: '#2471A3' },
-  concluida:  { bg: '#E9F7EF', text: '#1E8449' },
-  cancelada:  { bg: '#FDEDEC', text: '#C0392B' },
-}
-
-const FORMA_LABELS: Record<string, string> = {
-  dinheiro: 'Dinheiro',
-  pix: 'Pix',
-  credito: 'Crédito',
-  debito: 'Débito',
-  boleto: 'Boleto',
-  outro: 'Outro',
-}
-
-function formatBRL(val: number) {
-  return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-
-function formatDate(d: string | null) {
-  if (!d) return '—'
-  const [y, m, day] = d.split('-')
-  return `${day}/${m}/${y}`
-}
-
+// Ordens de serviço — "Concluir" lança o recebimento no Fluxo de Caixa
 export function OrdensServicoClient({ orders, contacts, companyId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [advancingId, setAdvancingId] = useState<string | null>(null)
-  const [filterStatus, setFilterStatus] = useState('')
+  const [excluir, setExcluir] = useState<ServiceOrder | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
+  const [concluindoId, setConcluindoId] = useState<string | null>(null)
+  const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState('todos')
 
-  const filtered = filterStatus ? orders.filter(o => o.status === filterStatus) : orders
+  const abertas = orders.filter((o) => o.status === 'aberta')
+  const concluidas = orders.filter((o) => o.status === 'concluida')
+  const totalAberto = abertas.reduce((s, o) => s + o.valor_total, 0)
 
-  const statusKeys = ['aberta', 'concluida', 'cancelada'] as const
-  const counts = Object.fromEntries(
-    statusKeys.map(s => [s, orders.filter(o => o.status === s).length])
-  ) as Record<string, number>
+  const q = busca.trim().toLowerCase()
+  const visiveis = orders
+    .filter((o) => filtro === 'todos' || o.status === filtro)
+    .filter((o) => !q || (o.cliente?.nome ?? '').toLowerCase().includes(q) || String(o.numero).includes(q))
 
-  const totalAberto = orders
-    .filter(o => o.status === 'aberta')
-    .reduce((sum, o) => sum + o.valor_total, 0)
-
-  function openAdd() { setEditingOrder(null); setModalOpen(true) }
-  function openEdit(o: ServiceOrder) { setEditingOrder(o); setModalOpen(true) }
+  function abrirNovo() { setEditingOrder(null); setModalOpen(true) }
+  function abrirEdicao(o: ServiceOrder) { setEditingOrder(o); setModalOpen(true) }
 
   async function handleConcluir(o: ServiceOrder) {
-    setAdvancingId(o.id)
-    await updateServiceOrderStatusAction(o.id, 'concluida')
-    setAdvancingId(null)
-    router.refresh()
+    setConcluindoId(o.id)
+    const r = await toast.promise(updateServiceOrderStatusAction(o.id, 'concluida'), {
+      loading: 'Concluindo…',
+      success: `Ordem #${String(o.numero).padStart(3, '0')} concluída — recebimento lançado no caixa.`,
+      error: 'Não foi possível concluir a ordem.',
+    })
+    setConcluindoId(null)
+    if (!('error' in r)) router.refresh()
   }
 
-  async function handleDelete(o: ServiceOrder) {
-    if (!confirm(`Excluir ordem de serviço #${String(o.numero).padStart(3, '0')}?`)) return
-    setDeletingId(o.id)
-    const result = await deleteServiceOrderAction(o.id)
-    setDeletingId(null)
-    if ('error' in result) alert(result.error)
-    else router.refresh()
+  async function confirmarExclusao() {
+    if (!excluir) return
+    setExcluindo(true)
+    const r = await toast.promise(deleteServiceOrderAction(excluir.id), {
+      loading: 'Excluindo…',
+      success: `Ordem #${String(excluir.numero).padStart(3, '0')} excluída.`,
+      error: 'Não foi possível excluir a ordem.',
+    })
+    setExcluindo(false)
+    setExcluir(null)
+    if (!('error' in r)) router.refresh()
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 min-w-0">
-          {/* Título e breadcrumb na mesma linha */}
-          <div className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>
-              Ordens de Serviço
-            </h1>
-            <Breadcrumb />
-          </div>
-          <p className="text-sm mt-1 animate-enter" style={{ color: 'var(--color-text-muted)', animationDelay: '60ms' }}>
-            Total em ordens abertas: <span className="font-semibold" style={{ color: 'var(--color-primary-darker)' }}>{formatBRL(totalAberto)}</span>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Ordens de Serviço</h1>
+        <Breadcrumb />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <SummaryCard icon="briefcase" title="Abertas" value={abertas.length} caption="em andamento" />
+        <SummaryCard icon="check" title="Concluídas" value={concluidas.length} caption="recebimento lançado" delay={60} />
+        <SummaryCard icon="dollar" title="Total em abertas" value={formatBRL(totalAberto)} caption="ainda não concluídas" delay={120} />
+      </div>
+
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {orders.length} {orders.length === 1 ? 'ordem' : 'ordens'}
           </p>
+          <AddButton onClick={abrirNovo} label="Nova ordem" />
         </div>
-        <Button onClick={openAdd}>Adicionar</Button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por cliente ou número..." />
+          <FilterSelect value={filtro} onChange={setFiltro} label="Filtrar por status" options={FILTRO_STATUS} />
+          {(busca || filtro !== 'todos') && (
+            <FilterResult total={visiveis.length} onClear={() => { setBusca(''); setFiltro('todos') }} />
+          )}
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {visiveis.length === 0 && (
+            <ListEmpty>{orders.length === 0 ? 'Crie a primeira ordem de serviço.' : 'Nenhuma ordem encontrada.'}</ListEmpty>
+          )}
+          {visiveis.map((o) => (
+            <ListItem
+              key={o.id}
+              icon="briefcase"
+              title={`Ordem #${String(o.numero).padStart(3, '0')}`}
+              subtitle={[o.cliente?.nome ?? 'Sem cliente', formatDate(o.data), o.forma_pagamento && FORMA_LABELS[o.forma_pagamento]].filter(Boolean).join(' · ')}
+              aside={
+                <>
+                  <span className="text-sm font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{formatBRL(o.valor_total)}</span>
+                  <Selo {...STATUS_SELO[o.status]} />
+                </>
+              }
+              onClick={() => abrirEdicao(o)}
+              actionsLabel={`ordem #${o.numero}`}
+              actions={[
+                ...(o.status === 'aberta' ? [{ icon: 'check' as const, label: 'Concluir', disabled: concluindoId === o.id, onClick: () => handleConcluir(o) }] : []),
+                { icon: 'pencil', label: 'Editar', onClick: () => abrirEdicao(o) },
+                { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir(o) },
+              ]}
+            />
+          ))}
+        </ul>
       </div>
 
-      {/* Cards de status */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        {statusKeys.map(s => {
-          const colors = STATUS_COLORS[s]
-          const isActive = filterStatus === s
-          return (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(isActive ? '' : s)}
-              className="p-2 rounded-xl border text-center transition-all"
-              style={{
-                borderColor: isActive ? colors.text : 'var(--color-bg-surface)',
-                backgroundColor: isActive ? colors.bg : 'white',
-              }}
-            >
-              <div className="text-lg font-bold" style={{ color: colors.text }}>{counts[s]}</div>
-              <div className="text-xs mt-0.5 leading-tight" style={{ color: 'var(--color-text-muted)' }}>
-                {STATUS_LABELS[s]}
-              </div>
-            </button>
-          )
-        })}
-      </div>
+      <ModalOrdemServico open={modalOpen} onClose={() => setModalOpen(false)} companyId={companyId} order={editingOrder} contacts={contacts} />
 
-      <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[700px] text-sm">
-          <thead style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-            <tr>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Nº</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Cliente</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Data</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Pgto</th>
-              <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Total</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Status</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-text-muted)' }}>
-                  {filterStatus ? `Nenhuma ordem com status "${STATUS_LABELS[filterStatus]}".` : 'Nenhuma ordem de serviço cadastrada.'}
-                </td>
-              </tr>
-            )}
-            {filtered.map(o => {
-              const colors = STATUS_COLORS[o.status]
-              return (
-                <tr key={o.id} className="border-t" style={{ borderColor: 'var(--color-bg-surface)' }}>
-                  <td className="px-4 py-3 font-mono font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                    #{String(o.numero).padStart(3, '0')}
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    {o.cliente?.nome ?? <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>{formatDate(o.data)}</td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                    {o.forma_pagamento ? FORMA_LABELS[o.forma_pagamento] ?? o.forma_pagamento : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                    {formatBRL(o.valor_total)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: colors.bg, color: colors.text }}
-                    >
-                      {STATUS_LABELS[o.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5 justify-end">
-                      {o.status === 'aberta' && (
-                        <Button variant="ghost" size="sm" loading={advancingId === o.id} onClick={() => handleConcluir(o)}>
-                          Concluir
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(o)}>Editar</Button>
-                      <Button variant="danger" size="sm" loading={deletingId === o.id} onClick={() => handleDelete(o)}>
-                        Excluir
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <ModalOrdemServico
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        companyId={companyId}
-        order={editingOrder}
-        contacts={contacts}
+      <ConfirmDialog
+        open={!!excluir}
+        onClose={() => { if (!excluindo) setExcluir(null) }}
+        onConfirm={confirmarExclusao}
+        loading={excluindo}
+        title="Excluir ordem de serviço"
+        confirmLabel="Excluir"
+        message={<p>Excluir a ordem <strong>#{excluir ? String(excluir.numero).padStart(3, '0') : ''}</strong>?</p>}
       />
     </>
   )
