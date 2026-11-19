@@ -24,10 +24,22 @@ function Selo({ texto, fundo, cor }: { texto: string; fundo: string; cor: string
   return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: fundo, color: cor }}>{texto}</span>
 }
 
+const PAPEL_SELO: Record<Contact['papel'], { texto: string; fundo: string; cor: string }> = {
+  cliente: { texto: 'Cliente', fundo: '#DBEAFE', cor: '#1D4ED8' },
+  fornecedor: { texto: 'Fornecedor', fundo: '#FEF3C7', cor: '#B45309' },
+  ambos: { texto: 'Cliente e Fornecedor', fundo: '#F3F4F6', cor: '#6B7280' },
+}
+
 const FILTRO_TIPO = [
   { value: 'todos', label: 'Todos' },
   { value: 'PF', label: 'Pessoa Física' },
   { value: 'PJ', label: 'Pessoa Jurídica' },
+]
+const FILTRO_PAPEL = [
+  { value: 'todos', label: 'Clientes e Fornecedores' },
+  { value: 'cliente', label: 'Clientes' },
+  { value: 'fornecedor', label: 'Fornecedores' },
+  { value: 'ambos', label: 'Cliente e Fornecedor' },
 ]
 
 interface Props {
@@ -35,7 +47,7 @@ interface Props {
   companyId: string
 }
 
-// Clientes e fornecedores usados nos lançamentos do Fluxo de Caixa
+// Clientes e fornecedores, usados nos Pedidos de Compra/Venda e nos lançamentos do Fluxo de Caixa
 export function ContatosClient({ contacts, companyId }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
@@ -43,14 +55,16 @@ export function ContatosClient({ contacts, companyId }: Props) {
   const [excluir, setExcluir] = useState<Contact | null>(null)
   const [excluindo, setExcluindo] = useState(false)
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState('todos')
+  const [filtroTipo, setFiltroTipo] = useState('todos')
+  const [filtroPapel, setFiltroPapel] = useState('todos')
 
   const pf = contacts.filter((c) => c.tipo === 'PF')
   const pj = contacts.filter((c) => c.tipo === 'PJ')
 
   const q = busca.trim().toLowerCase()
   const visiveis = contacts
-    .filter((c) => filtro === 'todos' || c.tipo === filtro)
+    .filter((c) => filtroTipo === 'todos' || c.tipo === filtroTipo)
+    .filter((c) => filtroPapel === 'todos' || c.papel === filtroPapel)
     .filter((c) => !q || c.nome.toLowerCase().includes(q) || (c.cpf_cnpj ?? '').includes(q) || (c.email ?? '').toLowerCase().includes(q) || (c.telefone ?? '').includes(q))
 
   function abrirNovo() { setEditing(null); setModalOpen(true) }
@@ -92,9 +106,10 @@ export function ContatosClient({ contacts, companyId }: Props) {
 
         <div className="flex flex-wrap items-center gap-2">
           <SearchField value={busca} onChange={setBusca} placeholder="Pesquisar por nome, CPF/CNPJ, e-mail ou telefone..." />
-          <FilterSelect value={filtro} onChange={setFiltro} label="Filtrar por tipo" options={FILTRO_TIPO} />
-          {(busca || filtro !== 'todos') && (
-            <FilterResult total={visiveis.length} onClear={() => { setBusca(''); setFiltro('todos') }} />
+          <FilterSelect value={filtroTipo} onChange={setFiltroTipo} label="Filtrar por tipo" options={FILTRO_TIPO} />
+          <FilterSelect value={filtroPapel} onChange={setFiltroPapel} label="Filtrar por papel" options={FILTRO_PAPEL} />
+          {(busca || filtroTipo !== 'todos' || filtroPapel !== 'todos') && (
+            <FilterResult total={visiveis.length} onClear={() => { setBusca(''); setFiltroTipo('todos'); setFiltroPapel('todos') }} />
           )}
         </div>
 
@@ -107,14 +122,18 @@ export function ContatosClient({ contacts, companyId }: Props) {
             return (
               <ListItem
                 key={c.id}
-                icon={c.tipo === 'PJ' ? 'briefcase' : 'user'}
+                media={c.foto_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.foto_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+                ) : undefined}
+                icon={c.foto_url ? undefined : (c.tipo === 'PJ' ? 'briefcase' : 'user')}
                 title={c.nome}
                 subtitle={[doc, c.email, c.telefone].filter(Boolean).join(' · ') || undefined}
-                aside={c.tipo === 'PJ' ? <Selo texto="Pessoa Jurídica" fundo="#EBF5FB" cor="#2471A3" /> : <Selo texto="Pessoa Física" fundo="#F0FFF4" cor="#1E8449" />}
+                aside={<Selo {...PAPEL_SELO[c.papel]} />}
                 onClick={() => abrirEdicao(c)}
                 actionsLabel={c.nome}
                 actions={[
-                  { icon: 'eye', label: 'Visualizar', onClick: () => router.push(`/financeiro/contatos/${c.id}`) },
+                  { icon: 'eye', label: 'Visualizar', onClick: () => router.push(`/operacional/contatos/${c.id}`) },
                   { icon: 'pencil', label: 'Editar', onClick: () => abrirEdicao(c) },
                   { icon: 'trash', label: 'Excluir', tone: 'danger', onClick: () => setExcluir(c) },
                 ]}
@@ -133,7 +152,7 @@ export function ContatosClient({ contacts, companyId }: Props) {
         loading={excluindo}
         title="Excluir contato"
         confirmLabel="Excluir"
-        message={<p>Excluir <strong>{excluir?.nome}</strong>? Lançamentos que já usam este contato não são apagados.</p>}
+        message={<p>Excluir <strong>{excluir?.nome}</strong>? Pedidos e lançamentos que já usam este contato não são apagados.</p>}
       />
     </>
   )

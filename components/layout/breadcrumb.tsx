@@ -21,6 +21,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'centro-de-custo': 'Centro de Custo',
   categorias: 'Categorias',
   'contas-cartoes': 'Contas e Cartões',
+  configuracoes: 'Configurações',
   'fluxo-de-caixa': 'Fluxo de Caixa',
   faturas: 'Faturas',
   operacional: 'Operacional',

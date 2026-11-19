@@ -224,7 +224,7 @@ export function DREClient({ dreData, mes, ano }: Props) {
             {sem_categoria > 0 && nao_classificado > 0 ? ', ' : ''}
             {nao_classificado > 0 ? `${fmt(nao_classificado)} não classificadas` : ''}).
             Os totais podem estar incompletos.{' '}
-            <a href="/financeiro/categorias" className="underline font-medium">Classificar categorias →</a>
+            <a href="/financeiro/configuracoes" className="underline font-medium">Classificar categorias →</a>
           </span>
         </div>
       )}

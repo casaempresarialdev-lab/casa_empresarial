@@ -31,12 +31,14 @@ interface Props {
   bankAccounts: BankAccount[]
   creditCards: CreditCard[]
   companyId: string
+  /** true quando renderizado dentro de uma aba de Configurações — esconde o título/breadcrumb próprio */
+  embedded?: boolean
 }
 
 type Excluir = { tipo: 'conta'; item: BankAccount } | { tipo: 'cartao'; item: CreditCard } | null
 
 // Contas bancárias e cartões de crédito usados no Fluxo de Caixa e nas Faturas
-export function ContasCartoesClient({ bankAccounts, creditCards, companyId }: Props) {
+export function ContasCartoesClient({ bankAccounts, creditCards, companyId, embedded }: Props) {
   const router = useRouter()
   const [aba, setAba] = useState(0)
   const [busca, setBusca] = useState('')
@@ -75,10 +77,12 @@ export function ContasCartoesClient({ bankAccounts, creditCards, companyId }: Pr
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Contas e Cartões</h1>
-        <Breadcrumb />
-      </div>
+      {!embedded && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Contas e Cartões</h1>
+          <Breadcrumb />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <SummaryCard icon="wallet" title="Saldo em contas" value={fmtCurrency(saldoTotal)} caption={`${contasAtivas.length} ${contasAtivas.length === 1 ? 'conta ativa' : 'contas ativas'}`} />

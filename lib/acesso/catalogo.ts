@@ -56,11 +56,8 @@ export const MODULOS: ModuloAcesso[] = [
     icon: 'dollar',
     itens: [
       { key: 'financeiro.dashboard', label: 'Dashboard', href: '/financeiro', exato: true, dashboard: true },
-      { key: 'financeiro.contatos', label: 'Contatos', href: '/financeiro/contatos' },
-      { key: 'financeiro.centro-de-custo', label: 'Centro de Custo', href: '/financeiro/centro-de-custo' },
-      { key: 'financeiro.categorias', label: 'Categorias', href: '/financeiro/categorias' },
-      { key: 'financeiro.contas-cartoes', label: 'Contas e Cartões', href: '/financeiro/contas-cartoes' },
       { key: 'financeiro.fluxo-de-caixa', label: 'Fluxo de Caixa', href: '/financeiro/fluxo-de-caixa' },
+      { key: 'financeiro.configuracoes', label: 'Configurações', href: '/financeiro/configuracoes' },
       { key: 'financeiro.dre', label: 'DRE', href: '/financeiro/dre' },
       { key: 'financeiro.balanco', label: 'Balanço', href: '/financeiro/balanco' },
       { key: 'financeiro.faturas', label: 'Faturas', href: '/financeiro/faturas' },
@@ -92,6 +89,7 @@ export const MODULOS: ModuloAcesso[] = [
     icon: 'briefcase',
     itens: [
       { key: 'operacional.dashboard', label: 'Dashboard', href: '/operacional', exato: true, dashboard: true },
+      { key: 'operacional.contatos', label: 'Contatos', href: '/operacional/contatos' },
       { key: 'operacional.produtos', label: 'Produtos e Serviços', href: '/operacional/produtos' },
       { key: 'operacional.pedidos-compra', label: 'Pedidos de Compra', href: '/operacional/pedidos-compra' },
       { key: 'operacional.pedidos-venda', label: 'Pedidos de Venda', href: '/operacional/pedidos-venda' },

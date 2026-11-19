@@ -99,7 +99,7 @@ export default async function FinanceiroDashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <IndicadorCard
-          icon="wallet" titulo="Saldo em contas" valor={formatBRL(saldoEmContas)} href="/financeiro/contas-cartoes" delay={100}
+          icon="wallet" titulo="Saldo em contas" valor={formatBRL(saldoEmContas)} href="/financeiro/configuracoes" delay={100}
           detalhe={`${contasAtivas.length} ${contasAtivas.length === 1 ? 'conta ativa' : 'contas ativas'}`}
         />
         <IndicadorCard

@@ -31,7 +31,7 @@ export function OpenReceivables({ clients, delay }: Props) {
         ].filter(Boolean).join(' · '),
         // Vermelho se há parcela vencida
         badge: { label: formatCurrency(c.total), tone: c.vencidas > 0 ? 'red' : 'brand' },
-        href: `/financeiro/contatos/${c.contactId}`,
+        href: `/operacional/contatos/${c.contactId}`,
       }))}
     />
   )

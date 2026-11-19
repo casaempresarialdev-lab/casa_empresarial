@@ -11,7 +11,7 @@ async function getAuthUser() {
 }
 
 export async function createCostCenterAction(companyId: string, formData: FormData) {
-  const negado = await semAcesso('financeiro.centro-de-custo', companyId)
+  const negado = await semAcesso('financeiro.configuracoes', companyId)
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -34,7 +34,7 @@ export async function createCostCenterAction(companyId: string, formData: FormDa
 }
 
 export async function updateCostCenterAction(costCenterId: string, formData: FormData) {
-  const negado = await semAcesso('financeiro.centro-de-custo')
+  const negado = await semAcesso('financeiro.configuracoes')
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -56,7 +56,7 @@ export async function updateCostCenterAction(costCenterId: string, formData: For
 }
 
 export async function deleteCostCenterAction(costCenterId: string) {
-  const negado = await semAcesso('financeiro.centro-de-custo')
+  const negado = await semAcesso('financeiro.configuracoes')
   if (negado) return negado
 
   const user = await getAuthUser()

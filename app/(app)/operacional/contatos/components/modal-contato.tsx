@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,12 @@ function maskCNPJ(v: string) {
     .replace(/(\d{4})(\d)/, '$1-$2')
 }
 
+const PAPEIS = [
+  { value: 'cliente', label: 'Cliente' },
+  { value: 'fornecedor', label: 'Fornecedor' },
+  { value: 'ambos', label: 'Os dois' },
+] as const
+
 interface Props {
   open: boolean
   onClose: () => void
@@ -35,13 +41,16 @@ interface Props {
 export function ModalContato({ open, onClose, companyId, contact }: Props) {
   const router = useRouter()
   const isEdit = !!contact
+  const fotoInputRef = useRef<HTMLInputElement>(null)
 
   const [nome, setNome] = useState('')
   const [tipo, setTipo] = useState<'PF' | 'PJ'>('PF')
+  const [papel, setPapel] = useState<'cliente' | 'fornecedor' | 'ambos'>('ambos')
   const [cpfCnpj, setCpfCnpj] = useState('')
   const [email, setEmail] = useState('')
   const [telefone, setTelefone] = useState('')
   const [observacao, setObservacao] = useState('')
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -49,11 +58,14 @@ export function ModalContato({ open, onClose, companyId, contact }: Props) {
     if (open) {
       setNome(contact?.nome ?? '')
       setTipo((contact?.tipo as 'PF' | 'PJ') ?? 'PF')
+      setPapel(contact?.papel ?? 'ambos')
       const doc = contact?.cpf_cnpj ?? ''
       setCpfCnpj(doc ? (contact?.tipo === 'PJ' ? maskCNPJ(doc) : maskCPF(doc)) : '')
       setEmail(contact?.email ?? '')
       setTelefone(contact?.telefone ?? '')
       setObservacao(contact?.observacao ?? '')
+      setFotoPreview(contact?.foto_url ?? null)
+      if (fotoInputRef.current) fotoInputRef.current.value = ''
       setError('')
     }
   }, [open, contact])
@@ -73,8 +85,11 @@ export function ModalContato({ open, onClose, companyId, contact }: Props) {
     setError('')
 
     const fd = new FormData()
+    const fotoFile = fotoInputRef.current?.files?.[0]
+    if (fotoFile) fd.set('foto_file', fotoFile)
     fd.set('nome', nome)
     fd.set('tipo', tipo)
+    fd.set('papel', papel)
     fd.set('cpf_cnpj', cpfCnpj)
     fd.set('email', email)
     fd.set('telefone', telefone)
@@ -97,6 +112,43 @@ export function ModalContato({ open, onClose, companyId, contact }: Props) {
       title={isEdit ? 'Editar contato' : 'Novo contato'}
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {/* Foto */}
+        <div className="flex items-center gap-4">
+          {fotoPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={fotoPreview} alt="Preview" className="w-14 h-14 rounded-full object-cover border flex-shrink-0" style={{ borderColor: 'var(--color-bg-surface)' }} />
+          ) : (
+            <div className="w-14 h-14 rounded-full border flex items-center justify-center text-xl flex-shrink-0" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-bg-surface)' }}>
+              {tipo === 'PJ' ? '🏢' : '👤'}
+            </div>
+          )}
+          <div className="flex items-center gap-3">
+            <label className="cursor-pointer text-sm px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50" style={{ borderColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)' }}>
+              {fotoPreview ? 'Trocar foto' : 'Selecionar foto'}
+              <input
+                ref={fotoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0]
+                  if (f) setFotoPreview(URL.createObjectURL(f))
+                }}
+              />
+            </label>
+            {fotoPreview && (
+              <button
+                type="button"
+                onClick={() => { setFotoPreview(null); if (fotoInputRef.current) fotoInputRef.current.value = '' }}
+                className="text-sm hover:underline"
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                Remover
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Tipo PF / PJ */}
         <div className="flex gap-2">
           {(['PF', 'PJ'] as const).map((t) => (
@@ -114,6 +166,28 @@ export function ModalContato({ open, onClose, companyId, contact }: Props) {
               {t === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}
             </button>
           ))}
+        </div>
+
+        {/* Papel: cliente / fornecedor / os dois */}
+        <div>
+          <label className="text-sm font-medium mb-1.5 block" style={{ color: 'var(--color-text-secondary)' }}>É cliente ou fornecedor?</label>
+          <div className="flex gap-2">
+            {PAPEIS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => setPapel(p.value)}
+                className="flex-1 py-2 rounded-lg text-sm font-medium border transition-colors"
+                style={{
+                  backgroundColor: papel === p.value ? 'var(--color-primary)' : 'white',
+                  borderColor: papel === p.value ? 'var(--color-primary-dark)' : 'var(--color-bg-surface)',
+                  color: papel === p.value ? 'var(--color-primary-darker)' : 'var(--color-text-secondary)',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <Input

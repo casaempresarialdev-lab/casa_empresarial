@@ -18,6 +18,8 @@ import { ModalCategoria } from './modal-categoria'
 interface Props {
   categories: Category[]
   companyId: string
+  /** true quando renderizado dentro de uma aba de Configurações — esconde o título/breadcrumb próprio */
+  embedded?: boolean
 }
 
 function buildTree(categories: Category[], tipo: 'receita' | 'despesa') {
@@ -30,7 +32,7 @@ function buildTree(categories: Category[], tipo: 'receita' | 'despesa') {
 }
 
 // Categorias de receita e despesa, usadas no Fluxo de Caixa e agrupadas no DRE
-export function CategoriasClient({ categories, companyId }: Props) {
+export function CategoriasClient({ categories, companyId, embedded }: Props) {
   const router = useRouter()
   const [aba, setAba] = useState(0)
   const [busca, setBusca] = useState('')
@@ -72,10 +74,12 @@ export function CategoriasClient({ categories, companyId }: Props) {
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Categorias</h1>
-        <Breadcrumb />
-      </div>
+      {!embedded && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Categorias</h1>
+          <Breadcrumb />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <SummaryCard icon="dollar" title="Categorias cadastradas" value={categories.length} caption={`${categories.filter((c) => c.tipo === 'receita').length} receitas · ${categories.filter((c) => c.tipo === 'despesa').length} despesas`} />

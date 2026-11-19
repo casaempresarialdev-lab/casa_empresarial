@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { createTransactionAction, updateTransactionAction } from '../actions'
 import type { TransactionRow } from '../queries'
 import type { Category } from '../../categorias/queries'
-import type { Contact } from '../../contatos/queries'
+import type { Contact } from '../../../operacional/contatos/queries'
 import type { BankAccount, CreditCard } from '../../contas-cartoes/queries'
 import type { CostCenter } from '../../centro-de-custo/queries'
 

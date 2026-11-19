@@ -18,7 +18,7 @@ function parseMoney(v: string | null) {
 // ── Contas Bancárias ──────────────────────────────────────────
 
 export async function createBankAccountAction(companyId: string, formData: FormData) {
-  const negado = await semAcesso('financeiro.contas-cartoes', companyId)
+  const negado = await semAcesso('financeiro.configuracoes', companyId)
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -48,7 +48,7 @@ export async function createBankAccountAction(companyId: string, formData: FormD
 }
 
 export async function updateBankAccountAction(accountId: string, formData: FormData) {
-  const negado = await semAcesso('financeiro.contas-cartoes')
+  const negado = await semAcesso('financeiro.configuracoes')
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -74,7 +74,7 @@ export async function updateBankAccountAction(accountId: string, formData: FormD
 }
 
 export async function deleteBankAccountAction(accountId: string) {
-  const negado = await semAcesso('financeiro.contas-cartoes')
+  const negado = await semAcesso('financeiro.configuracoes')
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -91,7 +91,7 @@ export async function deleteBankAccountAction(accountId: string) {
 // ── Cartões de Crédito ────────────────────────────────────────
 
 export async function createCreditCardAction(companyId: string, formData: FormData) {
-  const negado = await semAcesso('financeiro.contas-cartoes', companyId)
+  const negado = await semAcesso('financeiro.configuracoes', companyId)
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -117,7 +117,7 @@ export async function createCreditCardAction(companyId: string, formData: FormDa
 }
 
 export async function updateCreditCardAction(cardId: string, formData: FormData) {
-  const negado = await semAcesso('financeiro.contas-cartoes')
+  const negado = await semAcesso('financeiro.configuracoes')
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -142,7 +142,7 @@ export async function updateCreditCardAction(cardId: string, formData: FormData)
 }
 
 export async function deleteCreditCardAction(cardId: string) {
-  const negado = await semAcesso('financeiro.contas-cartoes')
+  const negado = await semAcesso('financeiro.configuracoes')
   if (negado) return negado
 
   const user = await getAuthUser()

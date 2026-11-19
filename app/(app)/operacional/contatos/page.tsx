@@ -8,7 +8,7 @@ import { exigirAcessoPagina } from '@/lib/auth/acesso'
 export const dynamic = 'force-dynamic'
 
 export default async function ContatosPage() {
-  await exigirAcessoPagina('financeiro.contatos')
+  await exigirAcessoPagina('operacional.contatos')
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

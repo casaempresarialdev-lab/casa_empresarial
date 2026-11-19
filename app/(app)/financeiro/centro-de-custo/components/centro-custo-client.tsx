@@ -17,6 +17,8 @@ import { ModalCentroCusto } from './modal-centro-custo'
 interface Props {
   costCenters: CostCenter[]
   companyId: string
+  /** true quando renderizado dentro de uma aba de Configurações — esconde o título/breadcrumb próprio */
+  embedded?: boolean
 }
 
 const FILTRO_STATUS = [
@@ -26,7 +28,7 @@ const FILTRO_STATUS = [
 ]
 
 // Centros de custo da empresa: cadastro simples, usado pra classificar lançamentos no Fluxo de Caixa
-export function CentroCustoClient({ costCenters, companyId }: Props) {
+export function CentroCustoClient({ costCenters, companyId, embedded }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<CostCenter | null>(null)
@@ -61,10 +63,12 @@ export function CentroCustoClient({ costCenters, companyId }: Props) {
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Centro de Custo</h1>
-        <Breadcrumb />
-      </div>
+      {!embedded && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h1 className="text-3xl font-extrabold animate-enter" style={{ fontFamily: 'Manrope', color: 'var(--color-brand)' }}>Centro de Custo</h1>
+          <Breadcrumb />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <SummaryCard icon="briefcase" title="Centros de custo" value={costCenters.length} caption={costCenters.length === 1 ? 'cadastrado' : 'cadastrados'} />

@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getContactById } from '../queries'
+import { getContactById, getPedidosCompraDoContato, getPedidosVendaDoContato } from '../queries'
 import { ViewContato } from './view-contato'
 import { exigirAcessoPagina } from '@/lib/auth/acesso'
 
@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default async function ContatoViewPage({ params }: Props) {
-  await exigirAcessoPagina('financeiro.contatos')
+  await exigirAcessoPagina('operacional.contatos')
 
   const { id } = await params
 
@@ -27,9 +27,14 @@ export default async function ContatoViewPage({ params }: Props) {
   const contact = await getContactById(id, companyId)
   if (!contact) notFound()
 
+  const [pedidosCompra, pedidosVenda] = await Promise.all([
+    getPedidosCompraDoContato(id, companyId),
+    getPedidosVendaDoContato(id, companyId),
+  ])
+
   return (
     <div className="w-full">
-      <ViewContato contact={contact} />
+      <ViewContato contact={contact} pedidosCompra={pedidosCompra} pedidosVenda={pedidosVenda} />
     </div>
   )
 }

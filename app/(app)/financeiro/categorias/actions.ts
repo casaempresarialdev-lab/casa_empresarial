@@ -11,7 +11,7 @@ async function getAuthUser() {
 }
 
 export async function createCategoryAction(companyId: string, formData: FormData) {
-  const negado = await semAcesso('financeiro.categorias', companyId)
+  const negado = await semAcesso('financeiro.configuracoes', companyId)
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -44,7 +44,7 @@ export async function createCategoryAction(companyId: string, formData: FormData
 }
 
 export async function updateCategoryAction(categoryId: string, formData: FormData) {
-  const negado = await semAcesso('financeiro.categorias')
+  const negado = await semAcesso('financeiro.configuracoes')
   if (negado) return negado
 
   const user = await getAuthUser()
@@ -72,7 +72,7 @@ export async function updateCategoryAction(categoryId: string, formData: FormDat
 }
 
 export async function deleteCategoryAction(categoryId: string) {
-  const negado = await semAcesso('financeiro.categorias')
+  const negado = await semAcesso('financeiro.configuracoes')
   if (negado) return negado
 
   const user = await getAuthUser()
